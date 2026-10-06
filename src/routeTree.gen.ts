@@ -10,33 +10,94 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SpaceRouteImport } from './routes/_space'
+import { Route as SpaceSettingsRouteImport } from './routes/_space.settings'
+import { Route as SpaceTodayRouteImport } from './routes/_space.today'
+import { Route as SpaceTogetherRouteImport } from './routes/_space.together'
+import { Route as SpaceWeekRouteImport } from './routes/_space.week'
+import { Route as RCodeRouteImport } from './routes/r.$code'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpaceRoute = SpaceRouteImport.update({
+  id: '/_space',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpaceSettingsRoute = SpaceSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => SpaceRoute,
+} as any)
+const SpaceTodayRoute = SpaceTodayRouteImport.update({
+  id: '/today',
+  path: '/today',
+  getParentRoute: () => SpaceRoute,
+} as any)
+const SpaceTogetherRoute = SpaceTogetherRouteImport.update({
+  id: '/together',
+  path: '/together',
+  getParentRoute: () => SpaceRoute,
+} as any)
+const SpaceWeekRoute = SpaceWeekRouteImport.update({
+  id: '/week',
+  path: '/week',
+  getParentRoute: () => SpaceRoute,
+} as any)
+const RCodeRoute = RCodeRouteImport.update({
+  id: '/r/$code',
+  path: '/r/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/settings': typeof SpaceSettingsRoute
+  '/today': typeof SpaceTodayRoute
+  '/together': typeof SpaceTogetherRoute
+  '/week': typeof SpaceWeekRoute
+  '/r/$code': typeof RCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/settings': typeof SpaceSettingsRoute
+  '/today': typeof SpaceTodayRoute
+  '/together': typeof SpaceTogetherRoute
+  '/week': typeof SpaceWeekRoute
+  '/r/$code': typeof RCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_space': typeof SpaceRouteWithChildren
+  '/_space/settings': typeof SpaceSettingsRoute
+  '/_space/today': typeof SpaceTodayRoute
+  '/_space/together': typeof SpaceTogetherRoute
+  '/_space/week': typeof SpaceWeekRoute
+  '/r/$code': typeof RCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/settings' | '/today' | '/together' | '/week' | '/r/$code'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/settings' | '/today' | '/together' | '/week' | '/r/$code'
+  id:
+    | '__root__'
+    | '/'
+    | '/_space'
+    | '/_space/settings'
+    | '/_space/today'
+    | '/_space/together'
+    | '/_space/week'
+    | '/r/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SpaceRoute: typeof SpaceRouteWithChildren
+  RCodeRoute: typeof RCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +109,71 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_space': {
+      id: '/_space'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof SpaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_space/settings': {
+      id: '/_space/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SpaceSettingsRouteImport
+      parentRoute: typeof SpaceRoute
+    }
+    '/_space/today': {
+      id: '/_space/today'
+      path: '/today'
+      fullPath: '/today'
+      preLoaderRoute: typeof SpaceTodayRouteImport
+      parentRoute: typeof SpaceRoute
+    }
+    '/_space/together': {
+      id: '/_space/together'
+      path: '/together'
+      fullPath: '/together'
+      preLoaderRoute: typeof SpaceTogetherRouteImport
+      parentRoute: typeof SpaceRoute
+    }
+    '/_space/week': {
+      id: '/_space/week'
+      path: '/week'
+      fullPath: '/week'
+      preLoaderRoute: typeof SpaceWeekRouteImport
+      parentRoute: typeof SpaceRoute
+    }
+    '/r/$code': {
+      id: '/r/$code'
+      path: '/r/$code'
+      fullPath: '/r/$code'
+      preLoaderRoute: typeof RCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface SpaceRouteChildren {
+  SpaceSettingsRoute: typeof SpaceSettingsRoute
+  SpaceTodayRoute: typeof SpaceTodayRoute
+  SpaceTogetherRoute: typeof SpaceTogetherRoute
+  SpaceWeekRoute: typeof SpaceWeekRoute
+}
+
+const SpaceRouteChildren: SpaceRouteChildren = {
+  SpaceSettingsRoute: SpaceSettingsRoute,
+  SpaceTodayRoute: SpaceTodayRoute,
+  SpaceTogetherRoute: SpaceTogetherRoute,
+  SpaceWeekRoute: SpaceWeekRoute,
+}
+
+const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SpaceRoute: SpaceRouteWithChildren,
+  RCodeRoute: RCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
