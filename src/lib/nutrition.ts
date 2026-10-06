@@ -55,7 +55,7 @@ export function localDate(d = new Date()) {
 }
 
 export function parseLocalDate(s: string) {
-  const [y, m, d] = s.split("-").map(Number);
+  const [y = 1970, m = 1, d = 1] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
 

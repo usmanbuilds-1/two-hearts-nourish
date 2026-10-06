@@ -77,7 +77,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
   }
 
   async function confirm() {
-    if (!validDraft(draft)) return toast.error("Add a name and valid numbers first.");
+    if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
     setBusy(true);
     try {
       await save(draft);

@@ -40,7 +40,7 @@ const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
 
 export function validDraft(d: MealDraft) {
   const vals = [num(d.calories), num(d.protein), num(d.carbs), num(d.fat)];
-  return d.food_name.trim().length > 0 && vals.every((v) => Number.isFinite(v) && v >= 0) && vals[0] <= 20000;
+  return d.food_name.trim().length > 0 && vals.every((v) => Number.isFinite(v) && v >= 0) && (vals[0] ?? 0) <= 20000;
 }
 
 /** Shared editable fields — used by manual entry, edit and AI confirmation. */
@@ -139,7 +139,7 @@ export function MealSheet({
   }, [open, meal]);
 
   async function submit() {
-    if (!validDraft(draft)) return toast.error("Add a name and valid numbers first.");
+    if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
     setBusy(true);
     try {
       await save(draft, meal ?? undefined);
@@ -157,7 +157,7 @@ export function MealSheet({
     setBusy(true);
     const { error } = await supabase.from("meals").delete().eq("id", meal.id);
     setBusy(false);
-    if (error) return toast.error("Couldn't delete that meal. Please try again.");
+    if (error) return void toast.error("Couldn't delete that meal. Please try again.");
     removeLocal(meal.id);
     toast("Meal deleted");
     onOpenChange(false);

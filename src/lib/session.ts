@@ -50,7 +50,7 @@ const MESSAGES: Record<string, string> = {
 
 export function friendlyError(e: unknown) {
   const msg = e instanceof Error ? e.message : String(e);
-  for (const k of Object.keys(MESSAGES)) if (msg.includes(k)) return MESSAGES[k];
+  for (const k of Object.keys(MESSAGES)) if (msg.includes(k)) return MESSAGES[k] as string;
   if (typeof navigator !== "undefined" && !navigator.onLine)
     return "You're offline. We'll reconnect when you're back.";
   return "Something went wrong. Please try again.";

@@ -111,7 +111,7 @@ function Onboarding() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const c = normalizeCode(code);
-                  if (!c) return toast.error("That code should look like 7KQ4-M2PX.");
+                  if (!c) return void toast.error("That code should look like 7KQ4-M2PX.");
                   void navigate({ to: "/r/$code", params: { code: c } });
                 }}
               >

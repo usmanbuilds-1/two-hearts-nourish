@@ -29,14 +29,14 @@ function SettingsPage() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
   async function save() {
-    if (!f.name.trim()) return toast.error("Your name can't be empty.");
+    if (!f.name.trim()) return void toast.error("Your name can't be empty.");
     setBusy(true);
     const [a, b] = await Promise.all([
       supabase.from("members").update({ display_name: f.name.trim().slice(0, 40), daily_calorie_target: n(f.kcal), daily_protein_target: n(f.p), daily_carbs_target: n(f.c), daily_fat_target: n(f.fat) }).eq("id", me.id).select("id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, created_at").single(),
       supabase.from("rooms").update({ shared_goal: f.goal.trim().slice(0, 120) || null, couple_message: f.msg.trim().slice(0, 160) || null, together_since: f.since || null }).eq("id", room.id).select().single(),
     ]);
     setBusy(false);
-    if (a.error || b.error) return toast.error("Couldn't save your settings. Please try again.");
+    if (a.error || b.error) return void toast.error("Couldn't save your settings. Please try again.");
     setMember(a.data as Member);
     setRoom(b.data as Room);
     toast.success("Saved ❤️");
