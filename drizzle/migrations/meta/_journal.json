@@ -15,6 +15,13 @@
       "when": 1791265316829,
       "tag": "0001_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791334807454,
+      "tag": "0002_multi_device_profile_budget",
+      "breakpoints": true
     }
   ]
 }

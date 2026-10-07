@@ -33,6 +33,7 @@ function SpaceLayout() {
         if (!data) {
           // Browser identity was lost (e.g. storage partly cleared) — restore with the private key.
           try {
+            if (!local.key) throw new Error("NO_KEY");
             const r = await rejoinRoom({ data: { code: local.roomCode, key: local.key } });
             writeSession(r);
             data = await loadSpace(uid);

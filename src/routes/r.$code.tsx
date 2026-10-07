@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Btn, Field, TextInput } from "@/components/us/primitives";
-import { getRoomPreview, joinRoom, rejoinRoom } from "@/lib/room.functions";
+import { getRoomPreview, joinRoom, linkDevice, rejoinRoom } from "@/lib/room.functions";
 import { ensureIdentity, friendlyError, readSession, writeSession } from "@/lib/session";
 
 export const Route = createFileRoute("/r/$code")({
@@ -31,6 +31,7 @@ function Join() {
   const [busy, setBusy] = useState(false);
   const [rejoin, setRejoin] = useState(false);
   const [key, setKey] = useState("");
+  const [useKey, setUseKey] = useState(false);
 
   useEffect(() => {
     const s = readSession();
@@ -64,7 +65,8 @@ function Join() {
     setBusy(true);
     try {
       await ensureIdentity();
-      const r = await rejoinRoom({ data: { code, key: key.trim() } });
+      const v = key.trim();
+      const r = useKey ? await rejoinRoom({ data: { code, key: v } }) : await linkDevice({ data: { code, linkCode: v.replace(/\D/g, "") } });
       writeSession(r);
       toast.success("Welcome back ❤️");
       void navigate({ to: "/today", replace: true });
@@ -105,12 +107,21 @@ function Join() {
 
   const rejoinForm = (
     <form onSubmit={doRejoin} className="mt-8 space-y-4">
-      <Field label="Your personal key" hint="You'll find it in Settings on your old phone.">
-        <TextInput value={key} onChange={(e) => setKey(e.target.value)} placeholder="64-character key" className="font-mono text-sm" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-      </Field>
+      {useKey ? (
+        <Field label="Your personal key" hint="You'll find it in Settings on your other device.">
+          <TextInput value={key} onChange={(e) => setKey(e.target.value)} placeholder="64-character key" className="font-mono text-sm" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+        </Field>
+      ) : (
+        <Field label="6-digit device code" hint="On a phone that's already in this space: Settings → Add another device.">
+          <TextInput value={key} onChange={(e) => setKey(e.target.value)} inputMode="numeric" maxLength={7} placeholder="123456" className="num text-2xl tracking-[0.3em]" autoComplete="one-time-code" />
+        </Field>
+      )}
       <Btn size="lg" className="w-full" disabled={!key.trim() || busy}>
-        {busy ? "Checking…" : "Rejoin our space"}
+        {busy ? "Checking…" : "Add this device ❤️"}
       </Btn>
+      <button type="button" onClick={() => { setUseKey(!useKey); setKey(""); }} className="w-full py-2 text-sm text-muted-foreground hover:underline">
+        {useKey ? "Use a 6-digit device code instead" : "Lost your other device? Use your personal key"}
+      </button>
     </form>
   );
 
@@ -119,7 +130,7 @@ function Join() {
       <>
         <h1 className="text-3xl leading-tight text-foreground">This space already belongs to two people ❤️</h1>
         <p className="mt-3 text-muted-foreground">
-          If you're one of them and you're on a new phone, use your personal key to step back in.
+          If you're one of them, add this device with a code from your other phone.
         </p>
         {rejoinForm}
       </>,
@@ -142,7 +153,7 @@ function Join() {
             </Btn>
           </form>
           <button onClick={() => setRejoin(true)} className="mt-4 w-full py-2 text-sm text-muted-foreground hover:underline">
-            Already joined before? Rejoin with your personal key
+            Already in this space? Add this device
           </button>
         </>
       ) : (
