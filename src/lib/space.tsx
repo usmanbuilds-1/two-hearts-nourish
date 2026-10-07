@@ -29,13 +29,20 @@ export function useSpace() {
 }
 
 const MEMBER_COLS =
-  "id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, created_at";
+  "id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, created_at, height_cm, weight_kg, age, sex, activity_level, body_goal, daily_food_budget, currency, locality";
 
 export async function loadSpace(userId: string) {
+  const { data: dev, error: devErr } = await supabase
+    .from("member_devices")
+    .select("member_id")
+    .eq("auth_user_id", userId)
+    .maybeSingle();
+  if (devErr) throw new Error("OFFLINE_OR_UNAVAILABLE");
+  if (!dev) return null;
   const { data: meRow, error } = await supabase
     .from("members")
     .select(MEMBER_COLS)
-    .eq("auth_user_id", userId)
+    .eq("id", dev.member_id)
     .maybeSingle();
   if (error) throw new Error("OFFLINE_OR_UNAVAILABLE");
   if (!meRow) return null;

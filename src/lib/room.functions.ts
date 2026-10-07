@@ -82,10 +82,8 @@ export const linkDevice = createServerFn({ method: "POST" })
     const current = await deviceMemberId(db, context.userId);
     if (current && current !== match) throw new Error("ALREADY_IN_SPACE");
     if (!current) await addDevice(db, match, context.userId);
-    // single use; issue a fresh personal key for this device's local session
-    const token = randomToken();
+    // single use
     await db.from("members").update({ link_code_hash: null, link_code_expires_at: null }).eq("id", match);
-    void token;
     return { roomCode: code, memberId: match };
   });
 

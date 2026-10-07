@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const KEY = "us.session.v1";
 
-export type LocalSession = { roomCode: string; memberId: string; key: string };
+export type LocalSession = { roomCode: string; memberId: string; key?: string };
 
 export function readSession(): LocalSession | null {
   if (typeof window === "undefined") return null;
@@ -10,7 +10,7 @@ export function readSession(): LocalSession | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as LocalSession;
-    return s.roomCode && s.memberId && s.key ? s : null;
+    return s.roomCode && s.memberId ? s : null;
   } catch {
     return null;
   }
@@ -45,6 +45,7 @@ const MESSAGES: Record<string, string> = {
   INVALID_KEY: "That personal key doesn't match anyone in this space.",
   ALREADY_IN_SPACE: "This phone is already part of a space. Reset it in Settings first.",
   OFFLINE_OR_UNAVAILABLE: "We can't reach the server right now. Check your connection and try again.",
+  INVALID_LINK: "That device code is wrong or expired. Make a new one in Settings on your other phone.",
   NOT_MEMBER: "Your session has expired. Please rejoin with your invite link.",
 };
 

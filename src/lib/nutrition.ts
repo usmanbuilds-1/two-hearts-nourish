@@ -28,6 +28,15 @@ export type Member = {
   daily_carbs_target: number | null;
   daily_fat_target: number | null;
   created_at: string;
+  height_cm: number | null;
+  weight_kg: number | null;
+  age: number | null;
+  sex: "male" | "female" | null;
+  activity_level: string | null;
+  body_goal: "lose" | "maintain" | "gain" | null;
+  daily_food_budget: number | null;
+  currency: string | null;
+  locality: string | null;
 };
 
 export type Room = {
