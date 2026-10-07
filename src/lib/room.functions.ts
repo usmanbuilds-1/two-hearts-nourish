@@ -34,6 +34,61 @@ async function admin() {
   return supabaseAdmin;
 }
 
+type Db = Awaited<ReturnType<typeof admin>>;
+
+async function deviceMemberId(db: Db, uid: string) {
+  const { data } = await db.from("member_devices").select("member_id").eq("auth_user_id", uid).maybeSingle();
+  return data?.member_id ?? null;
+}
+
+async function addDevice(db: Db, memberId: string, uid: string) {
+  const { error } = await db.from("member_devices").insert({ member_id: memberId, auth_user_id: uid });
+  if (error) throw new Error("SERVER_ERROR");
+}
+
+/** Short-lived 6-digit code (10 min, single use) for adding another phone/laptop. */
+export const createLinkCode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const db = await admin();
+    const id = await deviceMemberId(db, context.userId);
+    if (!id) throw new Error("NOT_MEMBER");
+    const n = crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000;
+    const code = String(n).padStart(6, "0");
+    const expires = new Date(Date.now() + 10 * 60_000).toISOString();
+    const { error } = await db.from("members").update({ link_code_hash: await sha256(`${id}:${code}`), link_code_expires_at: expires }).eq("id", id);
+    if (error) throw new Error("SERVER_ERROR");
+    return { code, expiresAt: expires };
+  });
+
+export const linkDevice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { code: string; linkCode: string }) => ({
+    code: codeSchema.parse(i.code),
+    linkCode: z.string().trim().regex(/^\d{6}$/).parse(i.linkCode),
+  }))
+  .handler(async ({ data, context }) => {
+    const code = normalizeCode(data.code);
+    if (!code) throw new Error("INVALID_CODE");
+    const db = await admin();
+    const { data: room } = await db.from("rooms").select("id").eq("room_code", code).maybeSingle();
+    if (!room) throw new Error("ROOM_NOT_FOUND");
+    const { data: members } = await db.from("members").select("id, link_code_hash, link_code_expires_at").eq("room_id", room.id);
+    let match: string | null = null;
+    for (const m of members ?? []) {
+      if (m.link_code_hash && m.link_code_expires_at && new Date(m.link_code_expires_at) > new Date() && m.link_code_hash === (await sha256(`${m.id}:${data.linkCode}`))) match = m.id;
+    }
+    if (!match) throw new Error("INVALID_LINK");
+    const current = await deviceMemberId(db, context.userId);
+    if (current && current !== match) throw new Error("ALREADY_IN_SPACE");
+    if (!current) await addDevice(db, match, context.userId);
+    // single use; issue a fresh personal key for this device's local session
+    const token = randomToken();
+    await db.from("members").update({ link_code_hash: null, link_code_expires_at: null }).eq("id", match);
+    void token;
+    return { roomCode: code, memberId: match };
+  });
+
 export const getRoomPreview = createServerFn({ method: "POST" })
   .inputValidator((i: { code: string }) => ({ code: codeSchema.parse(i.code) }))
   .handler(async ({ data }) => {
@@ -60,12 +115,7 @@ export const createRoom = createServerFn({ method: "POST" })
   .inputValidator((i: { name: string }) => ({ name: nameSchema.parse(i.name) }))
   .handler(async ({ data, context }) => {
     const db = await admin();
-    const { data: existing } = await db
-      .from("members")
-      .select("id")
-      .eq("auth_user_id", context.userId)
-      .maybeSingle();
-    if (existing) throw new Error("ALREADY_IN_SPACE");
+    if (await deviceMemberId(db, context.userId)) throw new Error("ALREADY_IN_SPACE");
 
     let room: { id: string; room_code: string } | null = null;
     for (let i = 0; i < 5 && !room; i++) {
@@ -94,6 +144,7 @@ export const createRoom = createServerFn({ method: "POST" })
       await db.from("rooms").delete().eq("id", room.id);
       throw new Error("SERVER_ERROR");
     }
+    await addDevice(db, member.id, context.userId);
     return { roomCode: room.room_code, memberId: member.id, key: token };
   });
 
@@ -110,12 +161,7 @@ export const joinRoom = createServerFn({ method: "POST" })
     const { data: room } = await db.from("rooms").select("id").eq("room_code", code).maybeSingle();
     if (!room) throw new Error("ROOM_NOT_FOUND");
 
-    const { data: existing } = await db
-      .from("members")
-      .select("id, room_id")
-      .eq("auth_user_id", context.userId)
-      .maybeSingle();
-    if (existing) throw new Error("ALREADY_IN_SPACE");
+    if (await deviceMemberId(db, context.userId)) throw new Error("ALREADY_IN_SPACE");
 
     const { count } = await db
       .from("members")
@@ -137,6 +183,7 @@ export const joinRoom = createServerFn({ method: "POST" })
       .single();
     // unique(room_id, seat) guards against two people racing for seat 2
     if (error || !member) throw new Error("ROOM_FULL");
+    await addDevice(db, member.id, context.userId);
     return { roomCode: code, memberId: member.id, key: token };
   });
 
@@ -159,19 +206,9 @@ export const rejoinRoom = createServerFn({ method: "POST" })
       .eq("participant_token_hash", await sha256(data.key.toLowerCase()))
       .maybeSingle();
     if (!member) throw new Error("INVALID_KEY");
-    if (member.auth_user_id !== context.userId) {
-      const { data: other } = await db
-        .from("members")
-        .select("id")
-        .eq("auth_user_id", context.userId)
-        .maybeSingle();
-      if (other) throw new Error("ALREADY_IN_SPACE");
-      const { error } = await db
-        .from("members")
-        .update({ auth_user_id: context.userId })
-        .eq("id", member.id);
-      if (error) throw new Error("SERVER_ERROR");
-    }
+    const current = await deviceMemberId(db, context.userId);
+    if (current && current !== member.id) throw new Error("ALREADY_IN_SPACE");
+    if (!current) await addDevice(db, member.id, context.userId);
     return { roomCode: code, memberId: member.id, key: data.key.toLowerCase() };
   });
 
@@ -179,11 +216,9 @@ export const leaveRoom = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const db = await admin();
-    const { data: me } = await db
-      .from("members")
-      .select("id, room_id")
-      .eq("auth_user_id", context.userId)
-      .maybeSingle();
+    const myId = await deviceMemberId(db, context.userId);
+    if (!myId) return { ok: true };
+    const { data: me } = await db.from("members").select("id, room_id").eq("id", myId).single();
     if (!me) return { ok: true };
     await db.from("members").delete().eq("id", me.id);
     const { count } = await db
