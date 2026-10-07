@@ -80,45 +80,107 @@ export type Database = {
           },
         ]
       }
+      member_devices: {
+        Row: {
+          auth_user_id: string
+          created_at: string
+          id: string
+          member_id: string
+        }
+        Insert: {
+          auth_user_id: string
+          created_at?: string
+          id?: string
+          member_id: string
+        }
+        Update: {
+          auth_user_id?: string
+          created_at?: string
+          id?: string
+          member_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_devices_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       members: {
         Row: {
+          activity_level: string | null
+          age: number | null
           auth_user_id: string | null
+          body_goal: string | null
           created_at: string
+          currency: string | null
           daily_calorie_target: number | null
           daily_carbs_target: number | null
           daily_fat_target: number | null
+          daily_food_budget: number | null
           daily_protein_target: number | null
           display_name: string
+          height_cm: number | null
           id: string
+          link_code_expires_at: string | null
+          link_code_hash: string | null
+          locality: string | null
           participant_token_hash: string
           room_id: string
           seat: number
+          sex: string | null
+          weight_kg: number | null
         }
         Insert: {
+          activity_level?: string | null
+          age?: number | null
           auth_user_id?: string | null
+          body_goal?: string | null
           created_at?: string
+          currency?: string | null
           daily_calorie_target?: number | null
           daily_carbs_target?: number | null
           daily_fat_target?: number | null
+          daily_food_budget?: number | null
           daily_protein_target?: number | null
           display_name: string
+          height_cm?: number | null
           id?: string
+          link_code_expires_at?: string | null
+          link_code_hash?: string | null
+          locality?: string | null
           participant_token_hash: string
           room_id: string
           seat: number
+          sex?: string | null
+          weight_kg?: number | null
         }
         Update: {
+          activity_level?: string | null
+          age?: number | null
           auth_user_id?: string | null
+          body_goal?: string | null
           created_at?: string
+          currency?: string | null
           daily_calorie_target?: number | null
           daily_carbs_target?: number | null
           daily_fat_target?: number | null
+          daily_food_budget?: number | null
           daily_protein_target?: number | null
           display_name?: string
+          height_cm?: number | null
           id?: string
+          link_code_expires_at?: string | null
+          link_code_hash?: string | null
+          locality?: string | null
           participant_token_hash?: string
           room_id?: string
           seat?: number
+          sex?: string | null
+          weight_kg?: number | null
         }
         Relationships: [
           {
