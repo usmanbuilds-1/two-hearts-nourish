@@ -28,7 +28,7 @@ export function useSpace() {
   return c;
 }
 
-const MEMBER_COLS =
+export const MEMBER_COLS =
   "id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, created_at, height_cm, weight_kg, age, sex, activity_level, body_goal, daily_food_budget, currency, locality";
 
 export async function loadSpace(userId: string) {
