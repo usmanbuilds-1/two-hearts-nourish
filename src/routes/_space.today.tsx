@@ -6,7 +6,10 @@ import { MEAL_TYPES, addDays, coupleStats, fmt, greeting, totals, usMessages, ty
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet } from "@/components/us/MealSheet";
 import { ScanSheet } from "@/components/us/ScanSheet";
+import { BudgetPlanSheet, warnNoTarget } from "@/components/us/BudgetPlanSheet";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { PiggyBank } from "lucide-react";
 
 export const Route = createFileRoute("/_space/today")({
   head: () => ({ meta: [{ title: "Today — Us" }, { name: "description", content: "Your shared day of meals." }, { property: "og:title", content: "Today — Us" }, { property: "og:description", content: "Your shared day of meals." }] }),
