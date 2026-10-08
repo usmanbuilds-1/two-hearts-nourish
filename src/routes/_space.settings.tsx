@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpace } from "@/lib/space";
 import { clearSession, inviteUrl, readSession } from "@/lib/session";
-import { leaveRoom } from "@/lib/room.functions";
+import { createLinkCode, leaveRoom } from "@/lib/room.functions";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
-import { ACTIVITY, bmi, bmiCategory, bmr, suggest, validate, type Activity, type BodyGoal, type HealthInput, type Sex } from "@/lib/health";
+import { ACTIVITY, type Activity, type BodyGoal, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
+import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
 
 export const Route = createFileRoute("/_space/settings")({
@@ -19,61 +20,141 @@ const n = (s: string) => (s.trim() === "" ? null : Math.max(0, Number(s)) || nul
 function SettingsPage() {
   const { me, partner, room, setMember, setRoom } = useSpace();
   const navigate = useNavigate();
+
   const [f, setF] = useState({
-    name: me.display_name, kcal: String(me.daily_calorie_target ?? ""), p: String(me.daily_protein_target ?? ""), c: String(me.daily_carbs_target ?? ""), fat: String(me.daily_fat_target ?? ""),
-    goal: room.shared_goal ?? "", msg: room.couple_message ?? "", since: room.together_since ?? "",
+    name: me.display_name,
+    kcal: String(me.daily_calorie_target ?? ""),
+    p: String(me.daily_protein_target ?? ""),
+    c: String(me.daily_carbs_target ?? ""),
+    fat: String(me.daily_fat_target ?? ""),
+    goal: room.shared_goal ?? "",
+    msg: room.couple_message ?? "",
+    since: room.together_since ?? "",
   });
   const [busy, setBusy] = useState(false);
   const [dark, setDark] = useState(true);
   const [showKey, setShowKey] = useState(false);
-  const [showCalc, setShowCalc] = useState(false);
-  const [h, setH] = useState({
-    heightCm: "", weightKg: "", age: "", sex: "" as Sex | "", activity: "" as Activity | "", goal: "" as BodyGoal | "",
-  });
-  useEffect(() => setDark(document.documentElement.classList.contains("dark")), []);
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
-  // Local, evidence-based target calculator (src/lib/health.ts) — no server calls, no AI.
-  const num = (s: string) => {
-    const v = Number(s);
-    return s.trim() === "" || !Number.isFinite(v) ? null : v;
-  };
-  const heightCm = num(h.heightCm);
-  const weightKg = num(h.weightKg);
-  const age = num(h.age);
-  const sex = h.sex;
-  const activity = h.activity;
-  const goal = h.goal;
-  const partial: Partial<HealthInput> = {};
-  if (heightCm !== null) partial.heightCm = heightCm;
-  if (weightKg !== null) partial.weightKg = weightKg;
-  if (age !== null) partial.age = age;
-  if (sex !== "") partial.sex = sex;
-  if (activity !== "") partial.activity = activity;
-  if (goal !== "") partial.goal = goal;
-  const calcError = validate(partial);
-  const anyFilled = h.heightCm + h.weightKg + h.age + h.sex + h.activity + h.goal !== "";
-  const shownError = anyFilled && calcError ? calcError : null;
-  const bmiVal =
-    heightCm !== null && weightKg !== null && heightCm >= 100 && heightCm <= 250 && weightKg >= 20 && weightKg <= 400
-      ? bmi(heightCm, weightKg)
-      : null;
-  const bmrVal =
-    bmiVal !== null && heightCm !== null && weightKg !== null && age !== null && age >= 10 && age <= 110 && sex !== ""
-      ? Math.round(bmr({ heightCm, weightKg, age, sex }))
-      : null;
+  // Health calculator
+  const [showCalc, setShowCalc] = useState(false);
+  const [calc, setCalc] = useState({
+    heightCm: String(me.height_cm ?? ""),
+    weightKg: String(me.weight_kg ?? ""),
+    age: String(me.age ?? ""),
+    sex: (me.sex ?? "") as Sex | "",
+    activity: (me.activity_level ?? "") as Activity | "",
+    goal: (me.body_goal ?? "") as BodyGoal | "",
+  });
+
+  const liveBmi = useMemo(() => {
+    const h = parseFloat(calc.heightCm), w = parseFloat(calc.weightKg);
+    return h > 0 && w > 0 ? bmi(h, w) : null;
+  }, [calc.heightCm, calc.weightKg]);
+
+  const liveBmr = useMemo(() => {
+    const h = parseFloat(calc.heightCm), w = parseFloat(calc.weightKg), a = parseInt(calc.age);
+    return h > 0 && w > 0 && a > 0 && calc.sex ? bmr({ heightCm: h, weightKg: w, age: a, sex: calc.sex as Sex }) : null;
+  }, [calc]);
+
+  const calcError = validate({
+    heightCm: parseFloat(calc.heightCm) || undefined,
+    weightKg: parseFloat(calc.weightKg) || undefined,
+    age: parseInt(calc.age) || undefined,
+    sex: calc.sex || undefined,
+    activity: calc.activity || undefined,
+    goal: calc.goal || undefined,
+  });
 
   function applyTargets() {
-    if (validate(partial)) return;
-    const s = suggest(partial as HealthInput);
-    setF((p) => ({ ...p, kcal: String(s.calories), p: String(s.protein), c: String(s.carbs), fat: String(s.fat) }));
+    const input = {
+      heightCm: parseFloat(calc.heightCm),
+      weightKg: parseFloat(calc.weightKg),
+      age: parseInt(calc.age),
+      sex: calc.sex as Sex,
+      activity: calc.activity as Activity,
+      goal: calc.goal as BodyGoal,
+    };
+    const s = suggest(input);
+    setF((prev) => ({ ...prev, kcal: String(s.calories), p: String(s.protein), c: String(s.carbs), fat: String(s.fat) }));
+    toast.success("Targets updated ✓ — hit Save to keep them.");
   }
+
+  // Device link card
+  const [linkCode, setLinkCode] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [countdown, setCountdown] = useState("");
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startCountdown(expiresAt: string) {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      const diff = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      if (diff === 0) { setLinkCode(null); if (timerRef.current) clearInterval(timerRef.current); return; }
+      const m = Math.floor(diff / 60), s = diff % 60;
+      setCountdown(`${m}:${s.toString().padStart(2, "0")}`);
+    }, 1000);
+  }
+
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  async function genLinkCode() {
+    setLinkBusy(true);
+    try {
+      const res = await createLinkCode();
+      setLinkCode(res);
+      startCountdown(res.expiresAt);
+    } catch { toast.error("Couldn't generate a code. Please try again."); }
+    finally { setLinkBusy(false); }
+  }
+
+  // Weight log
+  const [weightInput, setWeightInput] = useState("");
+  const [weightLog, setWeightLog] = useState<WeightEntry[]>([]);
+  const [weightBusy, setWeightBusy] = useState(false);
+
+  useEffect(() => {
+    getWeightLog().then((r) => setWeightLog(r.entries)).catch(() => {});
+  }, []);
+
+  async function saveWeight() {
+    const kg = parseFloat(weightInput);
+    if (!isFinite(kg) || kg < 20 || kg > 400) return void toast.error("Enter a valid weight in kg (20–400).");
+    setWeightBusy(true);
+    try {
+      await logWeight({ data: { weightKg: kg } });
+      setWeightInput("");
+      const r = await getWeightLog();
+      setWeightLog(r.entries);
+      toast.success("Weight logged ✓");
+    } catch { toast.error("Couldn't save. Try again."); }
+    finally { setWeightBusy(false); }
+  }
+
+  const weightMax = weightLog.length ? Math.max(...weightLog.map((e) => e.weight_kg)) : 1;
+  const weightMin = weightLog.length ? Math.min(...weightLog.map((e) => e.weight_kg)) : 0;
+  const weightRange = Math.max(weightMax - weightMin, 1);
+
+  useEffect(() => setDark(document.documentElement.classList.contains("dark")), []);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
   async function save() {
     if (!f.name.trim()) return void toast.error("Your name can't be empty.");
     setBusy(true);
+    const healthFields = {
+      height_cm: parseFloat(calc.heightCm) || null,
+      weight_kg: parseFloat(calc.weightKg) || null,
+      age: parseInt(calc.age) || null,
+      sex: (calc.sex || null) as "male" | "female" | null,
+      activity_level: calc.activity || null,
+      body_goal: (calc.goal || null) as "lose" | "maintain" | "gain" | null,
+    };
     const [a, b] = await Promise.all([
-      supabase.from("members").update({ display_name: f.name.trim().slice(0, 40), daily_calorie_target: n(f.kcal), daily_protein_target: n(f.p), daily_carbs_target: n(f.c), daily_fat_target: n(f.fat) }).eq("id", me.id).select("id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, created_at").single(),
+      supabase.from("members").update({
+        display_name: f.name.trim().slice(0, 40),
+        daily_calorie_target: n(f.kcal), daily_protein_target: n(f.p),
+        daily_carbs_target: n(f.c), daily_fat_target: n(f.fat),
+        ...healthFields,
+      }).eq("id", me.id).select("id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, height_cm, weight_kg, age, sex, activity_level, body_goal, created_at").single(),
       supabase.from("rooms").update({ shared_goal: f.goal.trim().slice(0, 120) || null, couple_message: f.msg.trim().slice(0, 160) || null, together_since: f.since || null }).eq("id", room.id).select().single(),
     ]);
     setBusy(false);
@@ -100,12 +181,14 @@ function SettingsPage() {
   }
 
   const key = readSession()?.key ?? "";
+
   return (
     <Screen>
       <h1 className="text-3xl">Settings</h1>
       <div className="mt-6 space-y-4">
         <Field label="My name"><TextInput value={f.name} onChange={set("name")} maxLength={40} /></Field>
         <Field label="Partner name" hint="Your partner sets their own name."><TextInput value={partner?.display_name ?? "Not joined yet"} disabled /></Field>
+
         <Eyebrow className="pt-2">My daily targets</Eyebrow>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Calories"><TextInput inputMode="numeric" value={f.kcal} onChange={set("kcal")} placeholder="—" /></Field>
@@ -113,69 +196,108 @@ function SettingsPage() {
           <Field label="Carbs (g)"><TextInput inputMode="decimal" value={f.c} onChange={set("c")} placeholder="—" /></Field>
           <Field label="Fat (g)"><TextInput inputMode="decimal" value={f.fat} onChange={set("fat")} placeholder="—" /></Field>
         </div>
-        <Btn variant="outline" className="w-full" aria-expanded={showCalc} onClick={() => setShowCalc((v) => !v)}>
-          Calculate my targets 🧮
+
+        {/* Health calculator collapsible */}
+        <Btn variant="outline" className="w-full" onClick={() => setShowCalc((v) => !v)}>
+          {showCalc ? "Hide" : "Calculate my targets"} 🧮
         </Btn>
         {showCalc && (
-          <div className="space-y-4 rounded-xl border border-border p-4">
-            <Eyebrow>Your details</Eyebrow>
-            <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
               <Field label="Height (cm)">
-                <TextInput inputMode="numeric" value={h.heightCm} onChange={(e) => setH((p) => ({ ...p, heightCm: e.target.value }))} placeholder="170" />
+                <TextInput inputMode="decimal" value={calc.heightCm} onChange={(e) => setCalc({ ...calc, heightCm: e.target.value })} placeholder="170" />
               </Field>
               <Field label="Weight (kg)">
-                <TextInput inputMode="decimal" value={h.weightKg} onChange={(e) => setH((p) => ({ ...p, weightKg: e.target.value }))} placeholder="70" />
+                <TextInput inputMode="decimal" value={calc.weightKg} onChange={(e) => setCalc({ ...calc, weightKg: e.target.value })} placeholder="70" />
               </Field>
               <Field label="Age">
-                <TextInput inputMode="numeric" value={h.age} onChange={(e) => setH((p) => ({ ...p, age: e.target.value }))} placeholder="28" />
+                <TextInput inputMode="numeric" value={calc.age} onChange={(e) => setCalc({ ...calc, age: e.target.value })} placeholder="25" />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <fieldset>
-                <legend className="mb-1.5 block text-sm text-muted-foreground">Sex</legend>
-                <div className="flex gap-2">
-                  {(["male", "female"] as Sex[]).map((s) => (
-                    <label key={s} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-input text-sm capitalize has-[:checked]:border-primary">
-                      <input type="radio" name="calc-sex" value={s} checked={h.sex === s} onChange={() => setH((p) => ({ ...p, sex: s }))} className="accent-primary" />
-                      {s}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend className="mb-1.5 block text-sm text-muted-foreground">Goal</legend>
-                <div className="flex gap-2">
-                  {(["lose", "maintain", "gain"] as BodyGoal[]).map((g) => (
-                    <label key={g} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-input text-xs capitalize has-[:checked]:border-primary">
-                      <input type="radio" name="calc-goal" value={g} checked={h.goal === g} onChange={() => setH((p) => ({ ...p, goal: g }))} className="accent-primary" />
-                      {g}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            </div>
+
+            <Field label="Sex">
+              <div className="grid grid-cols-2 gap-2">
+                {(["male", "female"] as const).map((s) => (
+                  <button key={s} type="button" onClick={() => setCalc({ ...calc, sex: s })}
+                    className={`rounded-xl border px-3 py-2 text-sm capitalize transition-colors ${calc.sex === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            <Field label="Goal">
+              <div className="grid grid-cols-3 gap-2">
+                {(["lose", "maintain", "gain"] as const).map((g) => (
+                  <button key={g} type="button" onClick={() => setCalc({ ...calc, goal: g })}
+                    className={`rounded-xl border px-2 py-2 text-sm capitalize transition-colors ${calc.goal === g ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
             <Field label="Activity level">
               <select
-                value={h.activity}
-                onChange={(e) => setH((p) => ({ ...p, activity: e.target.value as Activity }))}
-                className="h-12 w-full rounded-xl border border-input bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                value={calc.activity}
+                onChange={(e) => setCalc({ ...calc, activity: e.target.value as Activity })}
+                className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                <option value="">Choose…</option>
-                {Object.entries(ACTIVITY).map(([key, v]) => (
-                  <option key={key} value={key}>{v.label}</option>
+                <option value="">Select…</option>
+                {(Object.entries(ACTIVITY) as [Activity, { label: string }][]).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
                 ))}
               </select>
             </Field>
-            {bmiVal !== null && (
-              <p className="num text-sm text-muted-foreground">
-                BMI: {bmiVal} ({bmiCategory(bmiVal)})
-                {bmrVal !== null ? ` · BMR: ${bmrVal} kcal` : ""}
+
+            {liveBmi !== null && liveBmr !== null && (
+              <p className="text-sm text-muted-foreground">
+                BMI: <span className="font-medium text-foreground">{liveBmi} ({bmiCategory(liveBmi)})</span>
+                {" · "}BMR: <span className="font-medium text-foreground">{Math.round(liveBmr)} kcal</span>
               </p>
             )}
-            {shownError && <p className="text-sm text-destructive">{shownError}</p>}
-            <Btn className="w-full" onClick={applyTargets} disabled={calcError !== null}>Apply to daily targets</Btn>
+
+            {calcError && <p className="text-sm text-destructive">{calcError}</p>}
+
+            <Btn className="w-full" disabled={!!calcError} onClick={applyTargets}>
+              Apply to daily targets ↑
+            </Btn>
           </div>
         )}
+
+        {/* Weight log */}
+        <Eyebrow className="pt-2">Weight log</Eyebrow>
+        <div className="flex gap-2">
+          <TextInput
+            inputMode="decimal"
+            className="flex-1"
+            placeholder={me.weight_kg ? String(me.weight_kg) : "kg"}
+            value={weightInput}
+            onChange={(e) => setWeightInput(e.target.value)}
+          />
+          <Btn variant="outline" disabled={weightBusy || !weightInput.trim()} onClick={saveWeight}>
+            {weightBusy ? "…" : "Log"}
+          </Btn>
+        </div>
+        {weightLog.length >= 2 && (
+          <div className="flex h-12 items-end gap-0.5 px-1">
+            {weightLog.slice().reverse().map((e) => {
+              const pct = ((e.weight_kg - weightMin) / weightRange) * 70 + 30;
+              return (
+                <div key={e.logged_date} title={`${e.logged_date}: ${e.weight_kg} kg`}
+                  className="flex-1 rounded-t bg-primary/60 transition-all"
+                  style={{ height: `${pct}%` }}
+                />
+              );
+            })}
+          </div>
+        )}
+        {weightLog.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Latest: {weightLog[0].weight_kg} kg ({new Date(weightLog[0].logged_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })})
+          </p>
+        )}
+
         <Eyebrow className="pt-2">Us</Eyebrow>
         <Field label="Shared goal"><TextInput value={f.goal} onChange={set("goal")} placeholder="Eat better together" maxLength={120} /></Field>
         <Field label="Custom couple message"><TextInput value={f.msg} onChange={set("msg")} placeholder="Getting healthier together, one meal at a time ❤️" maxLength={160} /></Field>
@@ -185,7 +307,22 @@ function SettingsPage() {
 
       <div className="mt-10 space-y-3">
         <Eyebrow>Space</Eyebrow>
-        <Btn variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(inviteUrl(room.room_code)).then(() => toast.success("Invite link copied"), () => toast.error("Couldn't copy"))}>Copy invite link · {room.room_code}</Btn>
+        <Btn variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(inviteUrl(room.room_code)).then(() => toast.success("Invite link copied"), () => toast.error("Couldn't copy"))}>
+          Copy invite link · {room.room_code}
+        </Btn>
+
+        {/* Device link card */}
+        <Btn variant="outline" className="w-full" disabled={linkBusy} onClick={genLinkCode}>
+          {linkBusy ? "Generating…" : "Link another device 📱"}
+        </Btn>
+        {linkCode && (
+          <div className="rounded-2xl border border-border bg-card p-4 text-center">
+            <div className="font-mono text-4xl tracking-[0.25em] text-foreground">{linkCode.code}</div>
+            <div className="mt-1 text-xs text-muted-foreground">Expires in {countdown}</div>
+            <div className="mt-2 text-xs text-muted-foreground">Enter this code on the other device at the welcome screen.</div>
+          </div>
+        )}
+
         <Btn variant="outline" className="w-full" onClick={toggleTheme}>Theme: {dark ? "Dark" : "Light"}</Btn>
         <div className="rounded-xl border border-border p-4 text-sm">
           <div className="text-muted-foreground">Your personal key lets you rejoin from a new phone. Keep it private.</div>
@@ -197,3 +334,4 @@ function SettingsPage() {
     </Screen>
   );
 }
+
