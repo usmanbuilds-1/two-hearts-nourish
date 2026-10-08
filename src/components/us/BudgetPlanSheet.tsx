@@ -156,7 +156,3 @@ export function BudgetPlanSheet({ open, onOpenChange, me }: { open: boolean; onO
     </Drawer>
   );
 }
-
-export function warnNoTarget() {
-  toast("Set your calorie target in Settings first.");
-}

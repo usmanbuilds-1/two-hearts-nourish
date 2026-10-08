@@ -6,7 +6,7 @@ import { MEAL_TYPES, addDays, coupleStats, fmt, greeting, totals, usMessages, ty
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet } from "@/components/us/MealSheet";
 import { ScanSheet } from "@/components/us/ScanSheet";
-import { BudgetPlanSheet, warnNoTarget } from "@/components/us/BudgetPlanSheet";
+import { BudgetPlanSheet } from "@/components/us/BudgetPlanSheet";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PiggyBank } from "lucide-react";
