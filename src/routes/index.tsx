@@ -97,13 +97,22 @@ function Onboarding() {
                     {busy ? "Making it yours…" : "Create our space ❤️"}
                   </Btn>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setCodeMode(true)}
-                  className="w-full py-2 text-sm text-muted-foreground underline-offset-4 hover:underline"
-                >
-                  Have a room code? Enter it here
-                </button>
+                <div className="space-y-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setCodeMode(true)}
+                    className="w-full py-2 text-sm text-muted-foreground underline-offset-4 hover:underline"
+                  >
+                    Have a room code? Enter it here
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCodeMode(true)}
+                    className="w-full py-1 text-sm text-primary underline-offset-4 hover:underline"
+                  >
+                    Already have a space? Enter your 6-digit device code →
+                  </button>
+                </div>
               </form>
             ) : (
               <form
@@ -111,16 +120,16 @@ function Onboarding() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const c = normalizeCode(code);
-                  if (!c) return void toast.error("That code should look like 7KQ4-M2PX.");
+                  if (!c) return void toast.error("That code should look like 7KQ4-M2PX or a 6-digit number.");
                   void navigate({ to: "/r/$code", params: { code: c } });
                 }}
               >
-                <Field label="Enter room code">
+                <Field label="Enter room or device code">
                   <TextInput
                     autoFocus
                     value={code}
                     onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    placeholder="7KQ4-M2PX"
+                    placeholder="7KQ4-M2PX or 123456"
                     className="font-mono tracking-[0.2em] uppercase"
                     autoCapitalize="characters"
                   />
@@ -152,9 +161,7 @@ function Onboarding() {
                   {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                   {copied ? "Copied" : "Copy invite link"}
                 </Btn>
-                <Btn variant="outline" onClick={share}>
-                  Share
-                </Btn>
+                <Btn variant="outline" onClick={share}>Share</Btn>
               </div>
               <div className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
                 Or they can enter this code:
