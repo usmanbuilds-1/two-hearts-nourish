@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarDays, Heart, Settings, Sun, WifiOff } from "lucide-react";
+import { CalendarDays, CalendarRange, Heart, Settings, Sun, WifiOff } from "lucide-react";
 import { SpaceProvider, loadSpace, useSpace } from "@/lib/space";
 import { clearSession, ensureIdentity, friendlyError, readSession, writeSession } from "@/lib/session";
 import { rejoinRoom } from "@/lib/room.functions";
@@ -31,7 +31,6 @@ function SpaceLayout() {
         const uid = await ensureIdentity();
         let data = await loadSpace(uid);
         if (!data) {
-          // Browser identity was lost (e.g. storage partly cleared) — restore with the private key.
           try {
             if (!local.key) throw new Error("NO_KEY");
             const r = await rejoinRoom({ data: { code: local.roomCode, key: local.key } });
@@ -52,9 +51,7 @@ function SpaceLayout() {
         if (!cancelled) setState({ kind: "error", msg: friendlyError(e) });
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [navigate, attempt]);
 
   if (state.kind === "loading")
@@ -83,6 +80,7 @@ const NAV = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/together", label: "Together", icon: Heart },
   { to: "/week", label: "Week", icon: CalendarDays },
+  { to: "/history", label: "History", icon: CalendarRange },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -112,7 +110,7 @@ function Shell() {
           ))}
         </nav>
         {room.couple_message && (
-          <p className="mt-auto font-display text-sm italic leading-relaxed text-muted-foreground">“{room.couple_message}”</p>
+          <p className="mt-auto font-display text-sm italic leading-relaxed text-muted-foreground">"{room.couple_message}"</p>
         )}
       </aside>
 
@@ -126,11 +124,11 @@ function Shell() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-xl grid-cols-4">
+        <div className="mx-auto grid max-w-xl grid-cols-5">
           {NAV.map((n) => {
             const active = path === n.to;
             return (
-              <Link key={n.to} to={n.to} className={cn("flex min-h-[60px] flex-col items-center justify-center gap-1 text-[11px]", active ? "text-primary" : "text-muted-foreground")}>
+              <Link key={n.to} to={n.to} className={cn("flex min-h-[60px] flex-col items-center justify-center gap-1 text-[10px]", active ? "text-primary" : "text-muted-foreground")}>
                 <n.icon className="size-5" strokeWidth={active ? 2.2 : 1.7} />
                 {n.label}
               </Link>
