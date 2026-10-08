@@ -22,6 +22,13 @@
       "when": 1791334807454,
       "tag": "0002_multi_device_profile_budget",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1760000000000,
+      "tag": "0003_weight_logs",
+      "breakpoints": true
     }
   ]
 }
