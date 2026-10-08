@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { supabase } from "@/integrations/supabase/client";
 import { Btn, Field, TextInput } from "./primitives";
 import { MEAL_TYPES, defaultMealType, fmt, type Meal, type MealType } from "@/lib/nutrition";
+import { lookupFood } from "@/lib/lookup.functions";
 import { useSpace } from "@/lib/space";
 import { cn } from "@/lib/utils";
 
@@ -43,11 +44,95 @@ export function validDraft(d: MealDraft) {
   return d.food_name.trim().length > 0 && vals.every((v) => Number.isFinite(v) && v >= 0) && (vals[0] ?? 0) <= 20000;
 }
 
-/** Shared editable fields — used by manual entry, edit and AI confirmation. */
-export function MealFields({ draft, onChange }: { draft: MealDraft; onChange: (d: MealDraft) => void }) {
+/** Shared editable fields */
+export function MealFields({
+  draft,
+  onChange,
+  meId,
+  isNew,
+}: {
+  draft: MealDraft;
+  onChange: (d: MealDraft) => void;
+  meId?: string;
+  isNew?: boolean;
+}) {
   const set = (k: keyof MealDraft) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...draft, [k]: e.target.value });
+  const [lookingUp, setLookingUp] = useState(false);
+
+  // Favourites from localStorage
+  const favKey = meId ? `us.fav.${meId}` : null;
+  const [favs, setFavs] = useState<MealDraft[]>(() => {
+    if (!favKey) return [];
+    try { return JSON.parse(localStorage.getItem(favKey) ?? "[]"); } catch { return []; }
+  });
+
+  function applyFav(f: MealDraft) {
+    onChange({ ...f, meal_type: draft.meal_type });
+  }
+
+  function removeFav(name: string) {
+    if (!favKey) return;
+    const next = favs.filter((f) => f.food_name !== name);
+    localStorage.setItem(favKey, JSON.stringify(next));
+    setFavs(next);
+  }
+
+  async function aiLookup() {
+    const q = draft.food_name.trim();
+    if (q.length < 2) return;
+    setLookingUp(true);
+    try {
+      const res = await lookupFood({ data: { description: q } });
+      if (!res.ok) {
+        const msg = res.error === "AI_CREDITS" ? "Daily AI budget reached." : res.error === "AI_BUSY" ? "AI is busy, try again." : "Couldn't estimate — check the name and try again.";
+        toast.error(msg);
+        return;
+      }
+      const e = res.estimate;
+      onChange({
+        ...draft,
+        food_name: e.food_name,
+        serving_description: e.serving_description || draft.serving_description,
+        calories: String(e.calories),
+        protein: String(e.protein),
+        carbs: String(e.carbs),
+        fat: String(e.fat),
+        ai_confidence: e.confidence,
+      });
+      toast.success(`Estimated · ${e.confidence} confidence ✨`);
+    } catch {
+      toast.error("Couldn't estimate right now. Try again.");
+    } finally {
+      setLookingUp(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {/* Favourites quick-add (new meals only) */}
+      {isNew && favs.length > 0 && (
+        <div>
+          <div className="mb-2 text-xs font-medium text-muted-foreground">Favourites ⭐</div>
+          <div className="flex flex-wrap gap-2">
+            {favs.map((f) => (
+              <div key={f.food_name} className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-sm">
+                <button type="button" onClick={() => applyFav(f)} className="text-left">
+                  {f.food_name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeFav(f.food_name)}
+                  className="ml-1 text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${f.food_name} from favourites`}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-4 gap-1.5 rounded-xl bg-secondary p-1">
         {MEAL_TYPES.map((t) => (
           <button
@@ -60,9 +145,35 @@ export function MealFields({ draft, onChange }: { draft: MealDraft; onChange: (d
           </button>
         ))}
       </div>
+
+      {/* Food name with AI lookup */}
       <Field label="Food">
-        <TextInput value={draft.food_name} onChange={set("food_name")} placeholder="Chicken biryani" maxLength={200} />
+        <div className="flex gap-2">
+          <TextInput
+            value={draft.food_name}
+            onChange={set("food_name")}
+            placeholder="2 slices bread, KitKat 2 bars…"
+            maxLength={200}
+            className="flex-1"
+          />
+          <button
+            type="button"
+            onClick={aiLookup}
+            disabled={lookingUp || draft.food_name.trim().length < 2}
+            title="AI estimate from description"
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-xl border border-border bg-card px-3 transition-colors",
+              "hover:border-primary hover:text-primary disabled:opacity-40",
+            )}
+          >
+            {lookingUp ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          </button>
+        </div>
+        {draft.ai_confidence && (
+          <p className="mt-1 text-xs text-muted-foreground">AI estimate · {draft.ai_confidence} confidence</p>
+        )}
       </Field>
+
       <Field label="Serving">
         <TextInput value={draft.serving_description} onChange={set("serving_description")} placeholder="approximately 350g" maxLength={160} />
       </Field>
@@ -121,7 +232,7 @@ export function MealSheet({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  meal: Meal | null; // null = new manual meal
+  meal: Meal | null;
 }) {
   const { me, members, removeLocal } = useSpace();
   const save = useSaveMeal();
@@ -153,7 +264,7 @@ export function MealSheet({
   }
 
   async function remove() {
-    if (!meal || !confirm(`Delete “${meal.food_name}”?`)) return;
+    if (!meal || !confirm(`Delete "${meal.food_name}"?`)) return;
     setBusy(true);
     const { error } = await supabase.from("meals").delete().eq("id", meal.id);
     setBusy(false);
@@ -171,30 +282,25 @@ export function MealSheet({
             {!meal ? "Add a meal" : editing ? "Edit meal" : meal.food_name}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {!meal ? "Log it by hand — no photo needed." : `Logged by ${mine ? "you" : owner?.display_name}`}
+            {!meal ? "Type a description and tap ✨ to auto-fill macros, or enter manually." : `Logged by ${mine ? "you" : owner?.display_name}`}
           </DrawerDescription>
 
           <div className="mt-5">
             {editing ? (
-              <MealFields draft={draft} onChange={setDraft} />
+              <MealFields draft={draft} onChange={setDraft} meId={me.id} isNew={!meal} />
             ) : meal ? (
               <div className="space-y-4">
                 {meal.serving_description && <p className="text-muted-foreground">{meal.serving_description}</p>}
                 <div className="grid grid-cols-4 gap-2 rounded-2xl border border-border bg-card p-4 text-center">
-                  {[
-                    ["kcal", meal.calories],
-                    ["protein", Number(meal.protein)],
-                    ["carbs", Number(meal.carbs)],
-                    ["fat", Number(meal.fat)],
-                  ].map(([l, v]) => (
-                    <div key={l as string}>
+                  {([["kcal", meal.calories], ["protein", Number(meal.protein)], ["carbs", Number(meal.carbs)], ["fat", Number(meal.fat)]] as const).map(([l, v]) => (
+                    <div key={l}>
                       <div className="num text-xl font-semibold">{fmt(v as number)}{l !== "kcal" && <span className="text-sm text-muted-foreground">g</span>}</div>
                       <div className="text-xs text-muted-foreground">{l}</div>
                     </div>
                   ))}
                 </div>
                 {meal.ai_confidence && (
-                  <p className="text-xs text-muted-foreground">Estimated from a photo · {meal.ai_confidence} confidence</p>
+                  <p className="text-xs text-muted-foreground">Estimated · {meal.ai_confidence} confidence</p>
                 )}
               </div>
             ) : null}
