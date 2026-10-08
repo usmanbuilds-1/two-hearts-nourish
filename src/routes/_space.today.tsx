@@ -61,9 +61,12 @@ function Today() {
         <PersonCard label={partner?.display_name ?? "Partner"} member={partner} meals={theirs} partner />
       </div>
 
-      <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
+      <div className="mt-5 grid grid-cols-2 gap-2">
         <Btn size="lg" onClick={() => setScan(true)}><Camera className="size-5" /> Scan Food 📷</Btn>
         <Btn size="lg" variant="outline" onClick={() => setSheet({ open: true, meal: null })}><Plus className="size-4" /> Add Meal</Btn>
+        <Btn size="lg" variant="outline" className="col-span-2" onClick={() => (me.daily_calorie_target == null ? toast("Set your calorie target in Settings first.") : setPlan(true))}>
+          <PiggyBank className="size-4" /> Plan meals 💰
+        </Btn>
       </div>
 
       <section className="mt-8">
@@ -108,6 +111,7 @@ function Today() {
       </section>
 
       <ScanSheet open={scan} onOpenChange={setScan} onManual={() => setSheet({ open: true, meal: null })} />
+      <BudgetPlanSheet open={plan} onOpenChange={setPlan} me={me} />
       <MealSheet open={sheet.open} meal={sheet.meal} onOpenChange={(o) => setSheet((s) => ({ ...s, open: o }))} />
     </Screen>
   );
