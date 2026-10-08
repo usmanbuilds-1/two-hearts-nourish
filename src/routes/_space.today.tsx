@@ -40,6 +40,7 @@ function PersonCard({ label, member, meals, partner }: { label: string; member: 
 function Today() {
   const { me, partner, meals, today, room, fresh } = useSpace();
   const [scan, setScan] = useState(false);
+  const [plan, setPlan] = useState(false);
   const [sheet, setSheet] = useState<{ open: boolean; meal: Meal | null }>({ open: false, meal: null });
   const todays = useMemo(() => meals.filter((m) => m.meal_date === today), [meals, today]);
   const mine = todays.filter((m) => m.member_id === me.id);
