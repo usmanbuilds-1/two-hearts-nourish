@@ -72,7 +72,7 @@ export function suggest(i: HealthInput): Suggestion {
   }
   let kcal = tdee;
   if (goal === "lose") kcal = tdee - Math.min(500, tdee * 0.2); // ~0.5 kg/week max
-  if (goal === "gain") kcal = tdee + 250; // lean, gradual gain
+  if (goal === "gain") kcal = tdee + 400; // moderate lean bulk (~0.4 kg/month)
   const floor = Math.max(i.sex === "male" ? 1500 : 1200, base);
   if (kcal < floor) {
     kcal = floor;
