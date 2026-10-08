@@ -6,6 +6,7 @@ import { useSpace } from "@/lib/space";
 import { clearSession, inviteUrl, readSession } from "@/lib/session";
 import { leaveRoom } from "@/lib/room.functions";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
+import { ACTIVITY, bmi, bmiCategory, bmr, suggest, validate, type Activity, type BodyGoal, type HealthInput, type Sex } from "@/lib/health";
 import type { Member, Room } from "@/lib/nutrition";
 
 export const Route = createFileRoute("/_space/settings")({
@@ -25,8 +26,48 @@ function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [dark, setDark] = useState(true);
   const [showKey, setShowKey] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
+  const [h, setH] = useState({
+    heightCm: "", weightKg: "", age: "", sex: "" as Sex | "", activity: "" as Activity | "", goal: "" as BodyGoal | "",
+  });
   useEffect(() => setDark(document.documentElement.classList.contains("dark")), []);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+
+  // Local, evidence-based target calculator (src/lib/health.ts) — no server calls, no AI.
+  const num = (s: string) => {
+    const v = Number(s);
+    return s.trim() === "" || !Number.isFinite(v) ? null : v;
+  };
+  const heightCm = num(h.heightCm);
+  const weightKg = num(h.weightKg);
+  const age = num(h.age);
+  const sex = h.sex;
+  const activity = h.activity;
+  const goal = h.goal;
+  const partial: Partial<HealthInput> = {};
+  if (heightCm !== null) partial.heightCm = heightCm;
+  if (weightKg !== null) partial.weightKg = weightKg;
+  if (age !== null) partial.age = age;
+  if (sex !== "") partial.sex = sex;
+  if (activity !== "") partial.activity = activity;
+  if (goal !== "") partial.goal = goal;
+  const calcError = validate(partial);
+  const anyFilled = h.heightCm + h.weightKg + h.age + h.sex + h.activity + h.goal !== "";
+  const shownError = anyFilled && calcError ? calcError : null;
+  const bmiVal =
+    heightCm !== null && weightKg !== null && heightCm >= 100 && heightCm <= 250 && weightKg >= 20 && weightKg <= 400
+      ? bmi(heightCm, weightKg)
+      : null;
+  const bmrVal =
+    bmiVal !== null && heightCm !== null && weightKg !== null && age !== null && age >= 10 && age <= 110 && sex !== ""
+      ? Math.round(bmr({ heightCm, weightKg, age, sex }))
+      : null;
+
+  function applyTargets() {
+    if (validate(partial)) return;
+    const s = suggest(partial as HealthInput);
+    setF((p) => ({ ...p, kcal: String(s.calories), p: String(s.protein), c: String(s.carbs), fat: String(s.fat) }));
+  }
 
   async function save() {
     if (!f.name.trim()) return void toast.error("Your name can't be empty.");
@@ -72,6 +113,69 @@ function SettingsPage() {
           <Field label="Carbs (g)"><TextInput inputMode="decimal" value={f.c} onChange={set("c")} placeholder="—" /></Field>
           <Field label="Fat (g)"><TextInput inputMode="decimal" value={f.fat} onChange={set("fat")} placeholder="—" /></Field>
         </div>
+        <Btn variant="outline" className="w-full" aria-expanded={showCalc} onClick={() => setShowCalc((v) => !v)}>
+          Calculate my targets 🧮
+        </Btn>
+        {showCalc && (
+          <div className="space-y-4 rounded-xl border border-border p-4">
+            <Eyebrow>Your details</Eyebrow>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Height (cm)">
+                <TextInput inputMode="numeric" value={h.heightCm} onChange={(e) => setH((p) => ({ ...p, heightCm: e.target.value }))} placeholder="170" />
+              </Field>
+              <Field label="Weight (kg)">
+                <TextInput inputMode="decimal" value={h.weightKg} onChange={(e) => setH((p) => ({ ...p, weightKg: e.target.value }))} placeholder="70" />
+              </Field>
+              <Field label="Age">
+                <TextInput inputMode="numeric" value={h.age} onChange={(e) => setH((p) => ({ ...p, age: e.target.value }))} placeholder="28" />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <fieldset>
+                <legend className="mb-1.5 block text-sm text-muted-foreground">Sex</legend>
+                <div className="flex gap-2">
+                  {(["male", "female"] as Sex[]).map((s) => (
+                    <label key={s} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-input text-sm capitalize has-[:checked]:border-primary">
+                      <input type="radio" name="calc-sex" value={s} checked={h.sex === s} onChange={() => setH((p) => ({ ...p, sex: s }))} className="accent-primary" />
+                      {s}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend className="mb-1.5 block text-sm text-muted-foreground">Goal</legend>
+                <div className="flex gap-2">
+                  {(["lose", "maintain", "gain"] as BodyGoal[]).map((g) => (
+                    <label key={g} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-input text-xs capitalize has-[:checked]:border-primary">
+                      <input type="radio" name="calc-goal" value={g} checked={h.goal === g} onChange={() => setH((p) => ({ ...p, goal: g }))} className="accent-primary" />
+                      {g}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+            <Field label="Activity level">
+              <select
+                value={h.activity}
+                onChange={(e) => setH((p) => ({ ...p, activity: e.target.value as Activity }))}
+                className="h-12 w-full rounded-xl border border-input bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Choose…</option>
+                {Object.entries(ACTIVITY).map(([key, v]) => (
+                  <option key={key} value={key}>{v.label}</option>
+                ))}
+              </select>
+            </Field>
+            {bmiVal !== null && (
+              <p className="num text-sm text-muted-foreground">
+                BMI: {bmiVal} ({bmiCategory(bmiVal)})
+                {bmrVal !== null ? ` · BMR: ${bmrVal} kcal` : ""}
+              </p>
+            )}
+            {shownError && <p className="text-sm text-destructive">{shownError}</p>}
+            <Btn className="w-full" onClick={applyTargets} disabled={calcError !== null}>Apply to daily targets</Btn>
+          </div>
+        )}
         <Eyebrow className="pt-2">Us</Eyebrow>
         <Field label="Shared goal"><TextInput value={f.goal} onChange={set("goal")} placeholder="Eat better together" maxLength={120} /></Field>
         <Field label="Custom couple message"><TextInput value={f.msg} onChange={set("msg")} placeholder="Getting healthier together, one meal at a time ❤️" maxLength={160} /></Field>
