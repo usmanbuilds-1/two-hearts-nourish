@@ -44,14 +44,13 @@ function SettingsPage() {
   const sex = h.sex;
   const activity = h.activity;
   const goal = h.goal;
-  const partial: Partial<HealthInput> = {
-    heightCm: heightCm ?? undefined,
-    weightKg: weightKg ?? undefined,
-    age: age ?? undefined,
-    sex: sex || undefined,
-    activity: activity || undefined,
-    goal: goal || undefined,
-  };
+  const partial: Partial<HealthInput> = {};
+  if (heightCm !== null) partial.heightCm = heightCm;
+  if (weightKg !== null) partial.weightKg = weightKg;
+  if (age !== null) partial.age = age;
+  if (sex !== "") partial.sex = sex;
+  if (activity !== "") partial.activity = activity;
+  if (goal !== "") partial.goal = goal;
   const calcError = validate(partial);
   const anyFilled = h.heightCm + h.weightKg + h.age + h.sex + h.activity + h.goal !== "";
   const shownError = anyFilled && calcError ? calcError : null;
