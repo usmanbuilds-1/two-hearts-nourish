@@ -54,7 +54,7 @@ export function BudgetPlanSheet({ open, onOpenChange, me }: { open: boolean; onO
         setError(ERRORS[r.error] ?? "The plan didn't come together. Please try again.");
       }
     } catch {
-      setError(navigator.onLine ? ERRORS.AI_FAILED : "You're offline. We'll reconnect when you're back.");
+      setError(navigator.onLine ? "The plan didn't come together. Please try again." : "You're offline. We'll reconnect when you're back.");
     } finally {
       setLoading(false);
     }
