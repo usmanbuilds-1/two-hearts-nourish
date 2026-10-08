@@ -6,7 +6,10 @@ import { MEAL_TYPES, addDays, coupleStats, fmt, greeting, totals, usMessages, ty
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet } from "@/components/us/MealSheet";
 import { ScanSheet } from "@/components/us/ScanSheet";
+import { BudgetPlanSheet } from "@/components/us/BudgetPlanSheet";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { PiggyBank } from "lucide-react";
 
 export const Route = createFileRoute("/_space/today")({
   head: () => ({ meta: [{ title: "Today — Us" }, { name: "description", content: "Your shared day of meals." }, { property: "og:title", content: "Today — Us" }, { property: "og:description", content: "Your shared day of meals." }] }),
@@ -37,6 +40,7 @@ function PersonCard({ label, member, meals, partner }: { label: string; member: 
 function Today() {
   const { me, partner, meals, today, room, fresh } = useSpace();
   const [scan, setScan] = useState(false);
+  const [plan, setPlan] = useState(false);
   const [sheet, setSheet] = useState<{ open: boolean; meal: Meal | null }>({ open: false, meal: null });
   const todays = useMemo(() => meals.filter((m) => m.meal_date === today), [meals, today]);
   const mine = todays.filter((m) => m.member_id === me.id);
@@ -57,9 +61,12 @@ function Today() {
         <PersonCard label={partner?.display_name ?? "Partner"} member={partner} meals={theirs} partner />
       </div>
 
-      <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
+      <div className="mt-5 grid grid-cols-2 gap-2">
         <Btn size="lg" onClick={() => setScan(true)}><Camera className="size-5" /> Scan Food 📷</Btn>
         <Btn size="lg" variant="outline" onClick={() => setSheet({ open: true, meal: null })}><Plus className="size-4" /> Add Meal</Btn>
+        <Btn size="lg" variant="outline" className="col-span-2" onClick={() => (me.daily_calorie_target == null ? toast("Set your calorie target in Settings first.") : setPlan(true))}>
+          <PiggyBank className="size-4" /> Plan meals 💰
+        </Btn>
       </div>
 
       <section className="mt-8">
@@ -104,6 +111,7 @@ function Today() {
       </section>
 
       <ScanSheet open={scan} onOpenChange={setScan} onManual={() => setSheet({ open: true, meal: null })} />
+      <BudgetPlanSheet open={plan} onOpenChange={setPlan} me={me} />
       <MealSheet open={sheet.open} meal={sheet.meal} onOpenChange={(o) => setSheet((s) => ({ ...s, open: o }))} />
     </Screen>
   );
