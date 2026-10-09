@@ -6,7 +6,7 @@ import { useSpace } from "@/lib/space";
 import { clearSession, inviteUrl, readSession } from "@/lib/session";
 import { createLinkCode, leaveRoom } from "@/lib/room.functions";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
-import { ACTIVITY, type Activity, type BodyGoal, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
+import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
 
