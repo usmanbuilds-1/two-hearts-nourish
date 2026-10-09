@@ -58,6 +58,51 @@ export type Database = {
           },
         ]
       }
+      meal_plans: {
+        Row: {
+          created_at: string
+          eaten: boolean | null
+          id: string
+          meal_date: string
+          member_id: string
+          recipe_id: string
+          servings: number
+        }
+        Insert: {
+          created_at?: string
+          eaten?: boolean | null
+          id?: string
+          meal_date: string
+          member_id: string
+          recipe_id: string
+          servings?: number
+        }
+        Update: {
+          created_at?: string
+          eaten?: boolean | null
+          id?: string
+          meal_date?: string
+          member_id?: string
+          recipe_id?: string
+          servings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_plans_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plans_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meal_templates: {
         Row: {
           created_at: string
@@ -267,6 +312,44 @@ export type Database = {
             columns: ["room_id"]
             isOneToOne: false
             referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipes: {
+        Row: {
+          created_at: string
+          id: string
+          ingredients: Json
+          member_id: string
+          name: string
+          servings: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredients?: Json
+          member_id: string
+          name: string
+          servings?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredients?: Json
+          member_id?: string
+          name?: string
+          servings?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipes_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
             referencedColumns: ["id"]
           },
         ]
