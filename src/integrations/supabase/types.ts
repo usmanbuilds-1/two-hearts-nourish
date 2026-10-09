@@ -58,6 +58,41 @@ export type Database = {
           },
         ]
       }
+      meal_templates: {
+        Row: {
+          created_at: string
+          id: string
+          meals: Json
+          member_id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meals?: Json
+          member_id: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meals?: Json
+          member_id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_templates_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meals: {
         Row: {
           ai_confidence: string | null
