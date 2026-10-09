@@ -43,7 +43,7 @@ export const saveFavoriteMeal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { foodName: string; servingDescription?: string; calories: number; protein: number; carbs: number; fat: number }) => ({
     foodName: z.string().trim().min(1).max(200).parse(i.foodName),
-    servingDescription: z.string().max(200).optional().default(""),
+    servingDescription: z.string().max(200).optional().default("").parse(i.servingDescription),
     calories: z.number().min(0).max(10000).parse(i.calories),
     protein: z.number().min(0).max(1000).parse(i.protein),
     carbs: z.number().min(0).max(1000).parse(i.carbs),
@@ -143,7 +143,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
       .eq("member_id", memberId)
       .eq("meal_date", data.sourceDate);
     if (fetchError || !sourceMeals) throw new Error("SOURCE_NOT_FOUND");
-    const newMeals = sourceMeals.map((m: Meal) => ({
+    const newMeals = sourceMeals.map((m) => ({
       room_id: m.room_id,
       member_id: m.member_id,
       food_name: m.food_name,
@@ -152,7 +152,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
       protein: m.protein,
       carbs: m.carbs,
       fat: m.fat,
-      meal_type: m.meal_type,
+      meal_type: m.meal_type as MealType,
       meal_date: data.targetDate,
       ai_confidence: m.ai_confidence,
     }));
@@ -168,7 +168,7 @@ export const getMealTemplates = createServerFn({ method: "GET" })
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) return [];
     const { data } = await db.from("meal_templates").select("*").eq("member_id", memberId).order("created_at", { ascending: false });
-    return (data ?? []) as MealTemplate[];
+    return (data ?? []) as unknown as MealTemplate[];
   });
 
 export const saveMealTemplate = createServerFn({ method: "POST" })

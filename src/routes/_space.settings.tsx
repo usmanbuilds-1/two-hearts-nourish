@@ -56,14 +56,14 @@ function SettingsPage() {
     return h > 0 && w > 0 && a > 0 && calc.sex ? bmr({ heightCm: h, weightKg: w, age: a, sex: calc.sex as Sex }) : null;
   }, [calc]);
 
-  const calcError = validate({
-    heightCm: parseFloat(calc.heightCm) || undefined,
-    weightKg: parseFloat(calc.weightKg) || undefined,
-    age: parseInt(calc.age) || undefined,
-    sex: calc.sex || undefined,
-    activity: calc.activity || undefined,
-    goal: calc.goal || undefined,
-  });
+  const calcInput: Partial<HealthInput> = {};
+  const hN = parseFloat(calc.heightCm); if (hN) calcInput.heightCm = hN;
+  const wN = parseFloat(calc.weightKg); if (wN) calcInput.weightKg = wN;
+  const aN = parseInt(calc.age); if (aN) calcInput.age = aN;
+  if (calc.sex) calcInput.sex = calc.sex;
+  if (calc.activity) calcInput.activity = calc.activity;
+  if (calc.goal) calcInput.goal = calc.goal;
+  const calcError = validate(calcInput);
 
   function applyTargets() {
     const input = {
@@ -292,7 +292,7 @@ function SettingsPage() {
             })}
           </div>
         )}
-        {weightLog.length > 0 && (
+        {weightLog.length > 0 && weightLog[0] && (
           <p className="text-xs text-muted-foreground">
             Latest: {weightLog[0].weight_kg} kg ({new Date(weightLog[0].logged_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })})
           </p>
