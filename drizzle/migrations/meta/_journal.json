@@ -57,6 +57,13 @@
       "when": 1791516806776,
       "tag": "0007_progress_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791516859053,
+      "tag": "0008_weight_logs_reapply",
+      "breakpoints": true
     }
   ]
 }
