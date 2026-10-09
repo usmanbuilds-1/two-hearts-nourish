@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      meal_favorites: {
+        Row: {
+          calories: number
+          carbs: number
+          created_at: string
+          fat: number
+          food_name: string
+          id: string
+          member_id: string
+          protein: number
+          serving_description: string | null
+        }
+        Insert: {
+          calories: number
+          carbs: number
+          created_at?: string
+          fat: number
+          food_name: string
+          id?: string
+          member_id: string
+          protein: number
+          serving_description?: string | null
+        }
+        Update: {
+          calories?: number
+          carbs?: number
+          created_at?: string
+          fat?: number
+          food_name?: string
+          id?: string
+          member_id?: string
+          protein?: number
+          serving_description?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_favorites_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meals: {
         Row: {
           ai_confidence: string | null
