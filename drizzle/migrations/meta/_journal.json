@@ -29,6 +29,41 @@
       "when": 1760000000000,
       "tag": "0003_weight_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791516746997,
+      "tag": "0004_meal_favorites",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791516765563,
+      "tag": "0005_meal_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791516787501,
+      "tag": "0006_recipes_meal_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791516806776,
+      "tag": "0007_progress_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791516859053,
+      "tag": "0008_weight_logs_reapply",
+      "breakpoints": true
     }
   ]
 }

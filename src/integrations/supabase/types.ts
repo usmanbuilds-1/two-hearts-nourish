@@ -14,6 +14,130 @@ export type Database = {
   }
   public: {
     Tables: {
+      meal_favorites: {
+        Row: {
+          calories: number
+          carbs: number
+          created_at: string
+          fat: number
+          food_name: string
+          id: string
+          member_id: string
+          protein: number
+          serving_description: string | null
+        }
+        Insert: {
+          calories: number
+          carbs: number
+          created_at?: string
+          fat: number
+          food_name: string
+          id?: string
+          member_id: string
+          protein: number
+          serving_description?: string | null
+        }
+        Update: {
+          calories?: number
+          carbs?: number
+          created_at?: string
+          fat?: number
+          food_name?: string
+          id?: string
+          member_id?: string
+          protein?: number
+          serving_description?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_favorites_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_plans: {
+        Row: {
+          created_at: string
+          eaten: boolean | null
+          id: string
+          meal_date: string
+          member_id: string
+          recipe_id: string
+          servings: number
+        }
+        Insert: {
+          created_at?: string
+          eaten?: boolean | null
+          id?: string
+          meal_date: string
+          member_id: string
+          recipe_id: string
+          servings?: number
+        }
+        Update: {
+          created_at?: string
+          eaten?: boolean | null
+          id?: string
+          meal_date?: string
+          member_id?: string
+          recipe_id?: string
+          servings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_plans_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plans_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_templates: {
+        Row: {
+          created_at: string
+          id: string
+          meals: Json
+          member_id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meals?: Json
+          member_id: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meals?: Json
+          member_id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_templates_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meals: {
         Row: {
           ai_confidence: string | null
@@ -192,6 +316,76 @@ export type Database = {
           },
         ]
       }
+      progress_notes: {
+        Row: {
+          created_at: string
+          id: string
+          member_id: string
+          note_date: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_id: string
+          note_date: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_id?: string
+          note_date?: string
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "progress_notes_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipes: {
+        Row: {
+          created_at: string
+          id: string
+          ingredients: Json
+          member_id: string
+          name: string
+          servings: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredients?: Json
+          member_id: string
+          name: string
+          servings?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredients?: Json
+          member_id?: string
+          name?: string
+          servings?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipes_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
           couple_message: string | null
@@ -218,6 +412,38 @@ export type Database = {
           together_since?: string | null
         }
         Relationships: []
+      }
+      weight_logs: {
+        Row: {
+          created_at: string
+          id: string
+          logged_date: string
+          member_id: string
+          weight_kg: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          logged_date?: string
+          member_id: string
+          weight_kg: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          logged_date?: string
+          member_id?: string
+          weight_kg?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weight_logs_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

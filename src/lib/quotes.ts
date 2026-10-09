@@ -57,5 +57,5 @@ const QUOTES: string[] = [
 
 export function dailyQuote(): string {
   const idx = Math.floor(Date.now() / 86_400_000) % QUOTES.length;
-  return QUOTES[idx];
+  return QUOTES[idx] ?? QUOTES[0] ?? "";
 }
