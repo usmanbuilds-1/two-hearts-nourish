@@ -50,6 +50,13 @@
       "when": 1791516787501,
       "tag": "0006_recipes_meal_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791516806776,
+      "tag": "0007_progress_notes",
+      "breakpoints": true
     }
   ]
 }

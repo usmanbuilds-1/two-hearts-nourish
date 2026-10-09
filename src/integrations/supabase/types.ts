@@ -316,6 +316,38 @@ export type Database = {
           },
         ]
       }
+      progress_notes: {
+        Row: {
+          created_at: string
+          id: string
+          member_id: string
+          note_date: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_id: string
+          note_date: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_id?: string
+          note_date?: string
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "progress_notes_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipes: {
         Row: {
           created_at: string
