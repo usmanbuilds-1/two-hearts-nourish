@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarDays, CalendarRange, Heart, Settings, Sun, WifiOff } from "lucide-react";
+import { BookOpen, CalendarDays, CalendarRange, ChefHat, Heart, LineChart, Settings, Sun, WifiOff } from "lucide-react";
 import { SpaceProvider, loadSpace, useSpace } from "@/lib/space";
 import { clearSession, ensureIdentity, friendlyError, readSession, writeSession } from "@/lib/session";
 import { rejoinRoom } from "@/lib/room.functions";
@@ -78,6 +78,9 @@ function SpaceLayout() {
 
 const NAV = [
   { to: "/today", label: "Today", icon: Sun },
+  { to: "/diary", label: "Diary", icon: BookOpen },
+  { to: "/recipes", label: "Recipes", icon: ChefHat },
+  { to: "/analytics", label: "Analytics", icon: LineChart },
   { to: "/together", label: "Together", icon: Heart },
   { to: "/week", label: "Week", icon: CalendarDays },
   { to: "/history", label: "History", icon: CalendarRange },
@@ -124,11 +127,11 @@ function Shell() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-xl grid-cols-5">
+        <div className="mx-auto flex items-center justify-around overflow-x-auto max-w-xl px-1">
           {NAV.map((n) => {
             const active = path === n.to;
             return (
-              <Link key={n.to} to={n.to} className={cn("flex min-h-[60px] flex-col items-center justify-center gap-1 text-[10px]", active ? "text-primary" : "text-muted-foreground")}>
+              <Link key={n.to} to={n.to} className={cn("flex min-h-[60px] min-w-[52px] shrink-0 flex-col items-center justify-center gap-1 text-[10px]", active ? "text-primary font-medium" : "text-muted-foreground")}>
                 <n.icon className="size-5" strokeWidth={active ? 2.2 : 1.7} />
                 {n.label}
               </Link>

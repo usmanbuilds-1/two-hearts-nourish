@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, History, Star, Search } from "lucide-react";
 import { useSpace } from "@/lib/space";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet } from "@/components/us/MealSheet";
 import { DiarySheet } from "@/components/us/DiarySheet";
+import { RecentMealsSheet } from "@/components/us/RecentMealsSheet";
+import { FoodSearchSheet } from "@/components/us/FoodSearchSheet";
 import { totals, addDays, MEAL_TYPES, fmt } from "@/lib/nutrition";
 import type { Meal } from "@/lib/nutrition";
 import { cn } from "@/lib/utils";
@@ -20,6 +22,8 @@ function DiaryView() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [addOpen, setAddOpen] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [editMeal, setEditMeal] = useState<Meal | null>(null);
 
   const dayMeals = useMemo(
@@ -79,6 +83,16 @@ function DiaryView() {
           </p>
         )}
 
+        {/* Quick action toolbar */}
+        <div className="flex gap-2">
+          <Btn variant="outline" size="sm" className="flex-1 text-xs" onClick={() => setRecentOpen(true)}>
+            <History className="size-3.5 mr-1" /> Recent Meals
+          </Btn>
+          <Btn variant="outline" size="sm" className="flex-1 text-xs" onClick={() => setSearchOpen(true)}>
+            <Search className="size-3.5 mr-1" /> Search Foods
+          </Btn>
+        </div>
+
         {/* Meals by type */}
         {MEAL_TYPES.map((t) => {
           const list = mine.filter((m) => m.meal_type === t.key);
@@ -93,7 +107,7 @@ function DiaryView() {
                     <button
                       key={m.id}
                       onClick={() => setEditMeal(m)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-3 text-left"
+                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-3 text-left hover:bg-accent/50 transition-colors"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{m.food_name}</div>
@@ -116,12 +130,14 @@ function DiaryView() {
         {/* Add button */}
         <div className="pt-2 border-t">
           <Btn className="w-full" onClick={() => setAddOpen(true)}>
-            <Plus className="size-4 mr-2" /> Add to {displayDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            <Plus className="size-4 mr-2" /> Add Meal
           </Btn>
         </div>
       </div>
 
       <DiarySheet open={addOpen} onOpenChange={setAddOpen} targetDate={selectedDate} />
+      <RecentMealsSheet open={recentOpen} onOpenChange={setRecentOpen} selectedDate={selectedDate} />
+      <FoodSearchSheet open={searchOpen} onOpenChange={setSearchOpen} />
       <MealSheet open={!!editMeal} meal={editMeal} onOpenChange={(o) => !o && setEditMeal(null)} />
     </Screen>
   );
