@@ -117,7 +117,27 @@ function Shell() {
         )}
       </aside>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 pb-16 md:pb-0">
+        {/* Mobile top bar with quick settings access */}
+        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur md:hidden">
+          <div className="font-display text-xl">us.</div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {me.display_name} + {partner?.display_name ?? "…"}
+            </span>
+            <Link
+              to="/settings"
+              className={cn(
+                "p-1.5 rounded-lg transition-colors",
+                path === "/settings" ? "bg-secondary text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-label="Settings"
+            >
+              <Settings className="size-5" />
+            </Link>
+          </div>
+        </div>
+
         {!online && (
           <div className="sticky top-0 z-30 flex items-center justify-center gap-2 bg-secondary px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-sm text-secondary-foreground">
             <WifiOff className="size-4" /> You're offline. We'll reconnect when you're back.
@@ -127,11 +147,11 @@ function Shell() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="mx-auto flex items-center justify-around overflow-x-auto max-w-xl px-1">
+        <div className="mx-auto flex items-center justify-around overflow-x-auto max-w-xl px-1 no-scrollbar">
           {NAV.map((n) => {
             const active = path === n.to;
             return (
-              <Link key={n.to} to={n.to} className={cn("flex min-h-[60px] min-w-[52px] shrink-0 flex-col items-center justify-center gap-1 text-[10px]", active ? "text-primary font-medium" : "text-muted-foreground")}>
+              <Link key={n.to} to={n.to} className={cn("flex min-h-[58px] min-w-[48px] shrink-0 flex-col items-center justify-center gap-1 text-[10px]", active ? "text-primary font-medium" : "text-muted-foreground")}>
                 <n.icon className="size-5" strokeWidth={active ? 2.2 : 1.7} />
                 {n.label}
               </Link>
