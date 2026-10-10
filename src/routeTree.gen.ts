@@ -11,7 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpaceRouteImport } from './routes/_space'
+import { Route as SpaceAnalyticsRouteImport } from './routes/_space.analytics'
+import { Route as SpaceDiaryRouteImport } from './routes/_space.diary'
 import { Route as SpaceHistoryRouteImport } from './routes/_space.history'
+import { Route as SpaceRecipesRouteImport } from './routes/_space.recipes'
 import { Route as SpaceSettingsRouteImport } from './routes/_space.settings'
 import { Route as SpaceTodayRouteImport } from './routes/_space.today'
 import { Route as SpaceTogetherRouteImport } from './routes/_space.together'
@@ -27,9 +30,24 @@ const SpaceRoute = SpaceRouteImport.update({
   id: '/_space',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpaceAnalyticsRoute = SpaceAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => SpaceRoute,
+} as any)
+const SpaceDiaryRoute = SpaceDiaryRouteImport.update({
+  id: '/diary',
+  path: '/diary',
+  getParentRoute: () => SpaceRoute,
+} as any)
 const SpaceHistoryRoute = SpaceHistoryRouteImport.update({
   id: '/history',
   path: '/history',
+  getParentRoute: () => SpaceRoute,
+} as any)
+const SpaceRecipesRoute = SpaceRecipesRouteImport.update({
+  id: '/recipes',
+  path: '/recipes',
   getParentRoute: () => SpaceRoute,
 } as any)
 const SpaceSettingsRoute = SpaceSettingsRouteImport.update({
@@ -60,7 +78,10 @@ const RCodeRoute = RCodeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/analytics': typeof SpaceAnalyticsRoute
+  '/diary': typeof SpaceDiaryRoute
   '/history': typeof SpaceHistoryRoute
+  '/recipes': typeof SpaceRecipesRoute
   '/settings': typeof SpaceSettingsRoute
   '/today': typeof SpaceTodayRoute
   '/together': typeof SpaceTogetherRoute
@@ -69,7 +90,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/analytics': typeof SpaceAnalyticsRoute
+  '/diary': typeof SpaceDiaryRoute
   '/history': typeof SpaceHistoryRoute
+  '/recipes': typeof SpaceRecipesRoute
   '/settings': typeof SpaceSettingsRoute
   '/today': typeof SpaceTodayRoute
   '/together': typeof SpaceTogetherRoute
@@ -80,7 +104,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_space': typeof SpaceRouteWithChildren
+  '/_space/analytics': typeof SpaceAnalyticsRoute
+  '/_space/diary': typeof SpaceDiaryRoute
   '/_space/history': typeof SpaceHistoryRoute
+  '/_space/recipes': typeof SpaceRecipesRoute
   '/_space/settings': typeof SpaceSettingsRoute
   '/_space/today': typeof SpaceTodayRoute
   '/_space/together': typeof SpaceTogetherRoute
@@ -91,7 +118,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/analytics'
+    | '/diary'
     | '/history'
+    | '/recipes'
     | '/settings'
     | '/today'
     | '/together'
@@ -100,7 +130,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/analytics'
+    | '/diary'
     | '/history'
+    | '/recipes'
     | '/settings'
     | '/today'
     | '/together'
@@ -110,7 +143,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_space'
+    | '/_space/analytics'
+    | '/_space/diary'
     | '/_space/history'
+    | '/_space/recipes'
     | '/_space/settings'
     | '/_space/today'
     | '/_space/together'
@@ -140,11 +176,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpaceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_space/analytics': {
+      id: '/_space/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof SpaceAnalyticsRouteImport
+      parentRoute: typeof SpaceRoute
+    }
+    '/_space/diary': {
+      id: '/_space/diary'
+      path: '/diary'
+      fullPath: '/diary'
+      preLoaderRoute: typeof SpaceDiaryRouteImport
+      parentRoute: typeof SpaceRoute
+    }
     '/_space/history': {
       id: '/_space/history'
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof SpaceHistoryRouteImport
+      parentRoute: typeof SpaceRoute
+    }
+    '/_space/recipes': {
+      id: '/_space/recipes'
+      path: '/recipes'
+      fullPath: '/recipes'
+      preLoaderRoute: typeof SpaceRecipesRouteImport
       parentRoute: typeof SpaceRoute
     }
     '/_space/settings': {
@@ -186,7 +243,10 @@ declare module '@tanstack/react-router' {
 }
 
 interface SpaceRouteChildren {
+  SpaceAnalyticsRoute: typeof SpaceAnalyticsRoute
+  SpaceDiaryRoute: typeof SpaceDiaryRoute
   SpaceHistoryRoute: typeof SpaceHistoryRoute
+  SpaceRecipesRoute: typeof SpaceRecipesRoute
   SpaceSettingsRoute: typeof SpaceSettingsRoute
   SpaceTodayRoute: typeof SpaceTodayRoute
   SpaceTogetherRoute: typeof SpaceTogetherRoute
@@ -194,7 +254,10 @@ interface SpaceRouteChildren {
 }
 
 const SpaceRouteChildren: SpaceRouteChildren = {
+  SpaceAnalyticsRoute: SpaceAnalyticsRoute,
+  SpaceDiaryRoute: SpaceDiaryRoute,
   SpaceHistoryRoute: SpaceHistoryRoute,
+  SpaceRecipesRoute: SpaceRecipesRoute,
   SpaceSettingsRoute: SpaceSettingsRoute,
   SpaceTodayRoute: SpaceTodayRoute,
   SpaceTogetherRoute: SpaceTogetherRoute,
