@@ -1,159 +1,79 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { BookOpen, CalendarDays, CalendarRange, ChefHat, Heart, LineChart, Settings, Sun, WifiOff } from "lucide-react";
+import { BookOpen, CalendarDays, Heart, Settings, Sun, WifiOff } from "lucide-react";
 import { SpaceProvider, loadSpace, useSpace } from "@/lib/space";
-import { clearSession, ensureIdentity, friendlyError, readSession, writeSession } from "@/lib/session";
-import { rejoinRoom } from "@/lib/room.functions";
-import { Btn } from "@/components/us/primitives";
-import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { readSession, clearSession } from "@/lib/session";
 
 export const Route = createFileRoute("/_space")({
   ssr: false,
   component: SpaceLayout,
+  loader: async () => {
+    const session = readSession();
+    if (!session) return null;
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return null;
+    try {
+      return await loadSpace(data.user.id);
+    } catch {
+      return null;
+    }
+  },
 });
 
-type Loaded = NonNullable<Awaited<ReturnType<typeof loadSpace>>>;
+const NAV = [
+  { to: "/today",    label: "Today",    icon: Sun },
+  { to: "/together", label: "Together", icon: Heart },
+  { to: "/diary",    label: "Diary",    icon: BookOpen },
+  { to: "/week",     label: "Week",     icon: CalendarDays },
+  { to: "/settings", label: "Settings", icon: Settings },
+] as const;
 
 function SpaceLayout() {
+  const data = Route.useLoaderData();
   const navigate = useNavigate();
-  const [state, setState] = useState<{ kind: "loading" } | { kind: "error"; msg: string } | { kind: "ready"; data: Loaded }>({ kind: "loading" });
-  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const local = readSession();
-      if (!local) {
-        void navigate({ to: "/", replace: true });
-        return;
-      }
-      try {
-        const uid = await ensureIdentity();
-        let data = await loadSpace(uid);
-        if (!data) {
-          try {
-            if (!local.key) throw new Error("NO_KEY");
-            const r = await rejoinRoom({ data: { code: local.roomCode, key: local.key } });
-            writeSession(r);
-            data = await loadSpace(uid);
-          } catch {
-            data = null;
-          }
-        }
-        if (cancelled) return;
-        if (!data) {
-          await clearSession();
-          void navigate({ to: "/r/$code", params: { code: local.roomCode }, replace: true });
-          return;
-        }
-        setState({ kind: "ready", data });
-      } catch (e) {
-        if (!cancelled) setState({ kind: "error", msg: friendlyError(e) });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [navigate, attempt]);
+    if (!data) {
+      void clearSession().finally(() => navigate({ to: "/", replace: true }));
+    }
+  }, [data, navigate]);
 
-  if (state.kind === "loading")
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-background">
-        <div className="animate-pulse font-display text-2xl text-muted-foreground">us.</div>
-      </div>
-    );
-  if (state.kind === "error")
-    return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-        <h1 className="text-2xl text-foreground">We can't reach your space</h1>
-        <p className="max-w-sm text-muted-foreground">{state.msg}</p>
-        <Btn onClick={() => { setState({ kind: "loading" }); setAttempt((a) => a + 1); }}>Try again</Btn>
-      </div>
-    );
-
+  if (!data) return null;
   return (
-    <SpaceProvider initial={state.data}>
-      <Shell />
+    <SpaceProvider initial={data}>
+      <InnerLayout />
     </SpaceProvider>
   );
 }
 
-const NAV = [
-  { to: "/today", label: "Today", icon: Sun },
-  { to: "/diary", label: "Diary", icon: BookOpen },
-  { to: "/recipes", label: "Recipes", icon: ChefHat },
-  { to: "/analytics", label: "Analytics", icon: LineChart },
-  { to: "/together", label: "Together", icon: Heart },
-  { to: "/week", label: "Week", icon: CalendarDays },
-  { to: "/history", label: "History", icon: CalendarRange },
-  { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+function InnerLayout() {
+  const { online } = useSpace();
+  const state = useRouterState();
+  const active = state.location.pathname;
 
-function Shell() {
-  const { online, me, partner, room } = useSpace();
-  const path = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground md:flex">
-      <aside className="sticky top-0 hidden h-[100dvh] w-60 shrink-0 flex-col border-r border-border px-5 py-8 md:flex">
-        <div className="font-display text-2xl">us.</div>
-        <div className="mt-1 text-sm text-muted-foreground">
-          {me.display_name} + {partner?.display_name ?? "…"}
+    <div className="flex min-h-[100dvh] flex-col bg-background text-foreground">
+      {!online && (
+        <div className="flex items-center justify-center gap-2 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+          <WifiOff className="size-3.5" /> Offline — changes will sync when you reconnect
         </div>
-        <nav className="mt-10 space-y-1">
-          {NAV.map((n) => (
-            <Link
-              key={n.to}
-              to={n.to}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                path === n.to ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <n.icon className="size-4" />
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-        {room.couple_message && (
-          <p className="mt-auto font-display text-sm italic leading-relaxed text-muted-foreground">"{room.couple_message}"</p>
-        )}
-      </aside>
-
-      <div className="min-w-0 flex-1 pb-16 md:pb-0">
-        {/* Mobile top bar with quick settings access */}
-        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur md:hidden">
-          <div className="font-display text-xl">us.</div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">
-              {me.display_name} + {partner?.display_name ?? "…"}
-            </span>
-            <Link
-              to="/settings"
-              className={cn(
-                "p-1.5 rounded-lg transition-colors",
-                path === "/settings" ? "bg-secondary text-primary" : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-label="Settings"
-            >
-              <Settings className="size-5" />
-            </Link>
-          </div>
-        </div>
-
-        {!online && (
-          <div className="sticky top-0 z-30 flex items-center justify-center gap-2 bg-secondary px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-sm text-secondary-foreground">
-            <WifiOff className="size-4" /> You're offline. We'll reconnect when you're back.
-          </div>
-        )}
+      )}
+      <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
-      </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="mx-auto flex items-center justify-around overflow-x-auto max-w-xl px-1 no-scrollbar">
-          {NAV.map((n) => {
-            const active = path === n.to;
+      </main>
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/80 backdrop-blur-md"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div className="mx-auto grid max-w-lg grid-cols-5">
+          {NAV.map(({ to, label, icon: Icon }) => {
+            const isActive = active === to || active.startsWith(to + "/");
             return (
-              <Link key={n.to} to={n.to} className={cn("flex min-h-[58px] min-w-[48px] shrink-0 flex-col items-center justify-center gap-1 text-[10px]", active ? "text-primary font-medium" : "text-muted-foreground")}>
-                <n.icon className="size-5" strokeWidth={active ? 2.2 : 1.7} />
-                {n.label}
+              <Link key={to} to={to}
+                className={`flex flex-col items-center gap-1 py-3 text-[11px] font-medium transition-colors ${
+                  isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}>
+                <Icon className="size-5" strokeWidth={isActive ? 2.5 : 1.8} />
+                {label}
               </Link>
             );
           })}
