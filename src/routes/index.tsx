@@ -110,7 +110,7 @@ function Onboarding() {
                     onClick={() => setCodeMode(true)}
                     className="w-full py-1 text-sm text-primary underline-offset-4 hover:underline"
                   >
-                    Already have a space? Enter your 6-digit device code →
+                    Adding this device to an existing space? →
                   </button>
                 </div>
               </form>
@@ -124,12 +124,12 @@ function Onboarding() {
                   void navigate({ to: "/r/$code", params: { code: c } });
                 }}
               >
-                <Field label="Enter room or device code">
+                <Field label="Enter your room code (XXXX-XXXX)">
                   <TextInput
                     autoFocus
                     value={code}
                     onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    placeholder="7KQ4-M2PX or 123456"
+                    placeholder="7KQ4-M2PX"
                     className="font-mono tracking-[0.2em] uppercase"
                     autoCapitalize="characters"
                   />
