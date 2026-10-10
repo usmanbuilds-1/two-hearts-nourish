@@ -79,8 +79,8 @@ export const analyzeFood = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }): Promise<ScanResult> => {
     const { data: me } = await context.supabase
-      .from("members")
-      .select("id")
+      .from("member_devices")
+      .select("member_id")
       .eq("auth_user_id", context.userId)
       .maybeSingle();
     if (!me) return { ok: false, error: "NOT_MEMBER" };

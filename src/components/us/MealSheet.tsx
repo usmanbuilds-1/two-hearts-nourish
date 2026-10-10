@@ -37,7 +37,8 @@ export function draftFromMeal(m: Meal): MealDraft {
   };
 }
 
-const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
+// Empty fields count as 0 so a quick "Apple · 95 kcal" log works.
+const num = (s: string) => (s.trim() === "" ? 0 : Number(s.replace(",", ".")));
 
 export function validDraft(d: MealDraft) {
   const vals = [num(d.calories), num(d.protein), num(d.carbs), num(d.fat)];
