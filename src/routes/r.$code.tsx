@@ -35,7 +35,11 @@ function Join() {
 
   useEffect(() => {
     const s = readSession();
-    if (s) {
+    const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const normalizedSessionCode = s?.roomCode?.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+    // Only auto-redirect if the session is for THIS exact room
+    if (s && normalizedSessionCode === normalizedCode) {
       void navigate({ to: "/today", replace: true });
       return;
     }

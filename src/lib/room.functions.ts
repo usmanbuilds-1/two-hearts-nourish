@@ -113,7 +113,21 @@ export const createRoom = createServerFn({ method: "POST" })
   .inputValidator((i: { name: string }) => ({ name: nameSchema.parse(i.name) }))
   .handler(async ({ data, context }) => {
     const db = await admin();
-    if (await deviceMemberId(db, context.userId)) throw new Error("ALREADY_IN_SPACE");
+    const existingId = await deviceMemberId(db, context.userId);
+    if (existingId) {
+      const { data: existingMember } = await db.from("members").select("id, room_id").eq("id", existingId).maybeSingle();
+      if (existingMember) {
+        const { count } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
+        if ((count ?? 0) <= 1) {
+          await db.from("members").delete().eq("id", existingMember.id);
+          const { count: rem } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
+          if ((rem ?? 0) === 0) await db.from("rooms").delete().eq("id", existingMember.room_id);
+        } else {
+          throw new Error("ALREADY_IN_SPACE");
+        }
+      }
+      await db.from("member_devices").delete().eq("auth_user_id", context.userId);
+    }
 
     let room: { id: string; room_code: string } | null = null;
     for (let i = 0; i < 5 && !room; i++) {
@@ -159,7 +173,24 @@ export const joinRoom = createServerFn({ method: "POST" })
     const { data: room } = await db.from("rooms").select("id").eq("room_code", code).maybeSingle();
     if (!room) throw new Error("ROOM_NOT_FOUND");
 
-    if (await deviceMemberId(db, context.userId)) throw new Error("ALREADY_IN_SPACE");
+    const existingId = await deviceMemberId(db, context.userId);
+    if (existingId) {
+      const { data: existingMember } = await db.from("members").select("id, room_id").eq("id", existingId).maybeSingle();
+      if (existingMember) {
+        if (existingMember.room_id === room.id) {
+          return { roomCode: code, memberId: existingMember.id };
+        }
+        const { count: memberCount } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
+        if ((memberCount ?? 0) <= 1) {
+          await db.from("members").delete().eq("id", existingMember.id);
+          const { count: rem } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
+          if ((rem ?? 0) === 0) await db.from("rooms").delete().eq("id", existingMember.room_id);
+        } else {
+          throw new Error("ALREADY_IN_SPACE");
+        }
+      }
+      await db.from("member_devices").delete().eq("auth_user_id", context.userId);
+    }
 
     const { count } = await db
       .from("members")
