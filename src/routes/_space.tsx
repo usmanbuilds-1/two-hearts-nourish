@@ -77,9 +77,9 @@ function SpaceLayout() {
 }
 
 const NAV = [
-  { to: "/diary", label: "Today", icon: Sun },
+  { to: "/today", label: "Today", icon: Sun },
   { to: "/together", label: "Together", icon: Heart },
-  { to: "/analytics", label: "Week", icon: CalendarDays },
+  { to: "/week", label: "Week", icon: CalendarDays },
   { to: "/history", label: "History", icon: CalendarRange },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
