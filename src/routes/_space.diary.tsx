@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Calendar, Plus } from "lucide-react";
 import { useSpace } from "@/lib/space";
 import { Btn, Screen, Eyebrow } from "@/components/us/primitives";
 import { DiarySheet } from "@/components/us/DiarySheet";
-import { totals, addDays, MEAL_TYPES } from "@/lib/nutrition";
+import { totals, addDays, localDate, MEAL_TYPES } from "@/lib/nutrition";
 import type { Meal } from "@/lib/nutrition";
 
 export const Route = createFileRoute("/_space/diary")({
@@ -13,10 +13,7 @@ export const Route = createFileRoute("/_space/diary")({
 
 function DiaryView() {
   const { me, meals } = useSpace();
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const now = new Date();
-    return now.toISOString().split("T")[0];
-  });
+  const [selectedDate, setSelectedDate] = useState(() => localDate());
   const [sheet, setSheet] = useState<"add" | null>(null);
 
   const dayMeals = useMemo(() => {
@@ -37,7 +34,7 @@ function DiaryView() {
   const mealsByType = useMemo(() => {
     const grouped = new Map<string, Meal[]>();
     for (const type of MEAL_TYPES) {
-      grouped.set(type, dayMeals.filter((m) => m.meal_type === type));
+      grouped.set(type.key, dayMeals.filter((m) => m.meal_type === type.key));
     }
     return grouped;
   }, [dayMeals]);
@@ -49,14 +46,14 @@ function DiaryView() {
     <Screen>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Btn size="sm" variant="ghost" onClick={handlePrevDay}>
+          <Btn variant="ghost" onClick={handlePrevDay}>
             <ChevronLeft className="w-4 h-4" />
           </Btn>
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-muted-foreground" />
             <span className="font-medium">{new Date(selectedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" })}</span>
           </div>
-          <Btn size="sm" variant="ghost" onClick={handleNextDay}>
+          <Btn variant="ghost" onClick={handleNextDay}>
             <ChevronRight className="w-4 h-4" />
           </Btn>
         </div>
