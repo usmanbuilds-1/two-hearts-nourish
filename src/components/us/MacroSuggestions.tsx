@@ -20,7 +20,7 @@ export function MacroSuggestions({
 }) {
   const { data: suggestions = [] } = useQuery({
     queryKey: ["macro-suggestions", remainingCalories],
-    queryFn: () => suggestMealsForMacros({ remainingCalories, targetProtein, targetCarbs, targetFat }),
+    queryFn: () => suggestMealsForMacros({ data: { remainingCalories, targetProtein, targetCarbs, targetFat } }),
     enabled: open,
   });
 

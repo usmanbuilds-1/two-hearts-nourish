@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Btn, TextInput, Field } from "@/components/us/primitives";
-import { insertMeal } from "@/lib/space";
+import { useSaveMeal, emptyDraft, type MealDraft } from "@/components/us/MealSheet";
+import { MEAL_TYPES, type MealType } from "@/lib/nutrition";
 import { toast } from "sonner";
 
 export function DiarySheet({
@@ -11,39 +12,23 @@ export function DiarySheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [foodName, setFoodName] = useState("");
-  const [servingDescription, setServingDescription] = useState("");
-  const [calories, setCalories] = useState("");
-  const [protein, setProtein] = useState("");
-  const [carbs, setCarbs] = useState("");
-  const [fat, setFat] = useState("");
-  const [mealType, setMealType] = useState("lunch");
+  const saveMeal = useSaveMeal();
+  const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [loading, setLoading] = useState(false);
 
+  const set = (patch: Partial<MealDraft>) => setDraft((d) => ({ ...d, ...patch }));
+
   const handleAdd = async () => {
-    if (!foodName.trim() || !calories) {
+    if (!draft.food_name.trim() || !draft.calories) {
       toast.error("Food name and calories required");
       return;
     }
     setLoading(true);
     try {
-      await insertMeal({
-        food_name: foodName,
-        serving_description: servingDescription || null,
-        calories: parseInt(calories),
-        protein: parseFloat(protein) || 0,
-        carbs: parseFloat(carbs) || 0,
-        fat: parseFloat(fat) || 0,
-        meal_type: mealType,
-        meal_date: new Date().toISOString().split("T")[0],
-      });
+      await saveMeal(draft);
       toast.success("Meal added");
       onOpenChange(false);
-      setFoodName("");
-      setCalories("");
-      setProtein("");
-      setCarbs("");
-      setFat("");
+      setDraft(emptyDraft());
     } catch {
       toast.error("Failed to add meal");
     } finally {
@@ -61,36 +46,37 @@ export function DiarySheet({
         <div className="p-4 space-y-3">
           <Field label="Meal Type">
             <select
-              value={mealType}
-              onChange={(e) => setMealType(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
+              value={draft.meal_type}
+              onChange={(e) => set({ meal_type: e.target.value as MealType })}
+              className="w-full px-3 py-2 border rounded-lg bg-background"
             >
-              <option value="breakfast">Breakfast</option>
-              <option value="lunch">Lunch</option>
-              <option value="snack">Snack</option>
-              <option value="dinner">Dinner</option>
+              {MEAL_TYPES.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.icon} {t.label}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="Food Name">
             <TextInput
               placeholder="e.g., Chicken breast"
-              value={foodName}
-              onChange={(e) => setFoodName(e.target.value)}
+              value={draft.food_name}
+              onChange={(e) => set({ food_name: e.target.value })}
             />
           </Field>
           <Field label="Serving (optional)">
             <TextInput
               placeholder="e.g., 150g"
-              value={servingDescription}
-              onChange={(e) => setServingDescription(e.target.value)}
+              value={draft.serving_description}
+              onChange={(e) => set({ serving_description: e.target.value })}
             />
           </Field>
           <Field label="Calories">
             <TextInput
               type="number"
               placeholder="0"
-              value={calories}
-              onChange={(e) => setCalories(e.target.value)}
+              value={draft.calories}
+              onChange={(e) => set({ calories: e.target.value })}
             />
           </Field>
           <div className="grid grid-cols-3 gap-2">
@@ -98,24 +84,24 @@ export function DiarySheet({
               <TextInput
                 type="number"
                 placeholder="0"
-                value={protein}
-                onChange={(e) => setProtein(e.target.value)}
+                value={draft.protein}
+                onChange={(e) => set({ protein: e.target.value })}
               />
             </Field>
             <Field label="Carbs (g)">
               <TextInput
                 type="number"
                 placeholder="0"
-                value={carbs}
-                onChange={(e) => setCarbs(e.target.value)}
+                value={draft.carbs}
+                onChange={(e) => set({ carbs: e.target.value })}
               />
             </Field>
             <Field label="Fat (g)">
               <TextInput
                 type="number"
                 placeholder="0"
-                value={fat}
-                onChange={(e) => setFat(e.target.value)}
+                value={draft.fat}
+                onChange={(e) => set({ fat: e.target.value })}
               />
             </Field>
           </div>
