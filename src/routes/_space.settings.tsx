@@ -316,10 +316,19 @@ function SettingsPage() {
           {linkBusy ? "Generating…" : "Link another device 📱"}
         </Btn>
         {linkCode && (
-          <div className="rounded-2xl border border-border bg-card p-4 text-center">
-            <div className="font-mono text-4xl tracking-[0.25em] text-foreground">{linkCode.code}</div>
-            <div className="mt-1 text-xs text-muted-foreground">Expires in {countdown}</div>
-            <div className="mt-2 text-xs text-muted-foreground">Enter this code on the other device at the welcome screen.</div>
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <div className="text-center">
+              <div className="text-xs text-muted-foreground mb-1">6-digit device code</div>
+              <div className="font-mono text-4xl tracking-[0.25em] text-foreground">{linkCode.code}</div>
+              <div className="mt-1 text-xs text-muted-foreground">Expires in {countdown}</div>
+            </div>
+            <div className="border-t border-border pt-3 space-y-1.5 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground text-sm">How to add the new device:</p>
+              <p>1. Open the app on your other phone</p>
+              <p>2. Tap <span className="font-medium text-foreground">"Have a room code?"</span></p>
+              <p>3. Enter your room code: <span className="font-mono font-medium text-foreground">{room.room_code}</span></p>
+              <p>4. On the next screen, tap <span className="font-medium text-foreground">"Add this device"</span> and enter this 6-digit code</p>
+            </div>
           </div>
         )}
 
