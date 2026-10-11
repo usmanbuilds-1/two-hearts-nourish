@@ -145,7 +145,9 @@ export const analyzeFood = createServerFn({ method: "POST" })
       // Split "data:<mime>;base64,<data>" → mime + raw base64
       const match = data.image.match(/^data:(image\/[a-z]+);base64,(.+)$/s);
       if (!match) return { ok: false, error: "AI_FAILED" };
-      const [, mimeType, rawBase64] = match;
+      const mimeType  = match[1];
+      const rawBase64 = match[2];
+      if (!mimeType || !rawBase64) return { ok: false, error: "AI_FAILED" };
       try {
         text = await callGeminiDirect(geminiKey, SYSTEM, [
           { inline_data: { mime_type: mimeType, data: rawBase64 } },
