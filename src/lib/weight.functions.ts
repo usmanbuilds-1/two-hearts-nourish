@@ -101,8 +101,8 @@ export const getWeightAnalytics = createServerFn({ method: "GET" })
     const weights = entries.map((e) => e.weight_kg);
     const n = weights.length;
 
-    const latestWeight = weights[n - 1];
-    const startWeight  = weights[0];
+    const latestWeight = weights[n - 1]!;
+    const startWeight  = weights[0]!;
     const avgWeight    = Math.round((weights.reduce((a, b) => a + b, 0) / n) * 10) / 10;
     const minWeight    = Math.min(...weights);
     const maxWeight    = Math.max(...weights);
@@ -122,7 +122,7 @@ export const getWeightAnalytics = createServerFn({ method: "GET" })
       const ys = weights;
       const sumX  = xs.reduce((a, b) => a + b, 0);
       const sumY  = ys.reduce((a, b) => a + b, 0);
-      const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+      const sumXY = xs.reduce((a, x, i) => a + x * (ys[i] ?? 0), 0);
       const sumX2 = xs.reduce((a, x) => a + x * x, 0);
       const denom = n * sumX2 - sumX * sumX;
       if (denom !== 0) {
@@ -142,8 +142,8 @@ export const getWeightAnalytics = createServerFn({ method: "GET" })
       const rw = recent.map((e) => e.weight_kg);
       if (Math.max(...rw) - Math.min(...rw) < 0.5) {
         plateauDetected = true;
-        const firstD = new Date(recent[0].logged_date).getTime();
-        const lastD  = new Date(recent[recent.length - 1].logged_date).getTime();
+        const firstD = new Date(recent[0]!.logged_date).getTime();
+        const lastD  = new Date(recent[recent.length - 1]!.logged_date).getTime();
         plateauDays = Math.round((lastD - firstD) / 86_400_000);
       }
     }

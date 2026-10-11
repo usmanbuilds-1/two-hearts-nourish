@@ -1,4 +1,4 @@
-\
+
 import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, Scale } from "lucide-react";
 import { getWeightLog, logWeight } from "@/lib/weight.functions";
@@ -105,7 +105,7 @@ export function WeightCard() {
             )}
           />
           <span className="text-sm text-muted-foreground shrink-0">kg</span>
-          <Btn size="sm" onClick={save} disabled={busy || !input}>
+          <Btn size="md" onClick={save} disabled={busy || !input}>
             {busy ? "…" : "Log"}
           </Btn>
           {editing && (

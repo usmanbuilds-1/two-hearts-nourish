@@ -1,4 +1,4 @@
-\
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
@@ -47,7 +47,7 @@ function WeightChart({ analytics }: { analytics: WeightAnalytics }) {
   const rawPts   = entries.map((e, i) => `${toX(i)},${toY(e.weight_kg)}`).join(" ");
   const avgPts   = rollingAvg.map((e, i) => `${toX(i)},${toY(e.avg)}`).join(" ");
   const lastX    = toX(entries.length - 1);
-  const lastY    = toY(entries[entries.length - 1].weight_kg);
+  const lastY    = toY(entries[entries.length - 1]!.weight_kg);
 
   // x-axis labels: first & last date
   const fmtD = (s: string) => new Date(s + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -74,8 +74,8 @@ function WeightChart({ analytics }: { analytics: WeightAnalytics }) {
         <circle cx={lastX} cy={lastY} r="4" fill="var(--color-primary, #7c3aed)" />
         <circle cx={lastX} cy={lastY} r="7" fill="var(--color-primary, #7c3aed)" fillOpacity="0.18" />
         {/* x-axis labels */}
-        <text x={PAD.l} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4">{fmtD(entries[0].logged_date)}</text>
-        <text x={W - PAD.r} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4" textAnchor="end">{fmtD(entries[entries.length - 1].logged_date)}</text>
+        <text x={PAD.l} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4">{fmtD(entries[0]!.logged_date)}</text>
+        <text x={W - PAD.r} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4" textAnchor="end">{fmtD(entries[entries.length - 1]!.logged_date)}</text>
         {/* y-axis labels */}
         <text x={PAD.l} y={PAD.t + 6} fontSize="8" fill="currentColor" fillOpacity="0.4">{hi.toFixed(1)}</text>
         <text x={PAD.l} y={H - PAD.b + 2} fontSize="8" fill="currentColor" fillOpacity="0.4">{lo.toFixed(1)}</text>
@@ -324,7 +324,7 @@ function WeekView() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Weekly Stats</h2>
-            <Btn size="sm" onClick={() => setSuggestOpen(true)}>
+            <Btn size="md" onClick={() => setSuggestOpen(true)}>
               <Sparkles className="size-3.5 mr-1" /> Meal Ideas
             </Btn>
           </div>
@@ -379,7 +379,7 @@ function WeekView() {
               className="flex-1 bg-transparent text-sm focus:outline-none"
             />
             <span className="shrink-0 text-sm text-muted-foreground">kg</span>
-            <Btn size="sm" onClick={quickLog} disabled={logging || !quickKg}>
+            <Btn size="md" onClick={quickLog} disabled={logging || !quickKg}>
               {logging ? "…" : "Log"}
             </Btn>
           </div>
