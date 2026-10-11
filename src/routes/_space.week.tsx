@@ -47,7 +47,7 @@ function WeightChart({ analytics }: { analytics: WeightAnalytics }) {
   const rawPts   = entries.map((e, i) => `${toX(i)},${toY(e.weight_kg)}`).join(" ");
   const avgPts   = rollingAvg.map((e, i) => `${toX(i)},${toY(e.avg)}`).join(" ");
   const lastX    = toX(entries.length - 1);
-  const lastY    = toY(entries[entries.length - 1].weight_kg);
+  const lastY    = toY(entries[entries.length - 1]!.weight_kg);
 
   // x-axis labels: first & last date
   const fmtD = (s: string) => new Date(s + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -74,8 +74,8 @@ function WeightChart({ analytics }: { analytics: WeightAnalytics }) {
         <circle cx={lastX} cy={lastY} r="4" fill="var(--color-primary, #7c3aed)" />
         <circle cx={lastX} cy={lastY} r="7" fill="var(--color-primary, #7c3aed)" fillOpacity="0.18" />
         {/* x-axis labels */}
-        <text x={PAD.l} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4">{fmtD(entries[0].logged_date)}</text>
-        <text x={W - PAD.r} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4" textAnchor="end">{fmtD(entries[entries.length - 1].logged_date)}</text>
+        <text x={PAD.l} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4">{fmtD(entries[0]!.logged_date)}</text>
+        <text x={W - PAD.r} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4" textAnchor="end">{fmtD(entries[entries.length - 1]!.logged_date)}</text>
         {/* y-axis labels */}
         <text x={PAD.l} y={PAD.t + 6} fontSize="8" fill="currentColor" fillOpacity="0.4">{hi.toFixed(1)}</text>
         <text x={PAD.l} y={H - PAD.b + 2} fontSize="8" fill="currentColor" fillOpacity="0.4">{lo.toFixed(1)}</text>
