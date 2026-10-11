@@ -1,38 +1,133 @@
+\
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { AlertTriangle, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { useSpace } from "@/lib/space";
 import { addDays, fmt, parseLocalDate, totals } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MacroSuggestions } from "@/components/us/MacroSuggestions";
 import { getWeeklySummary, type WeeklySummary } from "@/lib/meal-operations.functions";
+import { getWeightAnalytics, logWeight, type WeightAnalytics } from "@/lib/weight.functions";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_space/week")({
-  head: () => ({ meta: [{ title: "Week — Us" }, { name: "description", content: "Charts, 30-day history and weekly stats." }] }),
+  head: () => ({ meta: [{ title: "Week — Us" }] }),
   component: WeekView,
 });
 
-/** Kept so history.tsx can re-export without error */
 export function WeekAndHistory() { return <WeekView />; }
 
-type Tab = "week" | "history" | "stats";
+type Tab = "week" | "history" | "stats" | "weight";
 
+// ── tiny SVG weight chart ────────────────────────────────────────────────
+function WeightChart({ analytics }: { analytics: WeightAnalytics }) {
+  const { entries, rollingAvg, minWeight, maxWeight } = analytics;
+  if (entries.length < 2) {
+    return (
+      <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
+        Log at least 2 weights to see your chart
+      </div>
+    );
+  }
+
+  const W = 300;
+  const H = 100;
+  const PAD = { t: 8, b: 20, l: 8, r: 8 };
+  const chartW = W - PAD.l - PAD.r;
+  const chartH = H - PAD.t - PAD.b;
+
+  const lo = (minWeight ?? 0) - 0.5;
+  const hi = (maxWeight ?? 100) + 0.5;
+  const range = hi - lo || 1;
+
+  const toX = (i: number) => PAD.l + (i / Math.max(entries.length - 1, 1)) * chartW;
+  const toY = (kg: number) => PAD.t + chartH - ((kg - lo) / range) * chartH;
+
+  const rawPts   = entries.map((e, i) => `${toX(i)},${toY(e.weight_kg)}`).join(" ");
+  const avgPts   = rollingAvg.map((e, i) => `${toX(i)},${toY(e.avg)}`).join(" ");
+  const lastX    = toX(entries.length - 1);
+  const lastY    = toY(entries[entries.length - 1].weight_kg);
+
+  // x-axis labels: first & last date
+  const fmtD = (s: string) => new Date(s + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full overflow-visible" preserveAspectRatio="none">
+        {/* grid lines */}
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line key={f} x1={PAD.l} x2={W - PAD.r} y1={PAD.t + chartH * (1 - f)} y2={PAD.t + chartH * (1 - f)}
+            stroke="currentColor" strokeOpacity="0.06" strokeWidth="1" />
+        ))}
+        {/* rolling avg — dashed, softer */}
+        {rollingAvg.length >= 2 && (
+          <polyline points={avgPts} fill="none"
+            stroke="var(--color-primary, #7c3aed)" strokeOpacity="0.35"
+            strokeWidth="1.5" strokeDasharray="4 3" strokeLinejoin="round" strokeLinecap="round" />
+        )}
+        {/* raw line */}
+        <polyline points={rawPts} fill="none"
+          stroke="var(--color-primary, #7c3aed)" strokeWidth="2"
+          strokeLinejoin="round" strokeLinecap="round" />
+        {/* latest dot */}
+        <circle cx={lastX} cy={lastY} r="4" fill="var(--color-primary, #7c3aed)" />
+        <circle cx={lastX} cy={lastY} r="7" fill="var(--color-primary, #7c3aed)" fillOpacity="0.18" />
+        {/* x-axis labels */}
+        <text x={PAD.l} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4">{fmtD(entries[0].logged_date)}</text>
+        <text x={W - PAD.r} y={H - 3} fontSize="8" fill="currentColor" fillOpacity="0.4" textAnchor="end">{fmtD(entries[entries.length - 1].logged_date)}</text>
+        {/* y-axis labels */}
+        <text x={PAD.l} y={PAD.t + 6} fontSize="8" fill="currentColor" fillOpacity="0.4">{hi.toFixed(1)}</text>
+        <text x={PAD.l} y={H - PAD.b + 2} fontSize="8" fill="currentColor" fillOpacity="0.4">{lo.toFixed(1)}</text>
+      </svg>
+      <div className="mt-1 flex gap-4 text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1"><span className="inline-block h-px w-4 bg-primary" />Raw</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-px w-4 border-t border-dashed border-primary/50" />7-day avg</span>
+      </div>
+    </div>
+  );
+}
+
+// ── main view ───────────────────────────────────────────────────────────
 function WeekView() {
   const { me, partner, meals, today } = useSpace();
-  const [tab, setTab]       = useState<Tab>("week");
+  const [tab, setTab]           = useState<Tab>("week");
   const [selected, setSelected] = useState<string | null>(null);
-  const [stats, setStats]   = useState<WeeklySummary | null>(null);
+  const [stats, setStats]       = useState<WeeklySummary | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen]   = useState(false);
+  const [wa, setWa]             = useState<WeightAnalytics | null>(null);
+  const [waLoading, setWaLoading] = useState(false);
+  // quick-log from weight tab
+  const [quickKg, setQuickKg]   = useState("");
+  const [logging, setLogging]   = useState(false);
 
   useEffect(() => {
     if (tab === "stats" && !stats && !statsLoading) {
       setStatsLoading(true);
       getWeeklySummary().then(setStats).catch(() => {}).finally(() => setStatsLoading(false));
     }
-  }, [tab, stats, statsLoading]);
+    if (tab === "weight" && !wa && !waLoading) {
+      setWaLoading(true);
+      getWeightAnalytics().then(setWa).catch(() => {}).finally(() => setWaLoading(false));
+    }
+  }, [tab, stats, statsLoading, wa, waLoading]);
 
+  async function quickLog() {
+    const val = parseFloat(quickKg.replace(",", "."));
+    if (isNaN(val) || val < 20 || val > 400) { toast.error("Enter a valid weight (20–400 kg)"); return; }
+    setLogging(true);
+    try {
+      await logWeight({ data: { weightKg: val } });
+      toast.success("Weight logged ✓");
+      setQuickKg("");
+      // refresh analytics
+      setWa(null); setWaLoading(false);
+    } catch { toast.error("Couldn't save. Please try again."); }
+    finally { setLogging(false); }
+  }
+
+  // ── calorie chart data ──
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)), [today]);
   const rows = useMemo(() => days.map((d) => {
     const mine  = meals.filter((m) => m.meal_date === d && m.member_id === me.id);
@@ -54,6 +149,7 @@ function WeekView() {
   const myProteinTarget    = Number(me.daily_protein_target ?? 0);
   const theirProteinTarget = Number(partner?.daily_protein_target ?? 0);
 
+  // ── 30-day history data ──
   const last30  = useMemo(() => Array.from({ length: 30 }, (_, i) => addDays(today, i - 29)), [today]);
   const dayData = useMemo(() => last30.map((d) => {
     const mine   = meals.filter((m) => m.meal_date === d && m.member_id === me.id);
@@ -72,15 +168,22 @@ function WeekView() {
   const selectedDay = selected ? dayData.find((d) => d.d === selected) : null;
   const dailyTarget = me.daily_calorie_target ?? 2000;
 
+  const TABS: { key: Tab; label: string }[] = [
+    { key: "week",    label: "Week" },
+    { key: "history", label: "30 Days" },
+    { key: "stats",   label: "Stats" },
+    { key: "weight",  label: "Weight" },
+  ];
+
   return (
     <Screen>
-      {/* Tab bar */}
-      <div className="grid grid-cols-3 gap-1 rounded-xl bg-secondary p-1 mb-5">
-        {(["week", "history", "stats"] as Tab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={cn("rounded-lg py-2 text-sm font-medium capitalize transition-colors",
-              tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>
-            {t === "week" ? "This Week" : t === "history" ? "30 Days" : "Stats"}
+      {/* Tab bar — 4 cols */}
+      <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary p-1 mb-5">
+        {TABS.map(({ key, label }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={cn("rounded-lg py-2 text-[13px] font-medium transition-colors",
+              tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>
+            {label}
           </button>
         ))}
       </div>
@@ -170,8 +273,7 @@ function WeekView() {
                   className={cn("flex flex-col items-center gap-1 rounded-xl p-2 transition-colors",
                     isSelected ? "bg-secondary ring-1 ring-primary" : "hover:bg-secondary/60")}>
                   <span className="text-[11px] font-medium text-muted-foreground">{parseLocalDate(d).getDate()}</span>
-                  <span className={cn("size-2 rounded-full",
-                    status === "both" ? "bg-primary" : status === "one" ? "bg-partner" : "bg-border")} />
+                  <span className={cn("size-2 rounded-full", status === "both" ? "bg-primary" : status === "one" ? "bg-partner" : "bg-border")} />
                 </button>
               );
             })}
@@ -226,32 +328,142 @@ function WeekView() {
               <Sparkles className="size-3.5 mr-1" /> Meal Ideas
             </Btn>
           </div>
-          {statsLoading && <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>}
+          {statsLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
           {!statsLoading && stats && (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-4 bg-card border border-border rounded-2xl">
+                <div className="rounded-2xl border border-border bg-card p-4">
                   <div className="text-xs text-muted-foreground mb-1">Avg Calories</div>
-                  <div className="text-2xl font-bold num">{stats.avgCalories}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{stats.daysLogged} days logged</div>
+                  <div className="num text-2xl font-bold">{stats.avgCalories}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{stats.daysLogged} days logged</div>
                 </div>
-                <div className="p-4 bg-card border border-border rounded-2xl">
+                <div className="rounded-2xl border border-border bg-card p-4">
                   <div className="text-xs text-muted-foreground mb-1">Goal Hit</div>
-                  <div className="text-2xl font-bold num">{stats.targetAdherence}%</div>
-                  <div className="text-xs text-muted-foreground mt-1">Target: {dailyTarget} kcal</div>
+                  <div className="num text-2xl font-bold">{stats.targetAdherence}%</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Target: {dailyTarget} kcal</div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {[["Protein", `${stats.avgProtein}g`], ["Carbs", `${stats.avgCarbs}g`], ["Fat", `${stats.avgFat}g`]].map(([l, v]) => (
-                  <div key={l} className="p-3 bg-secondary/60 rounded-xl text-center">
-                    <div className="text-[11px] text-muted-foreground uppercase tracking-wider">{l}</div>
-                    <div className="text-lg font-bold num">{v}</div>
+                  <div key={l} className="rounded-xl bg-secondary/60 p-3 text-center">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{l}</div>
+                    <div className="num text-lg font-bold">{v}</div>
                   </div>
                 ))}
               </div>
               {!stats.daysLogged && (
-                <p className="text-sm text-muted-foreground text-center py-4">No meals logged this week yet — start adding meals to see your stats.</p>
+                <p className="py-4 text-center text-sm text-muted-foreground">No meals logged this week yet.</p>
               )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB: WEIGHT ── */}
+      {tab === "weight" && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold">Weight Tracker</h2>
+
+          {/* quick log */}
+          <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              min="20"
+              max="400"
+              placeholder="Log today's weight…"
+              value={quickKg}
+              onChange={(e) => setQuickKg(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && quickLog()}
+              className="flex-1 bg-transparent text-sm focus:outline-none"
+            />
+            <span className="shrink-0 text-sm text-muted-foreground">kg</span>
+            <Btn size="sm" onClick={quickLog} disabled={logging || !quickKg}>
+              {logging ? "…" : "Log"}
+            </Btn>
+          </div>
+
+          {waLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
+
+          {!waLoading && wa && wa.entries.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+              No weight data yet. Log your first weight above to start tracking.
+            </div>
+          )}
+
+          {!waLoading && wa && wa.entries.length > 0 && (
+            <>
+              {/* Plateau alert */}
+              {wa.plateauDetected && (
+                <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30">
+                  <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Plateau detected</p>
+                    <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                      Your weight has changed less than 0.5 kg over {wa.plateauDays} days. Consider adjusting calories or activity.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Chart */}
+              <WeightChart analytics={wa} />
+
+              {/* Key stats */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Current</div>
+                  <div className="num text-2xl font-bold">{wa.latestWeight} <span className="text-sm font-normal text-muted-foreground">kg</span></div>
+                </div>
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Average (90 days)</div>
+                  <div className="num text-2xl font-bold">{wa.avgWeight} <span className="text-sm font-normal text-muted-foreground">kg</span></div>
+                </div>
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Change since start</div>
+                  <div className={cn("num text-2xl font-bold flex items-center gap-1.5",
+                    (wa.totalChange ?? 0) > 0 ? "text-green-600" : (wa.totalChange ?? 0) < 0 ? "text-red-500" : "")}>
+                    {(wa.totalChange ?? 0) > 0 && <TrendingUp className="size-5" />}
+                    {(wa.totalChange ?? 0) < 0 && <TrendingDown className="size-5" />}
+                    {(wa.totalChange ?? 0) > 0 ? "+" : ""}{wa.totalChange} kg
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Trend / week</div>
+                  {wa.trendKgPerWeek !== null ? (
+                    <div className={cn("num text-2xl font-bold flex items-center gap-1.5",
+                      wa.trendKgPerWeek > 0.05 ? "text-green-600" : wa.trendKgPerWeek < -0.05 ? "text-red-500" : "text-muted-foreground")}>
+                      {wa.trendKgPerWeek > 0 && <TrendingUp className="size-5" />}
+                      {wa.trendKgPerWeek < 0 && <TrendingDown className="size-5" />}
+                      {wa.trendKgPerWeek > 0 ? "+" : ""}{wa.trendKgPerWeek} kg
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">Log more to see trend</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Log history */}
+              <Eyebrow>Recent entries</Eyebrow>
+              <div className="space-y-1.5">
+                {[...wa.entries].reverse().slice(0, 10).map((e) => {
+                  const ravg = wa.rollingAvg.find((r) => r.logged_date === e.logged_date);
+                  return (
+                    <div key={e.logged_date} className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-sm">
+                      <span className="text-muted-foreground">
+                        {new Date(e.logged_date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        {ravg && ravg.avg !== e.weight_kg && (
+                          <span className="text-xs text-muted-foreground">avg {ravg.avg} kg</span>
+                        )}
+                        <span className="num font-semibold">{e.weight_kg} kg</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </>
           )}
         </div>
