@@ -5,7 +5,7 @@ import type { FoodEstimate } from "./scan.functions";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
 const LOVABLE_MODEL = "google/gemini-3.8-flash";
-const GEMINI_MODEL  = "gemini-2.5-flash";
+const GEMINI_MODEL  = "gemini-flash-latest";
 
 // ── System prompt ─────────────────────────────────────────────────────────
 const SYSTEM = `You are a careful nutrition estimator. The user gives you a natural-language food description — it might include a portion size, a brand name, a dish name, or all three (e.g. "2 medium slices of white bread with butter", "Nestle KitKat 2 bars", "chicken biryani plate approx 400g", "daal chawal 1 serving").

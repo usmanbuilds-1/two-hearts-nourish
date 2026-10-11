@@ -4,7 +4,7 @@ import { z } from "zod";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
 const LOVABLE_MODEL  = "google/gemini-3.8-flash"; // Lovable gateway model ID
-const GEMINI_MODEL   = "gemini-2.5-flash";         // direct Google API model ID
+const GEMINI_MODEL   = "gemini-flash-latest";         // direct Google API model ID
 
 // ── System prompt ─────────────────────────────────────────────────────────
 const SYSTEM = `You are a careful nutrition estimator looking at a single food photo.
