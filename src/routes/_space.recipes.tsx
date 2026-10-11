@@ -183,10 +183,10 @@ function RecipesView() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Btn size="sm" onClick={() => handleLogRecipe(t)} className="text-xs">
+                      <Btn size="md" onClick={() => handleLogRecipe(t)} className="text-xs">
                         <Utensils className="w-3.5 h-3.5 mr-1" /> Log Today
                       </Btn>
-                      <Btn variant="ghost" size="sm" onClick={() => handleDelete(t.id)}>
+                      <Btn variant="ghost" size="md" onClick={() => handleDelete(t.id)}>
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </Btn>
                     </div>
@@ -241,10 +241,10 @@ function RecipesView() {
                         />
                       </div>
                       <div className="flex gap-2 pt-1">
-                        <Btn size="sm" onClick={() => handleAddItemToRecipe(t.id, t.meals, t.name)} className="flex-1">
+                        <Btn size="md" onClick={() => handleAddItemToRecipe(t.id, t.meals, t.name)} className="flex-1">
                           <Check className="w-3.5 h-3.5 mr-1" /> Save Item
                         </Btn>
-                        <Btn size="sm" variant="ghost" onClick={() => setAddingMealTo(null)} className="flex-1">
+                        <Btn size="md" variant="ghost" onClick={() => setAddingMealTo(null)} className="flex-1">
                           Cancel
                         </Btn>
                       </div>
@@ -252,7 +252,7 @@ function RecipesView() {
                   ) : (
                     <Btn
                       variant="outline"
-                      size="sm"
+                      size="md"
                       onClick={() => setAddingMealTo(t.id)}
                       className="w-full text-xs text-muted-foreground hover:text-foreground"
                     >

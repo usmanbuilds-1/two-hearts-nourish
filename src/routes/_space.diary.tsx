@@ -123,11 +123,11 @@ function DiaryView() {
       <div className="space-y-4">
         {/* Date navigation */}
         <div className="flex items-center justify-between">
-          <Btn size="sm" variant="ghost" onClick={prevDay}><ChevronLeft className="size-4" /></Btn>
+          <Btn size="md" variant="ghost" onClick={prevDay}><ChevronLeft className="size-4" /></Btn>
           <span className="font-medium">
             {displayDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
           </span>
-          <Btn size="sm" variant="ghost" onClick={nextDay}><ChevronRight className="size-4" /></Btn>
+          <Btn size="md" variant="ghost" onClick={nextDay}><ChevronRight className="size-4" /></Btn>
         </div>
 
         {/* Macro summary ring */}
