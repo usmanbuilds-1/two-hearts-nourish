@@ -26,6 +26,20 @@ const resultSchema = z.object({
   confidence: z.string().optional().default("low"),
 });
 
+function errorStatus(e: unknown): number | undefined {
+  let cur: unknown = e;
+  for (let i = 0; i < 5 && cur && typeof cur === "object"; i++) {
+    const o = cur as { statusCode?: number; status?: number; lastError?: unknown; cause?: unknown; errors?: unknown[] };
+    if (typeof o.statusCode === "number") return o.statusCode;
+    if (typeof o.status === "number") return o.status;
+    cur = o.lastError ?? o.cause ?? o.errors?.[o.errors.length - 1];
+  }
+  const msg = String((e as { message?: string })?.message ?? e);
+  if (/not enough credits|payment required/i.test(msg)) return 402;
+  if (/rate limit/i.test(msg)) return 429;
+  return undefined;
+}
+
 function clamp(n: number, max: number) {
   return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), 0), max) : 0;
 }
@@ -92,6 +106,7 @@ export const lookupFood = createServerFn({ method: "POST" })
             content: `Estimate the nutrition for: "${data.description}". JSON only.`,
           },
         ],
+        maxRetries: 0,
         onError: ({ error }) => {
           streamError = error;
         },
@@ -102,7 +117,7 @@ export const lookupFood = createServerFn({ method: "POST" })
     }
 
     if (streamError) {
-      const status = (streamError as { statusCode?: number }).statusCode;
+      const status = errorStatus(streamError);
       if (status === 429) return { ok: false, error: "AI_BUSY" };
       if (status === 402 || status === 403) return { ok: false, error: "AI_CREDITS" };
       return { ok: false, error: "AI_FAILED" };

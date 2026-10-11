@@ -34,6 +34,20 @@ export type FoodEstimate = {
   confidence: "low" | "medium" | "high";
 };
 
+function errorStatus(e: unknown): number | undefined {
+  let cur: unknown = e;
+  for (let i = 0; i < 5 && cur && typeof cur === "object"; i++) {
+    const o = cur as { statusCode?: number; status?: number; lastError?: unknown; cause?: unknown; errors?: unknown[] };
+    if (typeof o.statusCode === "number") return o.statusCode;
+    if (typeof o.status === "number") return o.status;
+    cur = o.lastError ?? o.cause ?? o.errors?.[o.errors.length - 1];
+  }
+  const msg = String((e as { message?: string })?.message ?? e);
+  if (/not enough credits|payment required/i.test(msg)) return 402;
+  if (/rate limit/i.test(msg)) return 429;
+  return undefined;
+}
+
 function clamp(n: number, max: number) {
   return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), 0), max) : 0;
 }
@@ -109,6 +123,7 @@ export const analyzeFood = createServerFn({ method: "POST" })
             ],
           },
         ],
+        maxRetries: 0,
         onError: ({ error }) => {
           streamError = error;
         },
@@ -118,7 +133,7 @@ export const analyzeFood = createServerFn({ method: "POST" })
       streamError = e;
     }
     if (streamError) {
-      const status = (streamError as { statusCode?: number }).statusCode;
+      const status = errorStatus(streamError);
       console.error("food scan failed", status, streamError);
       if (status === 429) return { ok: false, error: "AI_BUSY" };
       if (status === 402 || status === 403) return { ok: false, error: "AI_CREDITS" };
