@@ -9,6 +9,7 @@ import { MealSheet, draftFromMeal } from "@/components/us/MealSheet";
 import { ScanSheet } from "@/components/us/ScanSheet";
 import { BudgetPlanSheet } from "@/components/us/BudgetPlanSheet";
 import { dailyQuote } from "@/lib/quotes";
+import { WeightCard } from "@/components/us/WeightCard";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_space/today")({
@@ -87,7 +88,12 @@ function Today() {
         <PersonCard label={partner?.display_name ?? "Partner"} member={partner} meals={theirs} partner />
       </div>
 
-      <div className="mt-5 grid grid-cols-3 gap-2">
+      {/* Weight log — always visible, self-contained */}
+      <div className="mt-4">
+        <WeightCard />
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
         <Btn size="lg" onClick={() => setScan(true)}><Camera className="size-4" /> Scan</Btn>
         <Btn size="lg" variant="outline" onClick={() => setSheet({ open: true, meal: null })}><Plus className="size-4" /> Add</Btn>
         <Btn size="lg" variant="outline" onClick={() => {
