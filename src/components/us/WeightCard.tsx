@@ -1,4 +1,4 @@
-\
+
 import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, Scale } from "lucide-react";
 import { getWeightLog, logWeight } from "@/lib/weight.functions";
