@@ -85,7 +85,7 @@ export function MealFields({
     try {
       const res = await lookupFood({ data: { description: q } });
       if (!res.ok) {
-        const msg = res.error === "AI_CREDITS" ? "Daily AI budget reached." : res.error === "AI_BUSY" ? "AI is busy, try again." : "Couldn't estimate — check the name and try again.";
+        const msg = res.error === "AI_CREDITS" ? "AI estimates are paused — the AI allowance is used up. You can still type the numbers yourself." : res.error === "AI_BUSY" ? "AI is busy, try again." : "Couldn't estimate — check the name and try again.";
         toast.error(msg);
         return;
       }
