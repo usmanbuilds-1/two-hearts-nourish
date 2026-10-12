@@ -12,6 +12,7 @@ export type Meal = {
   serving_description: string | null;
   ai_confidence: string | null;
   meal_type: MealType;
+  photo_url?: string | null;
   meal_date: string;
   created_at: string;
   updated_at: string;
