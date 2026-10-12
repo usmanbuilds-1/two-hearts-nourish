@@ -18,6 +18,7 @@ export type MealDraft = {
   fat: string;
   meal_type: MealType;
   ai_confidence: "low" | "medium" | "high" | null;
+  photo_url?: string | null;
 };
 
 export function emptyDraft(): MealDraft {
@@ -208,6 +209,7 @@ export function useSaveMeal() {
       fat: Math.round(num(d.fat) * 10) / 10,
       meal_type: d.meal_type,
       ai_confidence: d.ai_confidence,
+      photo_url: d.photo_url ?? existing?.photo_url ?? null,
     };
     if (existing) {
       const { data, error } = await supabase.from("meals").update(payload).eq("id", existing.id).select().single();
@@ -291,6 +293,11 @@ export function MealSheet({
               <MealFields draft={draft} onChange={setDraft} meId={me.id} isNew={!meal} />
             ) : meal ? (
               <div className="space-y-4">
+                {meal.photo_url && (
+                  <div className="overflow-hidden rounded-2xl border border-border">
+                    <img src={meal.photo_url} alt={meal.food_name} className="h-48 w-full object-cover" />
+                  </div>
+                )}
                 {meal.serving_description && <p className="text-muted-foreground">{meal.serving_description}</p>}
                 <div className="grid grid-cols-4 gap-2 rounded-2xl border border-border bg-card p-4 text-center">
                   {([["kcal", meal.calories], ["protein", Number(meal.protein)], ["carbs", Number(meal.carbs)], ["fat", Number(meal.fat)]] as const).map(([l, v]) => (
