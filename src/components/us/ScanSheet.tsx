@@ -4,7 +4,8 @@ import { Camera, ImageIcon } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { Btn } from "./primitives";
 import { MealFields, emptyDraft, useSaveMeal, validDraft, type MealDraft } from "./MealSheet";
-import { compressImage } from "@/lib/image";
+import { useSpace } from "@/lib/space";
+import { compressImage, uploadMealPhoto } from "@/lib/image";
 import { analyzeFood } from "@/lib/scan.functions";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
@@ -25,6 +26,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
   const [errMsg, setErrMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const save = useSaveMeal();
+  const { room } = useSpace();
 
   useEffect(() => {
     if (!open) {
@@ -80,7 +82,12 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
     if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
     setBusy(true);
     try {
-      await save(draft);
+      // Upload the photo first (non-blocking — meal still saves if upload fails)
+      let photoUrl: string | null = null;
+      if (image) {
+        photoUrl = await uploadMealPhoto(room.id, image);
+      }
+      await save({ ...draft, photo_url: photoUrl });
       toast.success("Added ❤️");
       onOpenChange(false);
     } catch {
@@ -106,7 +113,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "An estimate from your photo — adjust anything before saving." : "Photos are only used for the estimate and never stored."}
+            {stage === "confirm" ? "An estimate from your photo — adjust anything before saving." : "Your photo is saved so your partner can see your plate 👀"}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
