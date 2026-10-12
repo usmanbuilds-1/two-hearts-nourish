@@ -5,7 +5,7 @@ import type { FoodEstimate } from "./scan.functions";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
 const LOVABLE_MODEL = "google/gemini-3.8-flash";
-const GEMINI_MODEL  = "gemini-flash-latest";
+const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"];
 
 // ── System prompt ─────────────────────────────────────────────────────────
 const SYSTEM = `You are a careful nutrition estimator. The user gives you a natural-language food description — it might include a portion size, a brand name, a dish name, or all three (e.g. "2 medium slices of white bread with butter", "Nestle KitKat 2 bars", "chicken biryani plate approx 400g", "daal chawal 1 serving").
@@ -88,21 +88,36 @@ async function callGeminiDirect(
   system: string,
   parts: GeminiRequestPart[],
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts }],
-      generationConfig: { response_mime_type: "application/json" },
-    }),
-  });
-  if (!res.ok) {
-    throw Object.assign(new Error(`Gemini API HTTP ${res.status}`), { status: res.status });
+  let lastError: unknown;
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts }],
+          generationConfig: { response_mime_type: "application/json" },
+        }),
+      });
+    } catch (e) {
+      lastError = e;
+      continue;
+    }
+    if (res.ok) {
+      const data = (await res.json()) as GeminiResponse;
+      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    }
+    lastError = Object.assign(new Error(`Gemini API HTTP ${res.status}`), { status: res.status });
+    if (res.status === 503 || res.status === 429 || res.status === 404 || res.status >= 500) {
+      console.warn(`Gemini ${model} HTTP ${res.status}, trying fallback`);
+      continue;
+    }
+    throw lastError;
   }
-  const data = (await res.json()) as GeminiResponse;
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  throw lastError ?? new Error("All Gemini models failed");
 }
 
 // ── Server function ───────────────────────────────────────────────────────
