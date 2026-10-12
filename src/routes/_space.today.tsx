@@ -131,7 +131,16 @@ function Today() {
                             className="flex min-w-0 flex-1 items-center gap-3 text-left"
                             onClick={() => setSheet({ open: true, meal: m })}
                           >
-                            <span className={cn("size-2 shrink-0 rounded-full", isMe ? "bg-primary" : "bg-partner")} />
+                            {m.photo_url ? (
+                              <img
+                                src={m.photo_url}
+                                alt=""
+                                className="size-11 shrink-0 rounded-xl object-cover border border-border"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span className={cn("size-2 shrink-0 rounded-full", isMe ? "bg-primary" : "bg-partner")} />
+                            )}
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{m.food_name}</div>
                               <div className="text-xs text-muted-foreground">{isMe ? "You" : partner?.display_name}</div>
