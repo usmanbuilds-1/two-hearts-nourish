@@ -216,7 +216,7 @@ export function useSaveMeal() {
     };
     if (existing) {
       const { data, error } = await supabase.from("meals").update(payload).eq("id", existing.id).select().single();
-      if (error || !data) throw new Error("update");
+      if (error || !data) { console.error("[MealSheet update]", error); throw new Error(error?.message ?? "update"); }
       upsertLocal(data as Meal);
       return data as Meal;
     }
@@ -225,7 +225,7 @@ export function useSaveMeal() {
       .insert({ ...payload, room_id: room.id, member_id: me.id, meal_date: today })
       .select()
       .single();
-    if (error || !data) throw new Error("save");
+    if (error || !data) { console.error("[MealSheet insert]", error); throw new Error(error?.message ?? "save"); }
     upsertLocal(data as Meal);
     return data as Meal;
   };
@@ -262,8 +262,10 @@ export function MealSheet({
       await save(draft, meal ?? undefined);
       toast.success(meal ? "Meal updated" : "Added ❤️");
       onOpenChange(false);
-    } catch {
-      toast.error(meal ? "Couldn't update that meal. Please try again." : "Couldn't save that meal — it wasn't added. Please try again.");
+    } catch (e) {
+      const detail = (e as Error)?.message ?? "";
+      console.error("[MealSheet catch]", detail);
+      toast.error(meal ? `Couldn't update: ${detail}` : `Couldn't save: ${detail}`);
     } finally {
       setBusy(false);
     }
