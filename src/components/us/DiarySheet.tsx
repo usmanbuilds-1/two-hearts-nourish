@@ -44,7 +44,7 @@ export function DiarySheet({
         })
         .select()
         .single();
-      if (error || !data) throw new Error("save");
+      if (error || !data) { console.error("[DiarySheet insert]", error); throw new Error(error?.message ?? "save"); }
       upsertLocal(data as Meal);
       toast.success("Added ❤️");
       setDraft(emptyDraft());
