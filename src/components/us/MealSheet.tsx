@@ -200,6 +200,9 @@ export function MealFields({
 export function useSaveMeal() {
   const { me, room, today, upsertLocal } = useSpace();
   return async (d: MealDraft, existing?: Meal) => {
+    // Only include photo_url when it is set — omitting it entirely keeps saves
+    // working even if migration 0011 (ADD COLUMN photo_url) hasn't been run yet.
+    const photoUrl = d.photo_url ?? existing?.photo_url;
     const payload = {
       food_name: d.food_name.trim(),
       serving_description: d.serving_description.trim() || null,
@@ -209,7 +212,7 @@ export function useSaveMeal() {
       fat: Math.round(num(d.fat) * 10) / 10,
       meal_type: d.meal_type,
       ai_confidence: d.ai_confidence,
-      photo_url: d.photo_url ?? existing?.photo_url ?? null,
+      ...(photoUrl !== undefined ? { photo_url: photoUrl } : {}),
     };
     if (existing) {
       const { data, error } = await supabase.from("meals").update(payload).eq("id", existing.id).select().single();
