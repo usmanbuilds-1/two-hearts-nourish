@@ -10,6 +10,7 @@ import { ScanSheet } from "@/components/us/ScanSheet";
 import { BudgetPlanSheet } from "@/components/us/BudgetPlanSheet";
 import { dailyQuote } from "@/lib/quotes";
 import { WeightCard } from "@/components/us/WeightCard";
+import { Lightbox } from "@/components/us/Lightbox";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_space/today")({
@@ -44,6 +45,7 @@ function Today() {
   const [sheet, setSheet] = useState<{ open: boolean; meal: Meal | null }>({ open: false, meal: null });
   const [budget, setBudget] = useState(false);
   const [, setFavTick] = useState(0);
+  const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
 
   const todays = useMemo(() => meals.filter((m) => m.meal_date === today), [meals, today]);
   const mine = todays.filter((m) => m.member_id === me.id);
@@ -132,12 +134,21 @@ function Today() {
                             onClick={() => setSheet({ open: true, meal: m })}
                           >
                             {m.photo_url ? (
-                              <img
-                                src={m.photo_url}
-                                alt=""
-                                className="size-11 shrink-0 rounded-xl object-cover border border-border"
-                                loading="lazy"
-                              />
+                              <button
+                                className="shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightbox({ src: m.photo_url!, caption: `${m.food_name} · ${fmt(m.calories)} kcal` });
+                                }}
+                                aria-label="View photo full screen"
+                              >
+                                <img
+                                  src={m.photo_url}
+                                  alt=""
+                                  className="size-11 rounded-xl object-cover border border-border transition-opacity hover:opacity-90"
+                                  loading="lazy"
+                                />
+                              </button>
                             ) : (
                               <span className={cn("size-2 shrink-0 rounded-full", isMe ? "bg-primary" : "bg-partner")} />
                             )}
@@ -170,6 +181,7 @@ function Today() {
         )}
       </section>
 
+      {lightbox && <Lightbox src={lightbox.src} caption={lightbox.caption} onClose={() => setLightbox(null)} />}
       <ScanSheet open={scan} onOpenChange={setScan} onManual={() => setSheet({ open: true, meal: null })} />
       <MealSheet open={sheet.open} meal={sheet.meal} onOpenChange={(o) => setSheet((s) => ({ ...s, open: o }))} />
       <BudgetPlanSheet open={budget} onOpenChange={setBudget} me={me} />
