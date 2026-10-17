@@ -6,6 +6,7 @@ import { useSpace } from "@/lib/space";
 import { addDays, fmt, parseLocalDate, totals } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MacroSuggestions } from "@/components/us/MacroSuggestions";
+import { Lightbox } from "@/components/us/Lightbox";
 import { getWeeklySummary, type WeeklySummary } from "@/lib/meal-operations.functions";
 import { getWeightAnalytics, logWeight, type WeightAnalytics } from "@/lib/weight.functions";
 import { cn } from "@/lib/utils";
@@ -101,6 +102,8 @@ function WeekView() {
   // quick-log from weight tab
   const [quickKg, setQuickKg]   = useState("");
   const [logging, setLogging]   = useState(false);
+  const [tappedDay, setTappedDay] = useState<string | null>(null);
+  const [lightbox, setLightbox]   = useState<{ src: string; caption: string } | null>(null);
 
   useEffect(() => {
     if (tab === "stats" && !stats && !statsLoading) {
@@ -193,19 +196,40 @@ function WeekView() {
         <div className="space-y-5">
           <div>
             <h1 className="text-3xl">Our Week ❤️</h1>
-            <p className="mt-1 text-muted-foreground">{both} of 7 days you both logged.</p>
+            <p className="mt-1 text-muted-foreground">{both} of 7 days you showed up for each other{both === 7 ? " — a perfect week 🌟" : " 💕"}</p>
           </div>
           <div className="relative flex h-40 items-end gap-2 rounded-2xl border border-border bg-card p-4">
             {rows.map((r) => (
-              <div key={r.d} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+              <button
+                key={r.d}
+                className="relative flex h-full flex-1 flex-col items-center justify-end gap-1 focus:outline-none"
+                onClick={() => setTappedDay(tappedDay === r.d ? null : r.d)}
+                aria-label={`${parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "long" })}: You ${r.mine.calories} kcal`}
+              >
+                {/* Calorie tooltip on tap */}
+                {tappedDay === r.d && (r.mine.calories > 0 || r.theirs.calories > 0) && (
+                  <div className="absolute -top-10 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-xl bg-foreground px-2.5 py-1.5 text-[10px] leading-snug text-background shadow-lg">
+                    {r.mine.calories > 0 && <div>You: {fmt(r.mine.calories)} kcal</div>}
+                    {r.theirs.calories > 0 && <div>{(partner?.display_name ?? "Partner").split(" ")[0]}: {fmt(r.theirs.calories)} kcal</div>}
+                  </div>
+                )}
                 <div className="flex h-full w-full items-end justify-center gap-0.5">
-                  <div className="w-1/2 max-w-3 rounded-t bg-primary" style={{ height: `${(r.mine.calories / max) * 100}%` }} />
-                  <div className="w-1/2 max-w-3 rounded-t bg-partner" style={{ height: `${(r.theirs.calories / max) * 100}%` }} />
+                  <div
+                    className={cn("w-1/2 max-w-3 rounded-t bg-primary transition-opacity duration-150",
+                      tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
+                    style={{ height: `${(r.mine.calories / max) * 100}%` }}
+                  />
+                  <div
+                    className={cn("w-1/2 max-w-3 rounded-t bg-partner transition-opacity duration-150",
+                      tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
+                    style={{ height: `${(r.theirs.calories / max) * 100}%` }}
+                  />
                 </div>
-                <div className="text-[10px] uppercase text-muted-foreground">
+                <div className={cn("text-[10px] uppercase transition-colors",
+                  tappedDay === r.d ? "font-semibold text-foreground" : "text-muted-foreground")}>
                   {parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "short" })}
                 </div>
-              </div>
+              </button>
             ))}
             {targetPct !== null && (
               <div className="pointer-events-none absolute inset-x-4 border-t border-dashed border-primary/50" style={{ bottom: `calc(${targetPct}% + 1rem)` }}>
@@ -262,8 +286,8 @@ function WeekView() {
       {tab === "history" && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-2xl font-bold">30-Day History</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Tap any day to see what you ate.</p>
+            <h2 className="text-2xl font-bold">Our Journey Together 💕</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Tap any day to revisit what you shared.</p>
           </div>
           <div className="grid grid-cols-6 gap-1.5">
             {dayData.map(({ d, status }) => {
@@ -279,24 +303,32 @@ function WeekView() {
             })}
           </div>
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" />Both on track</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-partner" />One logged</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-border" />Nothing</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" />Both on track 💕</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-partner" />One of you</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-border" />Rest day 🌙</span>
           </div>
           {selectedDay && (
             <div className="rounded-2xl border border-border bg-card p-4">
               <Eyebrow>{parseLocalDate(selectedDay.d).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</Eyebrow>
               {selectedDay.mine.length === 0 && selectedDay.theirs.length === 0 ? (
-                <p className="mt-3 text-sm text-muted-foreground">Nothing logged this day.</p>
+                <p className="mt-3 text-sm text-muted-foreground">A quiet day together 🌙</p>
               ) : (
                 <div className="mt-3 space-y-4">
                   {selectedDay.mine.length > 0 && (
                     <div>
                       <div className="mb-2 text-xs font-medium text-primary">You · {fmt(selectedDay.myT.calories)} kcal · {fmt(selectedDay.myT.protein)}g protein</div>
                       <div className="space-y-1.5">{selectedDay.mine.map((m) => (
-                        <div key={m.id} className="flex items-center justify-between text-sm">
-                          <span className="truncate">{m.food_name}</span>
-                          <span className="ml-4 shrink-0 num text-xs text-muted-foreground">{fmt(m.calories)} kcal</span>
+                        <div key={m.id} className="flex items-center gap-2 text-sm">
+                          {m.photo_url && (
+                            <button
+                              className="shrink-0"
+                              onClick={() => setLightbox({ src: m.photo_url!, caption: `${m.food_name} · ${fmt(m.calories)} kcal` })}
+                            >
+                              <img src={m.photo_url} alt="" className="size-9 rounded-lg object-cover border border-border" />
+                            </button>
+                          )}
+                          <span className="flex-1 truncate">{m.food_name}</span>
+                          <span className="shrink-0 num text-xs text-muted-foreground">{fmt(m.calories)} kcal</span>
                         </div>
                       ))}</div>
                     </div>
@@ -305,9 +337,17 @@ function WeekView() {
                     <div>
                       <div className="mb-2 text-xs font-medium text-partner">{partner.display_name} · {fmt(selectedDay.theirT.calories)} kcal</div>
                       <div className="space-y-1.5">{selectedDay.theirs.map((m) => (
-                        <div key={m.id} className="flex items-center justify-between text-sm">
-                          <span className="truncate">{m.food_name}</span>
-                          <span className="ml-4 shrink-0 num text-xs text-muted-foreground">{fmt(m.calories)} kcal</span>
+                        <div key={m.id} className="flex items-center gap-2 text-sm">
+                          {m.photo_url && (
+                            <button
+                              className="shrink-0"
+                              onClick={() => setLightbox({ src: m.photo_url!, caption: `${m.food_name} · ${fmt(m.calories)} kcal` })}
+                            >
+                              <img src={m.photo_url} alt="" className="size-9 rounded-lg object-cover border border-border" />
+                            </button>
+                          )}
+                          <span className="flex-1 truncate">{m.food_name}</span>
+                          <span className="shrink-0 num text-xs text-muted-foreground">{fmt(m.calories)} kcal</span>
                         </div>
                       ))}</div>
                     </div>
@@ -469,6 +509,7 @@ function WeekView() {
         </div>
       )}
 
+      {lightbox && <Lightbox src={lightbox.src} caption={lightbox.caption} onClose={() => setLightbox(null)} />}
       <MacroSuggestions
         open={suggestOpen}
         onOpenChange={setSuggestOpen}
