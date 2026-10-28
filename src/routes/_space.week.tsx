@@ -95,6 +95,7 @@ function WeekView() {
   const [tab, setTab]           = useState<Tab>("week");
   const [selected, setSelected] = useState<string | null>(null);
   const [stats, setStats]       = useState<WeeklySummary | null>(null);
+  const [statsError, setStatsError] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [suggestOpen, setSuggestOpen]   = useState(false);
   const [wa, setWa]             = useState<WeightAnalytics | null>(null);
@@ -108,11 +109,12 @@ function WeekView() {
   useEffect(() => {
     if (tab === "stats" && !stats && !statsLoading) {
       setStatsLoading(true);
-      getWeeklySummary().then(setStats).catch(() => {}).finally(() => setStatsLoading(false));
+      setStatsError(false);
+      getWeeklySummary().then(setStats).catch(() => setStatsError(true)).finally(() => setStatsLoading(false));
     }
-    if (tab === "weight" && !wa && !waLoading) {
+    if (tab === "weight" && !wa) {
       setWaLoading(true);
-      getWeightAnalytics().then(setWa).catch(() => {}).finally(() => setWaLoading(false));
+      getWeightAnalytics().then(setWa).catch(() => setWa({ entries: [], rollingAvg: [], latestWeight: null, startWeight: null, avgWeight: null, minWeight: null, maxWeight: null, totalChange: null, trendKgPerWeek: null, plateauDetected: false, plateauDays: 0 })).finally(() => setWaLoading(false));
     }
   }, [tab, stats, statsLoading, wa, waLoading]);
 
@@ -124,8 +126,8 @@ function WeekView() {
       await logWeight({ data: { weightKg: val } });
       toast.success("Weight logged ✓");
       setQuickKg("");
-      // refresh analytics
-      setWa(null); setWaLoading(false);
+      // refresh: clear wa first, waLoading will be set true by the effect
+      setWa(null);
     } catch { toast.error("Couldn't save. Please try again."); }
     finally { setLogging(false); }
   }
@@ -198,12 +200,12 @@ function WeekView() {
             <h1 className="text-3xl">Our Week ❤️</h1>
             <p className="mt-1 text-muted-foreground">{both} of 7 days you showed up for each other{both === 7 ? " — a perfect week 🌟" : " 💕"}</p>
           </div>
-          <div className="relative flex h-40 items-end gap-2 rounded-2xl border border-border bg-card p-4">
+          <div className="relative flex h-40 items-end gap-2 rounded-2xl border border-border bg-card p-4 overflow-visible" onClick={() => setTappedDay(null)}>
             {rows.map((r) => (
               <button
                 key={r.d}
                 className="relative flex h-full flex-1 flex-col items-center justify-end gap-1 focus:outline-none"
-                onClick={() => setTappedDay(tappedDay === r.d ? null : r.d)}
+                onClick={(e) => { e.stopPropagation(); setTappedDay(tappedDay === r.d ? null : r.d); }}
                 aria-label={`${parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "long" })}: You ${r.mine.calories} kcal`}
               >
                 {/* Calorie tooltip on tap */}
@@ -364,11 +366,14 @@ function WeekView() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Weekly Stats</h2>
-            <Btn size="md" onClick={() => setSuggestOpen(true)}>
+            <Btn size="sm" onClick={() => setSuggestOpen(true)}>
               <Sparkles className="size-3.5 mr-1" /> Meal Ideas
             </Btn>
           </div>
           {statsLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
+          {!statsLoading && statsError && (
+            <p className="py-8 text-center text-sm text-muted-foreground">Couldn't load stats — pull down to retry.</p>
+          )}
           {!statsLoading && stats && (
             <>
               <div className="grid grid-cols-2 gap-3">
@@ -419,7 +424,7 @@ function WeekView() {
               className="flex-1 bg-transparent text-sm focus:outline-none"
             />
             <span className="shrink-0 text-sm text-muted-foreground">kg</span>
-            <Btn size="md" onClick={quickLog} disabled={logging || !quickKg}>
+            <Btn size="sm" onClick={quickLog} disabled={logging || !quickKg}>
               {logging ? "…" : "Log"}
             </Btn>
           </div>
