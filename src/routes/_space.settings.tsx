@@ -103,7 +103,23 @@ function SettingsPage() {
       const res = await createLinkCode();
       setLinkCode(res);
       startCountdown(res.expiresAt);
-    } catch { toast.error("Couldn't generate a code. Please try again."); }
+      // Build the magic link — partner just taps it, no typing needed
+      const magicUrl = `${window.location.origin}/r/${room.room_code}?lc=${res.code}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "Rejoin our space 💕",
+            text: "Tap this to get back into our space!",
+            url: magicUrl,
+          });
+        } catch {
+          // Share cancelled — the card below lets them copy manually
+        }
+      } else {
+        await navigator.clipboard.writeText(magicUrl).catch(() => {});
+        toast.success("Re-invite link copied — send it to your partner!");
+      }
+    } catch { toast.error("Couldn't generate a link. Please try again."); }
     finally { setLinkBusy(false); }
   }
 
@@ -313,22 +329,27 @@ function SettingsPage() {
 
         {/* Device link card */}
         <Btn variant="outline" className="w-full" disabled={linkBusy} onClick={genLinkCode}>
-          {linkBusy ? "Generating…" : "Link another device 📱"}
+          {linkBusy ? "Generating…" : "Send re-invite link 💌"}
         </Btn>
         {linkCode && (
           <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            <div className="text-center">
-              <div className="text-xs text-muted-foreground mb-1">6-digit device code</div>
-              <div className="font-mono text-4xl tracking-[0.25em] text-foreground">{linkCode.code}</div>
-              <div className="mt-1 text-xs text-muted-foreground">Expires in {countdown}</div>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-foreground">Link ready ✓</p>
+              <p className="text-xs text-muted-foreground">Expires in {countdown}</p>
             </div>
-            <div className="border-t border-border pt-3 space-y-1.5 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground text-sm">How to add the new device:</p>
-              <p>1. Open the app on your other phone</p>
-              <p>2. Tap <span className="font-medium text-foreground">"Have a room code?"</span></p>
-              <p>3. Enter your room code: <span className="font-mono font-medium text-foreground">{room.room_code}</span></p>
-              <p>4. On the next screen, tap <span className="font-medium text-foreground">"Add this device"</span> and enter this 6-digit code</p>
+            <p className="text-xs text-muted-foreground">
+              If the share sheet didn't open, copy the link below and send it manually.
+            </p>
+            <div className="break-all rounded-lg bg-secondary/60 px-3 py-2 font-mono text-xs text-muted-foreground">
+              {window.location.origin}/r/{room.room_code}?lc={linkCode.code}
             </div>
+            <Btn size="sm" variant="outline" className="w-full" onClick={async () => {
+              const url = `${window.location.origin}/r/${room.room_code}?lc=${linkCode.code}`;
+              await navigator.clipboard.writeText(url).catch(() => {});
+              toast.success("Link copied!");
+            }}>
+              Copy link
+            </Btn>
           </div>
         )}
 
