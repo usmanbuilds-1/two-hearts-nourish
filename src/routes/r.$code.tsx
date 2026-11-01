@@ -33,6 +33,11 @@ function Join() {
   const [key, setKey] = useState("");
   const [useKey, setUseKey] = useState(false);
 
+  // Magic re-invite link: ?lc=123456 — partner just taps one button
+  const lc = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("lc") ?? undefined
+    : undefined;
+
   useEffect(() => {
     const s = readSession();
     const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -79,6 +84,45 @@ function Join() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // ── Magic link: one-tap rejoin ────────────────────────────────────────
+  if (lc) {
+    async function magicRejoin() {
+      setBusy(true);
+      try {
+        await ensureIdentity();
+        const r = await linkDevice({ data: { code, linkCode: lc!.replace(/\D/g, "") } });
+        writeSession(r);
+        toast.success("Welcome back ❤️");
+        void navigate({ to: "/today", replace: true });
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes("EXPIRED") || msg.includes("INVALID") || msg.includes("NOT_FOUND")) {
+          toast.error("This link has expired — ask your partner to send a new one.");
+        } else {
+          toast.error(friendlyError(err));
+        }
+        setBusy(false);
+      }
+    }
+    return (
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-6 py-12">
+        <div className="mx-auto w-full max-w-md animate-arrive text-center">
+          <div className="text-6xl mb-6">💕</div>
+          <h1 className="text-[2.2rem] leading-tight text-foreground">Welcome back!</h1>
+          <p className="mt-3 text-lg text-muted-foreground">
+            Your partner sent you a link to get back into your space.
+          </p>
+          <Btn size="lg" className="mt-10 w-full" disabled={busy} onClick={magicRejoin}>
+            {busy ? "Rejoining…" : "Rejoin our space ❤️"}
+          </Btn>
+          <p className="mt-4 text-xs text-muted-foreground">
+            This link is valid for 10 minutes · ask your partner for a new one if it expired
+          </p>
+        </div>
+      </main>
+    );
   }
 
   const shell = (children: React.ReactNode) => (
