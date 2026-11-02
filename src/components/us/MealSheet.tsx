@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Loader2, Sparkles, Star, Trash2 } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { supabase } from "@/integrations/supabase/client";
 import { Btn, Field, TextInput } from "./primitives";
 import { MEAL_TYPES, defaultMealType, fmt, type Meal, type MealType } from "@/lib/nutrition";
 import { lookupFood } from "@/lib/lookup.functions";
+import {
+  getFavoriteMeals, saveFavoriteMeal, removeFavoriteMeal,
+  type MealFavorite,
+} from "@/lib/meal-operations.functions";
 import { useSpace } from "@/lib/space";
 import { cn } from "@/lib/utils";
 
@@ -19,10 +24,15 @@ export type MealDraft = {
   meal_type: MealType;
   ai_confidence: "low" | "medium" | "high" | null;
   photo_url?: string | null;
+  portion_percentage: number;
+  nominal_calories?: number;
+  nominal_protein?: number;
+  nominal_carbs?: number;
+  nominal_fat?: number;
 };
 
 export function emptyDraft(): MealDraft {
-  return { food_name: "", serving_description: "", calories: "", protein: "", carbs: "", fat: "", meal_type: defaultMealType(), ai_confidence: null };
+  return { food_name: "", serving_description: "", calories: "", protein: "", carbs: "", fat: "", meal_type: defaultMealType(), ai_confidence: null, portion_percentage: 100 };
 }
 
 export function draftFromMeal(m: Meal): MealDraft {
@@ -35,6 +45,11 @@ export function draftFromMeal(m: Meal): MealDraft {
     fat: String(Number(m.fat)),
     meal_type: m.meal_type,
     ai_confidence: (m.ai_confidence as MealDraft["ai_confidence"]) ?? null,
+    portion_percentage: m.portion_percentage ?? 100,
+    nominal_calories: m.nominal_calories ?? undefined,
+    nominal_protein: m.nominal_protein ?? undefined,
+    nominal_carbs: m.nominal_carbs ?? undefined,
+    nominal_fat: m.nominal_fat ?? undefined,
   };
 }
 
@@ -60,23 +75,60 @@ export function MealFields({
 }) {
   const set = (k: keyof MealDraft) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...draft, [k]: e.target.value });
   const [lookingUp, setLookingUp] = useState(false);
+  const qc = useQueryClient();
 
-  // Favourites from localStorage
-  const favKey = meId ? `us.fav.${meId}` : null;
-  const [favs, setFavs] = useState<MealDraft[]>(() => {
-    if (!favKey) return [];
-    try { return JSON.parse(localStorage.getItem(favKey) ?? "[]"); } catch { return []; }
+  // Favourites — Supabase-backed (replaces localStorage)
+  const { data: favs = [] } = useQuery<MealFavorite[]>({
+    queryKey: ["meal-favorites"],
+    queryFn:  () => getFavoriteMeals(),
+    enabled:  isNew === true,
   });
 
-  function applyFav(f: MealDraft) {
-    onChange({ ...f, meal_type: draft.meal_type });
+  function applyFav(f: MealFavorite) {
+    onChange({
+      ...draft,
+      food_name:           f.food_name,
+      serving_description: f.serving_description ?? "",
+      calories:            String(f.calories),
+      protein:             String(f.protein),
+      carbs:               String(f.carbs),
+      fat:                 String(f.fat),
+    });
   }
 
-  function removeFav(name: string) {
-    if (!favKey) return;
-    const next = favs.filter((f) => f.food_name !== name);
-    localStorage.setItem(favKey, JSON.stringify(next));
-    setFavs(next);
+  async function removeFav(foodName: string) {
+    await removeFavoriteMeal({ data: { foodName } }).catch(() => {});
+    qc.invalidateQueries({ queryKey: ["meal-favorites"] });
+  }
+
+  // Portion percentage
+  const PORTIONS = [
+    { label: "¼", pct: 25 },
+    { label: "½", pct: 50 },
+    { label: "¾", pct: 75 },
+    { label: "Full", pct: 100 },
+    { label: "1½×", pct: 150 },
+  ];
+
+  function applyPortion(pct: number) {
+    // Derive nominal base (undo any previous scaling first)
+    const prevPct = draft.portion_percentage;
+    const nomCal  = draft.nominal_calories ?? (prevPct > 0 ? Math.round(num(draft.calories) / prevPct * 100) : num(draft.calories));
+    const nomProt = draft.nominal_protein  ?? (prevPct > 0 ? num(draft.protein)  / prevPct * 100 : num(draft.protein));
+    const nomCarb = draft.nominal_carbs    ?? (prevPct > 0 ? num(draft.carbs)    / prevPct * 100 : num(draft.carbs));
+    const nomFat  = draft.nominal_fat      ?? (prevPct > 0 ? num(draft.fat)      / prevPct * 100 : num(draft.fat));
+    onChange({
+      ...draft,
+      portion_percentage: pct,
+      nominal_calories:   Math.round(nomCal),
+      nominal_protein:    Math.round(nomProt * 10) / 10,
+      nominal_carbs:      Math.round(nomCarb * 10) / 10,
+      nominal_fat:        Math.round(nomFat  * 10) / 10,
+      calories:           String(Math.round(nomCal  * pct / 100)),
+      protein:            String(Math.round(nomProt * pct / 100 * 10) / 10),
+      carbs:              String(Math.round(nomCarb * pct / 100 * 10) / 10),
+      fat:                String(Math.round(nomFat  * pct / 100 * 10) / 10),
+    });
   }
 
   async function aiLookup() {
@@ -179,6 +231,35 @@ export function MealFields({
       <Field label="Serving">
         <TextInput value={draft.serving_description} onChange={set("serving_description")} placeholder="approximately 350g" maxLength={160} />
       </Field>
+      {/* Portion picker — shown only when food has been named */}
+      {draft.food_name.trim().length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Portion eaten</div>
+          <div className="flex gap-1.5">
+            {PORTIONS.map(({ label, pct }) => (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => applyPortion(pct)}
+                className={cn(
+                  "flex-1 rounded-xl border py-1.5 text-xs font-semibold transition-all",
+                  draft.portion_percentage === pct
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {draft.portion_percentage !== 100 && draft.nominal_calories !== undefined && (
+            <p className="text-[11px] text-muted-foreground">
+              Based on {draft.nominal_calories} kcal full serving → {draft.portion_percentage}% = {draft.calories} kcal
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <Field label="Calories (kcal)">
           <TextInput inputMode="numeric" value={draft.calories} onChange={set("calories")} placeholder="0" className="num" />
@@ -213,6 +294,13 @@ export function useSaveMeal() {
       meal_type: d.meal_type,
       ai_confidence: d.ai_confidence,
       ...(photoUrl !== undefined ? { photo_url: photoUrl } : {}),
+      ...(d.portion_percentage !== 100 ? {
+        portion_percentage: d.portion_percentage,
+        nominal_calories:   d.nominal_calories ?? null,
+        nominal_protein:    d.nominal_protein  ?? null,
+        nominal_carbs:      d.nominal_carbs    ?? null,
+        nominal_fat:        d.nominal_fat      ?? null,
+      } : { portion_percentage: 100 }),
     };
     if (existing) {
       const { data, error } = await supabase.from("meals").update(payload).eq("id", existing.id).select().single();
@@ -229,6 +317,32 @@ export function useSaveMeal() {
     upsertLocal(data as Meal);
     return data as Meal;
   };
+}
+
+function FavStarBtn({ meal }: { meal: Meal | null }) {
+  const qc = useQueryClient();
+  if (!meal) return null;
+  return (
+    <Btn
+      size="lg"
+      variant="outline"
+      aria-label="Save to favourites"
+      onClick={async () => {
+        await saveFavoriteMeal({ data: {
+          foodName:           meal.food_name,
+          servingDescription: meal.serving_description ?? "",
+          calories:           meal.calories,
+          protein:            Number(meal.protein),
+          carbs:              Number(meal.carbs),
+          fat:                Number(meal.fat),
+        }}).catch(() => {});
+        qc.invalidateQueries({ queryKey: ["meal-favorites"] });
+        toast.success("Saved to favourites ⭐");
+      }}
+    >
+      <Star className="size-4" />
+    </Btn>
+  );
 }
 
 export function MealSheet({
@@ -330,6 +444,7 @@ export function MealSheet({
             ) : mine ? (
               <>
                 <Btn size="lg" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>
+                <FavStarBtn meal={meal} />
                 <Btn size="lg" variant="danger" onClick={remove} disabled={busy} aria-label="Delete meal">
                   <Trash2 className="size-4" />
                 </Btn>
