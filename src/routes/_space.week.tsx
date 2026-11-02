@@ -115,7 +115,7 @@ function WeekView() {
       setStats(null);
       getWeeklySummary({ data: { clientDate: localDate(), weekOffset } })
         .then(setStats)
-        .catch(() => setStatsError(true))
+        .catch((err) => { console.error('Failed to load weekly summary:', err); setStatsError(true); })
         .finally(() => setStatsLoading(false));
     }
     if (tab === "weight" && !wa) {
