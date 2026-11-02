@@ -1,10 +1,21 @@
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { useQuery } from "@tanstack/react-query";
-import { getRecentMeals } from "@/lib/meal-operations.functions";
-import { supabase } from "@/integrations/supabase/client";
-import { useSpace } from "@/lib/space";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Clock, Star, Trash2 } from "lucide-react";
+import {
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription,
+} from "@/components/ui/drawer";
 import { Btn } from "@/components/us/primitives";
+import {
+  getRecentMeals,
+  getFavoriteMeals,
+  removeFavoriteMeal,
+  type MealFavorite,
+} from "@/lib/meal-operations.functions";
+import { useSaveMeal, emptyDraft } from "@/components/us/MealSheet";
+import { fmt } from "@/lib/nutrition";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import type { Meal } from "@/lib/nutrition";
 
 export function RecentMealsSheet({
   open,
@@ -12,74 +23,132 @@ export function RecentMealsSheet({
   selectedDate,
 }: {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (o: boolean) => void;
   selectedDate: string;
 }) {
-  const { me, room, upsertLocal } = useSpace();
+  const [tab, setTab] = useState<"recents" | "favs">("recents");
+  const save = useSaveMeal();
+  const qc   = useQueryClient();
 
-  const { data: meals = [] } = useQuery({
+  const { data: recents = [], isLoading: loadingR } = useQuery<Meal[]>({
     queryKey: ["recent-meals"],
-    queryFn: () => getRecentMeals(),
+    queryFn:  () => getRecentMeals(),
+    enabled:  open,
   });
 
-  const handleAdd = async (meal: any) => {
-    try {
-      const { data, error } = await supabase
-        .from("meals")
-        .insert({
-          room_id: room.id,
-          member_id: me.id,
-          meal_date: selectedDate,
-          food_name: meal.food_name,
-          calories: Math.round(meal.calories || 0),
-          protein: Math.round((meal.protein || 0) * 10) / 10,
-          carbs: Math.round((meal.carbs || 0) * 10) / 10,
-          fat: Math.round((meal.fat || 0) * 10) / 10,
-          meal_type: meal.meal_type || "lunch",
-          serving_description: meal.serving_description,
-        })
-        .select()
-        .single();
+  const { data: favs = [], isLoading: loadingF } = useQuery<MealFavorite[]>({
+    queryKey: ["meal-favorites"],
+    queryFn:  () => getFavoriteMeals(),
+    enabled:  open,
+  });
 
-      if (error || !data) throw error;
-      upsertLocal(data as any);
-      toast.success(`Added "${meal.food_name}" to ${selectedDate}`);
+  async function logMeal(m: Meal | MealFavorite) {
+    try {
+      await save({
+        ...emptyDraft(),
+        food_name:           m.food_name,
+        serving_description: m.serving_description ?? "",
+        calories:            String(m.calories),
+        protein:             String(m.protein),
+        carbs:               String(m.carbs),
+        fat:                 String(m.fat),
+        meal_type:           "meal_type" in m ? m.meal_type : "lunch",
+      });
+      toast.success(`${m.food_name} added ❤️`);
       onOpenChange(false);
     } catch {
-      toast.error("Failed to add meal");
+      toast.error("Couldn't add meal. Please try again.");
     }
-  };
+  }
+
+  async function deleteFav(foodName: string) {
+    await removeFavoriteMeal({ data: { foodName } }).catch(() => {});
+    qc.invalidateQueries({ queryKey: ["meal-favorites"] });
+    toast.success("Removed from favourites");
+  }
+
+  const loading = tab === "recents" ? loadingR : loadingF;
+  const items   = tab === "recents" ? recents : favs;
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="mx-auto max-w-xl border-border bg-background">
-        <DrawerHeader>
-          <DrawerTitle className="font-display text-xl font-normal">Recent Meals</DrawerTitle>
-          <DrawerDescription>Quick log a recently logged meal to {selectedDate}</DrawerDescription>
+      <DrawerContent className="mx-auto max-h-[90dvh] max-w-xl">
+        <DrawerHeader className="pb-2">
+          <DrawerTitle className="font-display text-2xl font-normal">Quick add</DrawerTitle>
+          <DrawerDescription className="sr-only">
+            Log a recent or favourite meal
+          </DrawerDescription>
         </DrawerHeader>
-        <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
-          {meals.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No recent meals logged yet</p>
-          ) : (
-            meals.map((m) => (
-              <Btn
-                key={m.id}
-                variant="outline"
-                className="w-full justify-between h-auto py-3 px-4 text-left"
-                onClick={() => handleAdd(m)}
+
+        {/* Tab bar */}
+        <div className="flex gap-0 border-b border-border px-4">
+          {(["recents", "favs"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 pb-2 text-sm font-medium transition-colors",
+                tab === t
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t === "recents" ? (
+                <><Clock className="size-3.5" /> Recents</>
+              ) : (
+                <><Star className="size-3.5" /> Favourites {favs.length > 0 && `(${favs.length})`}</>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* List */}
+        <div className="overflow-y-auto px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {loading && (
+            <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+          )}
+
+          {!loading && items.length === 0 && (
+            <div className="py-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {tab === "recents"
+                  ? "No recent meals yet — start logging!"
+                  : "No favourites saved yet. Tap ⭐ on any meal to save it."}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {items.map((m) => (
+              <div
+                key={"id" in m ? m.id : m.food_name}
+                className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
               >
-                <div className="flex-1 min-w-0 pr-2">
-                  <div className="text-sm font-medium truncate">{m.food_name}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{m.food_name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {m.calories} kcal • P: {m.protein}g | C: {m.carbs}g | F: {m.fat}g
+                    {fmt(m.calories)} kcal · P {fmt(Number(m.protein))}g
+                    {m.serving_description ? ` · ${m.serving_description}` : ""}
                   </div>
                 </div>
-                <div className="text-xs font-semibold uppercase px-2 py-0.5 rounded bg-secondary shrink-0">
-                  {m.meal_type}
-                </div>
-              </Btn>
-            ))
-          )}
+
+                {/* Remove fav */}
+                {tab === "favs" && (
+                  <button
+                    onClick={() => deleteFav(m.food_name)}
+                    className="shrink-0 p-1 text-muted-foreground hover:text-destructive transition-colors"
+                    aria-label="Remove from favourites"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+
+                <Btn size="sm" onClick={() => logMeal(m)}>
+                  Add
+                </Btn>
+              </div>
+            ))}
+          </div>
         </div>
       </DrawerContent>
     </Drawer>
