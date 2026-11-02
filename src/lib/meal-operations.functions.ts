@@ -279,7 +279,7 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { clientDate: string; weekOffset?: number }) => ({
     clientDate:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
-    weekOffset:  z.number().int().min(-52).max(0).default(0),
+    weekOffset:  z.number().int().min(-52).max(0).default(0).parse(i.weekOffset ?? 0),
   }))
   .handler(async ({ data, context }): Promise<WeeklySummary> => {
     const db       = await admin();
@@ -319,9 +319,8 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
     // Fetch both current + previous window in one query (no UTC toISOString)
     const { data: raw } = await db
       .from("meals")
-      .select("meal_date, calories, protein, carbs, fat")
+      .select("meal_date, calories, protein, carbs, fat, meal_type")
       .eq("member_id", memberId)
-      .eq("is_planned", false)
       .gte("meal_date", prevStart)
       .lte("meal_date", endDate);
 
@@ -467,7 +466,7 @@ export const getWeeklyHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { clientDate: string; weeksBack?: number }) => ({
     clientDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
-    weeksBack:  z.number().int().min(1).max(12).default(4),
+    weeksBack:  z.number().int().min(1).max(12).default(4).parse(i.weeksBack ?? 4),
   }))
   .handler(async ({ data, context }): Promise<WeekHistoryEntry[]> => {
     const db       = await admin();
@@ -486,7 +485,6 @@ export const getWeeklyHistory = createServerFn({ method: "POST" })
       .from("meals")
       .select("meal_date, calories")
       .eq("member_id", memberId)
-      .eq("is_planned", false)
       .gte("meal_date", startDate)
       .lte("meal_date", endDate);
 
