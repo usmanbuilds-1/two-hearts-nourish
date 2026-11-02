@@ -1,13 +1,14 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Info, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { useSpace } from "@/lib/space";
 import { addDays, fmt, parseLocalDate, totals } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MacroSuggestions } from "@/components/us/MacroSuggestions";
 import { Lightbox } from "@/components/us/Lightbox";
 import { getWeeklySummary, type WeeklySummary } from "@/lib/meal-operations.functions";
+import { localDate } from "@/lib/nutrition";
 import { getWeightAnalytics, logWeight, type WeightAnalytics } from "@/lib/weight.functions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -98,6 +99,7 @@ function WeekView() {
   const [statsError, setStatsError] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [suggestOpen, setSuggestOpen]   = useState(false);
+  const [weekOffset, setWeekOffset]     = useState(0);
   const [wa, setWa]             = useState<WeightAnalytics | null>(null);
   const [waLoading, setWaLoading] = useState(false);
   // quick-log from weight tab
@@ -107,16 +109,20 @@ function WeekView() {
   const [lightbox, setLightbox]   = useState<{ src: string; caption: string } | null>(null);
 
   useEffect(() => {
-    if (tab === "stats" && !stats && !statsLoading) {
+    if (tab === "stats") {
       setStatsLoading(true);
       setStatsError(false);
-      getWeeklySummary().then(setStats).catch(() => setStatsError(true)).finally(() => setStatsLoading(false));
+      setStats(null);
+      getWeeklySummary({ data: { clientDate: localDate(), weekOffset } })
+        .then(setStats)
+        .catch(() => setStatsError(true))
+        .finally(() => setStatsLoading(false));
     }
     if (tab === "weight" && !wa) {
       setWaLoading(true);
       getWeightAnalytics().then(setWa).catch(() => setWa({ entries: [], rollingAvg: [], latestWeight: null, startWeight: null, avgWeight: null, minWeight: null, maxWeight: null, totalChange: null, trendKgPerWeek: null, plateauDetected: false, plateauDays: 0 })).finally(() => setWaLoading(false));
     }
-  }, [tab, stats, statsLoading, wa, waLoading]);
+  }, [tab, wa, waLoading, weekOffset]);
 
   async function quickLog() {
     const val = parseFloat(quickKg.replace(",", "."));
@@ -364,41 +370,242 @@ function WeekView() {
       {/* ── TAB: STATS ── */}
       {tab === "stats" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Weekly Stats</h2>
-            <Btn size="sm" onClick={() => setSuggestOpen(true)}>
-              <Sparkles className="size-3.5 mr-1" /> Meal Ideas
-            </Btn>
+
+          {/* Week carousel */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setWeekOffset((w) => w - 1)}
+              className="rounded-xl border border-border p-2 hover:bg-secondary transition-colors"
+              aria-label="Previous week"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <div className="flex-1 text-center">
+              <div className="text-sm font-semibold">
+                {statsLoading ? "Loading…" : (stats?.weekLabel ?? "—")}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {weekOffset === 0 ? "This week" : weekOffset === -1 ? "Last week" : `${Math.abs(weekOffset)} weeks ago`}
+              </div>
+            </div>
+            <button
+              onClick={() => setWeekOffset((w) => Math.min(w + 1, 0))}
+              disabled={weekOffset >= 0}
+              className="rounded-xl border border-border p-2 hover:bg-secondary transition-colors disabled:opacity-30"
+              aria-label="Next week"
+            >
+              <ChevronRight className="size-4" />
+            </button>
           </div>
+
           {statsLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
           {!statsLoading && statsError && (
-            <p className="py-8 text-center text-sm text-muted-foreground">Couldn't load stats — pull down to retry.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Couldn't load stats — tap a week to retry.
+            </p>
           )}
+
           {!statsLoading && stats && (
             <>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-border bg-card p-4">
-                  <div className="text-xs text-muted-foreground mb-1">Avg Calories</div>
-                  <div className="num text-2xl font-bold">{stats.avgCalories}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{stats.daysLogged} days logged</div>
+              {stats.daysLogged === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                  No meals logged this week yet.
                 </div>
-                <div className="rounded-2xl border border-border bg-card p-4">
-                  <div className="text-xs text-muted-foreground mb-1">Goal Hit</div>
-                  <div className="num text-2xl font-bold">{stats.targetAdherence}%</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Target: {dailyTarget} kcal</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[["Protein", `${stats.avgProtein}g`], ["Carbs", `${stats.avgCarbs}g`], ["Fat", `${stats.avgFat}g`]].map(([l, v]) => (
-                  <div key={l} className="rounded-xl bg-secondary/60 p-3 text-center">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{l}</div>
-                    <div className="num text-lg font-bold">{v}</div>
+              ) : (
+                <>
+                  {/* Card 1: 7-day totals */}
+                  <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Eyebrow>7-Day Totals</Eyebrow>
+                      <span className="text-xs text-muted-foreground">{stats.daysLogged}/7 days logged</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-center">
+                      {[
+                        ["kcal",    stats.weeklyTotal.calories],
+                        ["protein", `${stats.weeklyTotal.protein}g`],
+                        ["carbs",   `${stats.weeklyTotal.carbs}g`],
+                        ["fat",     `${stats.weeklyTotal.fat}g`],
+                      ].map(([label, val]) => (
+                        <div key={label as string}>
+                          <div className="num text-xl font-bold">{val}</div>
+                          <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {stats.previousWeekDelta && (
+                      <p className={cn(
+                        "text-xs text-center",
+                        stats.previousWeekDelta.calories > 0 ? "text-amber-600" : "text-green-600",
+                      )}>
+                        {stats.previousWeekDelta.calories > 0 ? "↑" : "↓"}{" "}
+                        {Math.abs(stats.previousWeekDelta.calories)} kcal/day vs previous week
+                      </p>
+                    )}
                   </div>
-                ))}
-              </div>
-              {!stats.daysLogged && (
-                <p className="py-4 text-center text-sm text-muted-foreground">No meals logged this week yet.</p>
+
+                  {/* Card 2: daily averages */}
+                  <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                    <div className="flex items-center gap-1.5">
+                      <Eyebrow>Daily Averages</Eyebrow>
+                      <details className="group relative ml-auto">
+                        <summary className="list-none cursor-pointer text-muted-foreground hover:text-foreground">
+                          <Info className="size-3.5" />
+                        </summary>
+                        <div className="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground shadow-lg">
+                          <p><strong className="text-foreground">On logged days</strong> divides the weekly total by {stats.daysLogged} (days you actually logged).</p>
+                          <p className="mt-1"><strong className="text-foreground">Full-week average</strong> divides by 7, treating unlogged days as 0 — a stricter measure of consistency.</p>
+                        </div>
+                      </details>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">On logged days ({stats.daysLogged})</span>
+                        <span className="num font-semibold">{stats.dailyAverageLogged.calories} kcal</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Full-week average (7 days)</span>
+                        <span className="num font-semibold">{stats.dailyAverageFullWeek.calories} kcal</span>
+                      </div>
+                      {stats.calorieTarget > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Daily target</span>
+                          <span className="num font-semibold text-primary">{stats.calorieTarget} kcal</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border">
+                      {[
+                        ["Protein", `${stats.dailyAverageLogged.protein}g`],
+                        ["Carbs",   `${stats.dailyAverageLogged.carbs}g`],
+                        ["Fat",     `${stats.dailyAverageLogged.fat}g`],
+                      ].map(([l, v]) => (
+                        <div key={l as string} className="text-center">
+                          <div className="num text-sm font-semibold">{v}</div>
+                          <div className="text-[10px] text-muted-foreground">{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card 3: adherence */}
+                  {stats.calorieTarget > 0 && (
+                    <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Eyebrow>Consistency</Eyebrow>
+                        <span className={cn(
+                          "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                          stats.adherenceLabel === "Consistent"    ? "bg-green-500/10 text-green-600"  :
+                          stats.adherenceLabel === "Under target"  ? "bg-blue-500/10  text-blue-600"   :
+                          stats.adherenceLabel === "Over target"   ? "bg-amber-500/10 text-amber-600"  :
+                          "bg-secondary text-muted-foreground",
+                        )}>
+                          {stats.adherenceLabel}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Days on target (±10%)</span>
+                          <span className="num font-bold">{stats.targetAdherence}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                          <div
+                            className={cn("h-full rounded-full transition-all duration-500",
+                              stats.targetAdherence >= 70 ? "bg-green-500" :
+                              stats.targetAdherence >= 40 ? "bg-amber-500" : "bg-red-500",
+                            )}
+                            style={{ width: `${stats.targetAdherence}%` }}
+                          />
+                        </div>
+                        <details className="text-xs text-muted-foreground">
+                          <summary className="cursor-pointer hover:text-foreground">How this is calculated</summary>
+                          <p className="mt-1">
+                            Counts completed logged days where your calorie total was within ±10% (minimum ±150 kcal) of your {stats.calorieTarget} kcal target.
+                            Today is excluded if still in progress.
+                            Overeating does not count as on-target.
+                          </p>
+                        </details>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Card 4: day-by-day sparkline */}
+                  <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                    <Eyebrow>Day by Day</Eyebrow>
+                    {(() => {
+                      const maxCal = Math.max(
+                        ...stats.dailyBreakdown.map((d) => d.calories),
+                        stats.calorieTarget,
+                        1,
+                      );
+                      const targetPct = stats.calorieTarget > 0
+                        ? Math.min(100, (stats.calorieTarget / maxCal) * 100)
+                        : null;
+                      return (
+                        <div className="relative flex h-24 items-end gap-1.5 overflow-visible">
+                          {targetPct !== null && (
+                            <div
+                              className="pointer-events-none absolute inset-x-0 border-t border-dashed border-primary/40"
+                              style={{ bottom: `${targetPct}%` }}
+                            />
+                          )}
+                          {stats.dailyBreakdown.map((day) => {
+                            const pct     = Math.min(100, maxCal > 0 ? (day.calories / maxCal) * 100 : 0);
+                            const isToday = day.date === localDate();
+                            return (
+                              <div key={day.date} className="relative flex flex-1 flex-col items-center justify-end gap-1">
+                                <div
+                                  title={`${day.shortDay}: ${day.calories} kcal`}
+                                  className={cn(
+                                    "w-full rounded-t transition-all",
+                                    !day.logged   ? "bg-border/40" :
+                                    isToday       ? "bg-primary" : "bg-primary/70",
+                                  )}
+                                  style={{ height: `${pct}%`, minHeight: day.logged ? "3px" : "0" }}
+                                />
+                                <div className={cn(
+                                  "text-[9px] uppercase",
+                                  isToday ? "font-bold text-foreground" : "text-muted-foreground",
+                                )}>
+                                  {day.shortDay}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                    {stats.calorieTarget > 0 && (
+                      <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span className="inline-block h-px w-4 border-t border-dashed border-primary/50" />
+                        Target: {stats.calorieTarget} kcal/day
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Observation */}
+                  {stats.observation && (
+                    <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">💡</span>
+                        <span className="text-sm font-semibold">{stats.observation.headline}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{stats.observation.detail}</p>
+                      <details className="text-xs text-muted-foreground">
+                        <summary className="cursor-pointer hover:text-foreground">How this was calculated</summary>
+                        <p className="mt-1">{stats.observation.calculation}</p>
+                      </details>
+                    </div>
+                  )}
+                </>
               )}
+
+              {/* Meal Ideas */}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-sm text-muted-foreground">Need inspiration?</span>
+                <Btn size="sm" onClick={() => setSuggestOpen(true)}>
+                  <Sparkles className="size-3.5 mr-1" /> Meal Ideas
+                </Btn>
+              </div>
             </>
           )}
         </div>
