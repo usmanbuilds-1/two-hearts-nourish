@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Meal, MealType } from "@/lib/nutrition";
+import { addDays, adherencePct, adherenceLabel } from "@/lib/nutrition";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -29,12 +30,48 @@ export type MealTemplate = {
   meals: Array<{ food_name: string; calories: number; protein: number; carbs: number; fat: number; meal_type: MealType }>;
 };
 
+export type DayBreakdown = {
+  date: string;
+  shortDay: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  logged: boolean;
+};
+
 export type WeeklySummary = {
   startDate: string;
+  endDate: string;
+  weekLabel: string;
+  // 7-day cumulative totals
+  weeklyTotal: { calories: number; protein: number; carbs: number; fat: number };
+  // averages
+  dailyAverageLogged: { calories: number; protein: number; carbs: number; fat: number };
+  dailyAverageFullWeek: { calories: number; protein: number; carbs: number; fat: number };
+  daysLogged: number;
+  calorieTarget: number;
+  // adherence: % of *completed* logged days within ±10% of target (no 100% clamp on overeating)
+  targetAdherence: number;
+  adherenceLabel: string;
+  // per-day breakdown (always 7 entries)
+  dailyBreakdown: DayBreakdown[];
+  // delta vs previous 7-day window
+  previousWeekDelta: { calories: number; protein: number } | null;
+  // data-backed insight
+  observation: { headline: string; detail: string; calculation: string } | null;
+  // legacy aliases kept so existing callers don't break
   avgCalories: number;
   avgProtein: number;
   avgCarbs: number;
   avgFat: number;
+};
+
+export type WeekHistoryEntry = {
+  startDate: string;
+  endDate: string;
+  weekLabel: string;
+  avgCalories: number;
   daysLogged: number;
   targetAdherence: number;
 };
@@ -228,59 +265,257 @@ export const deleteMealTemplate = createServerFn({ method: "POST" })
   });
 
 // ============================================================================
-// PHASE 4: Analytics
+// PHASE 4: Analytics — rebuilt
 // ============================================================================
 
-export const getWeeklySummary = createServerFn({ method: "GET" })
+/** Helper: safe division returning 0 on divide-by-zero */
+const safeDivR  = (n: number, d: number) => (d > 0 ? Math.round(n / d) : 0);
+const safeDivD  = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 10) / 10 : 0);
+
+const fmtShort  = (s: string) =>
+  new Date(s + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+export const getWeeklySummary = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<WeeklySummary> => {
-    const db = await admin();
+  .inputValidator((i: { clientDate: string; weekOffset?: number }) => ({
+    clientDate:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
+    weekOffset:  z.number().int().min(-52).max(0).default(0),
+  }))
+  .handler(async ({ data, context }): Promise<WeeklySummary> => {
+    const db       = await admin();
     const memberId = await deviceMemberId(db, context.userId);
-    if (!memberId) return { startDate: "", avgCalories: 0, avgProtein: 0, avgCarbs: 0, avgFat: 0, daysLogged: 0, targetAdherence: 0 };
-    
-    const today = new Date();
-    const weekAgo = new Date(today.getTime() - 7 * 86400000);
-    const startDate = weekAgo.toISOString().split("T")[0] ?? "";
-    
-    const { data: meals } = await db
-      .from("meals")
-      .select("*, members(daily_calorie_target)")
-      .eq("member_id", memberId)
-      .gte("meal_date", startDate);
-    
-    if (!meals || meals.length === 0) {
-      return { startDate, avgCalories: 0, avgProtein: 0, avgCarbs: 0, avgFat: 0, daysLogged: 0, targetAdherence: 0 };
-    }
-    
-    const byDate = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
-    for (const m of meals) {
-      const key = m.meal_date;
-      const existing = byDate.get(key) ?? { calories: 0, protein: 0, carbs: 0, fat: 0 };
-      existing.calories += m.calories;
-      existing.protein += Number(m.protein);
-      existing.carbs += Number(m.carbs);
-      existing.fat += Number(m.fat);
-      byDate.set(key, existing);
-    }
-    
-    const daysLogged = byDate.size;
-    const totCalories = Array.from(byDate.values()).reduce((a, v) => a + v.calories, 0);
-    const totProtein = Array.from(byDate.values()).reduce((a, v) => a + v.protein, 0);
-    const totCarbs = Array.from(byDate.values()).reduce((a, v) => a + v.carbs, 0);
-    const totFat = Array.from(byDate.values()).reduce((a, v) => a + v.fat, 0);
-    
-    const target = meals[0]?.members?.daily_calorie_target ?? 2000;
-    const adherence = daysLogged > 0 ? Math.min(100, (totCalories / (daysLogged * target)) * 100) : 0;
-    
-    return {
-      startDate,
-      avgCalories: Math.round(totCalories / Math.max(daysLogged, 1)),
-      avgProtein: Math.round(totProtein / Math.max(daysLogged, 1)),
-      avgCarbs: Math.round(totCarbs / Math.max(daysLogged, 1)),
-      avgFat: Math.round(totFat / Math.max(daysLogged, 1)),
-      daysLogged,
-      targetAdherence: Math.round(adherence),
+    const wo       = data.weekOffset ?? 0;
+
+    // Compute this week's window using client-local dates (no UTC drift)
+    const endDate      = addDays(data.clientDate, wo * 7);
+    const startDate    = addDays(endDate, -6);
+    const prevEndDate  = addDays(startDate, -1);
+    const prevStart    = addDays(prevEndDate, -6);
+    const weekLabel    = `${fmtShort(startDate)} – ${fmtShort(endDate)}`;
+
+    const EMPTY: WeeklySummary = {
+      startDate, endDate, weekLabel,
+      weeklyTotal: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      dailyAverageLogged:   { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      dailyAverageFullWeek: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      daysLogged: 0, calorieTarget: 0, targetAdherence: 0,
+      adherenceLabel: "No target set", dailyBreakdown: [],
+      previousWeekDelta: null, observation: null,
+      avgCalories: 0, avgProtein: 0, avgCarbs: 0, avgFat: 0,
     };
+
+    if (!memberId) return EMPTY;
+
+    // Validate the member belongs to the authenticated user's account
+    const { data: member } = await db
+      .from("members")
+      .select("daily_calorie_target, daily_protein_target, room_id")
+      .eq("id", memberId)
+      .single();
+    if (!member) return EMPTY;
+
+    const calorieTarget = member.daily_calorie_target ?? 0;
+
+    // Fetch both current + previous window in one query (no UTC toISOString)
+    const { data: raw } = await db
+      .from("meals")
+      .select("meal_date, calories, protein, carbs, fat")
+      .eq("member_id", memberId)
+      .eq("is_planned", false)
+      .gte("meal_date", prevStart)
+      .lte("meal_date", endDate);
+
+    const allMeals = raw ?? [];
+    const curMeals  = allMeals.filter(m => m.meal_date >= startDate && m.meal_date <= endDate);
+    const prevMeals = allMeals.filter(m => m.meal_date >= prevStart  && m.meal_date <= prevEndDate);
+
+    // Bucket current-week meals by date
+    type DayData = { calories: number; protein: number; carbs: number; fat: number };
+    const byDate = new Map<string, DayData>();
+    for (const m of curMeals) {
+      const ex = byDate.get(m.meal_date) ?? { calories: 0, protein: 0, carbs: 0, fat: 0 };
+      ex.calories += m.calories;
+      ex.protein  += Number(m.protein);
+      ex.carbs    += Number(m.carbs);
+      ex.fat      += Number(m.fat);
+      byDate.set(m.meal_date, ex);
+    }
+
+    const daysLogged = byDate.size;
+
+    // Build 7-entry daily breakdown
+    const dailyBreakdown: DayBreakdown[] = Array.from({ length: 7 }, (_, i) => {
+      const date    = addDays(startDate, i);
+      const day     = byDate.get(date);
+      const shortDay = new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+      return {
+        date, shortDay,
+        calories: day?.calories ?? 0,
+        protein:  day?.protein  ?? 0,
+        carbs:    day?.carbs    ?? 0,
+        fat:      day?.fat      ?? 0,
+        logged: !!day,
+      };
+    });
+
+    // Cumulative totals
+    const totCal  = dailyBreakdown.reduce((a, d) => a + d.calories, 0);
+    const totProt = dailyBreakdown.reduce((a, d) => a + d.protein,  0);
+    const totCarb = dailyBreakdown.reduce((a, d) => a + d.carbs,    0);
+    const totFat  = dailyBreakdown.reduce((a, d) => a + d.fat,      0);
+
+    const weeklyTotal = {
+      calories: Math.round(totCal),
+      protein:  Math.round(totProt * 10) / 10,
+      carbs:    Math.round(totCarb * 10) / 10,
+      fat:      Math.round(totFat  * 10) / 10,
+    };
+
+    const dailyAverageLogged = {
+      calories: safeDivR(totCal,  daysLogged),
+      protein:  safeDivD(totProt, daysLogged),
+      carbs:    safeDivD(totCarb, daysLogged),
+      fat:      safeDivD(totFat,  daysLogged),
+    };
+    const dailyAverageFullWeek = {
+      calories: safeDivR(totCal,  7),
+      protein:  safeDivD(totProt, 7),
+      carbs:    safeDivD(totCarb, 7),
+      fat:      safeDivD(totFat,  7),
+    };
+
+    // Adherence — uses client today (not server now) so today is correctly excluded
+    const tadPct = adherencePct(byDate, calorieTarget, data.clientDate);
+    const tadLabel = adherenceLabel(tadPct, calorieTarget, dailyAverageLogged.calories);
+
+    // Previous-week delta (avg on logged days only)
+    let previousWeekDelta: WeeklySummary["previousWeekDelta"] = null;
+    if (prevMeals.length > 0) {
+      const pByDate = new Map<string, { calories: number; protein: number }>();
+      for (const m of prevMeals) {
+        const ex = pByDate.get(m.meal_date) ?? { calories: 0, protein: 0 };
+        ex.calories += m.calories;
+        ex.protein  += Number(m.protein);
+        pByDate.set(m.meal_date, ex);
+      }
+      const pDays = pByDate.size;
+      if (pDays > 0) {
+        const pCal  = Array.from(pByDate.values()).reduce((a, v) => a + v.calories, 0);
+        const pProt = Array.from(pByDate.values()).reduce((a, v) => a + v.protein,  0);
+        previousWeekDelta = {
+          calories: dailyAverageLogged.calories - safeDivR(pCal, pDays),
+          protein:  Math.round((dailyAverageLogged.protein - safeDivD(pProt, pDays)) * 10) / 10,
+        };
+      }
+    }
+
+    // One grounded observation
+    let observation: WeeklySummary["observation"] = null;
+    if (daysLogged >= 3) {
+      const weekdays = dailyBreakdown.filter(d => {
+        const dow = new Date(d.date + "T12:00:00").getDay();
+        return d.logged && dow >= 1 && dow <= 5;
+      });
+      const weekends = dailyBreakdown.filter(d => {
+        const dow = new Date(d.date + "T12:00:00").getDay();
+        return d.logged && (dow === 0 || dow === 6);
+      });
+      if (weekdays.length > 0 && weekends.length > 0) {
+        const wdAvg = weekdays.reduce((a, d) => a + d.calories, 0) / weekdays.length;
+        const weAvg = weekends.reduce((a, d) => a + d.calories, 0) / weekends.length;
+        if (Math.abs(wdAvg - weAvg) > 200) {
+          const diff = Math.round(Math.abs(weAvg - wdAvg));
+          observation = {
+            headline: weAvg > wdAvg ? `Weekend calories run +${diff} kcal higher` : `Weekends are ${diff} kcal lighter`,
+            detail: `Your weekday average is ${Math.round(wdAvg)} kcal vs ${Math.round(weAvg)} kcal on weekends.`,
+            calculation: `Weekday average computed from ${weekdays.length} logged Mon–Fri days; weekend from ${weekends.length} logged Sat–Sun days. Days with no log are excluded from both averages.`,
+          };
+        }
+      }
+      // Fallback: dinner dominance
+      if (!observation) {
+        const dinnerCal = curMeals
+          .filter(m => (m as any).meal_type === "dinner")
+          .reduce((a, m) => a + m.calories, 0);
+        if (totCal > 0) {
+          const dinnerPct = Math.round((dinnerCal / totCal) * 100);
+          if (dinnerPct >= 40) {
+            observation = {
+              headline: `Dinner drives ${dinnerPct}% of weekly intake`,
+              detail: "Front-loading calories earlier in the day may help with energy and appetite control.",
+              calculation: `Dinner total this week: ${Math.round(dinnerCal)} kcal ÷ weekly total ${Math.round(totCal)} kcal = ${dinnerPct}%.`,
+            };
+          }
+        }
+      }
+    }
+
+    return {
+      startDate, endDate, weekLabel,
+      weeklyTotal, dailyAverageLogged, dailyAverageFullWeek,
+      daysLogged, calorieTarget, targetAdherence: tadPct, adherenceLabel: tadLabel,
+      dailyBreakdown, previousWeekDelta, observation,
+      // legacy
+      avgCalories: dailyAverageLogged.calories,
+      avgProtein:  dailyAverageLogged.protein,
+      avgCarbs:    dailyAverageLogged.carbs,
+      avgFat:      dailyAverageLogged.fat,
+    };
+  });
+
+export const getWeeklyHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { clientDate: string; weeksBack?: number }) => ({
+    clientDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
+    weeksBack:  z.number().int().min(1).max(12).default(4),
+  }))
+  .handler(async ({ data, context }): Promise<WeekHistoryEntry[]> => {
+    const db       = await admin();
+    const memberId = await deviceMemberId(db, context.userId);
+    if (!memberId) return [];
+
+    const { data: member } = await db.from("members").select("daily_calorie_target").eq("id", memberId).single();
+    const target = member?.daily_calorie_target ?? 0;
+    const wb     = data.weeksBack ?? 4;
+
+    // Fetch all meals across past N complete weeks (exclude current week)
+    const endDate   = addDays(data.clientDate, -7);
+    const startDate = addDays(endDate, -(wb * 7 - 1));
+
+    const { data: raw } = await db
+      .from("meals")
+      .select("meal_date, calories")
+      .eq("member_id", memberId)
+      .eq("is_planned", false)
+      .gte("meal_date", startDate)
+      .lte("meal_date", endDate);
+
+    const meals = raw ?? [];
+    const results: WeekHistoryEntry[] = [];
+
+    for (let w = 0; w < wb; w++) {
+      const wEnd   = addDays(endDate, -(w * 7));
+      const wStart = addDays(wEnd, -6);
+      const wMeals = meals.filter(m => m.meal_date >= wStart && m.meal_date <= wEnd);
+
+      const byDate = new Map<string, number>();
+      for (const m of wMeals) byDate.set(m.meal_date, (byDate.get(m.meal_date) ?? 0) + m.calories);
+
+      const dl    = byDate.size;
+      const totCal = Array.from(byDate.values()).reduce((a, b) => a + b, 0);
+      const threshold = Math.max(target * 0.1, 150);
+      const hits = target > 0 ? [...byDate.values()].filter(c => Math.abs(c - target) <= threshold).length : 0;
+
+      results.unshift({
+        startDate:       wStart,
+        endDate:         wEnd,
+        weekLabel:       `${fmtShort(wStart)} – ${fmtShort(wEnd)}`,
+        avgCalories:     safeDivR(totCal, dl),
+        daysLogged:      dl,
+        targetAdherence: dl > 0 && target > 0 ? Math.round((hits / dl) * 100) : 0,
+      });
+    }
+    return results;
   });
 
 // ============================================================================
