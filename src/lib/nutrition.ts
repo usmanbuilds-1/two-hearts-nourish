@@ -13,6 +13,12 @@ export type Meal = {
   ai_confidence: string | null;
   meal_type: MealType;
   photo_url?: string | null;
+  is_planned?: boolean;
+  portion_percentage?: number | null;
+  nominal_calories?: number | null;
+  nominal_protein?: number | null;
+  nominal_carbs?: number | null;
+  nominal_fat?: number | null;
   meal_date: string;
   created_at: string;
   updated_at: string;
@@ -225,4 +231,40 @@ export function usMessages(opts: {
   if (opts.yesterdayBothProtein) out.push("Yesterday you both hit your protein goals.");
   if (out.length < 2) out.push("One more meal in the books.");
   return out;
+}
+
+// ── Week-stat utilities ──────────────────────────────────────────────────────
+
+/** Compute the 7-day window [startDate, endDate] for a given client date and week offset.
+ *  weekOffset=0 → current trailing 7 days ending on clientDate.
+ *  weekOffset=-1 → the 7 days before that.
+ */
+export function weekWindow(clientDate: string, weekOffset = 0) {
+  const endDate   = addDays(clientDate, weekOffset * 7);
+  const startDate = addDays(endDate, -6);
+  const fmt = (s: string) =>
+    parseLocalDate(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return { startDate, endDate, label: `${fmt(startDate)} – ${fmt(endDate)}` };
+}
+
+/** % of completed logged days whose calorie total landed within ±10% (or ±150 kcal) of target.
+ *  Today is excluded (still in progress). Returns 100 if no completed days yet. */
+export function adherencePct(
+  byDate: Map<string, { calories: number }>,
+  target: number,
+  today: string,
+): number {
+  if (target <= 0 || byDate.size === 0) return 0;
+  const completed = [...byDate.entries()].filter(([d]) => d < today);
+  if (completed.length === 0) return 100;
+  const threshold = Math.max(target * 0.1, 150);
+  const hits = completed.filter(([, v]) => Math.abs(v.calories - target) <= threshold).length;
+  return Math.round((hits / completed.length) * 100);
+}
+
+export function adherenceLabel(pct: number, target: number, avgCalories: number): string {
+  if (target <= 0) return "No target set";
+  if (pct >= 70)               return "Consistent";
+  if (avgCalories < target * 0.9) return "Under target";
+  return "Over target";
 }
