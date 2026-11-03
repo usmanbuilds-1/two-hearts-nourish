@@ -277,9 +277,10 @@ const fmtShort  = (s: string) =>
 
 export const getWeeklySummary = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { clientDate: string; weekOffset?: number }) => ({
+  .inputValidator((i: { clientDate: string; weekOffset?: number; memberId?: string }) => ({
     clientDate:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
     weekOffset:  z.number().int().min(-52).max(0).default(0).parse(i.weekOffset ?? 0),
+    memberId:    z.string().uuid().optional().parse(i.memberId),
   }))
   .handler(async ({ data, context }): Promise<WeeklySummary> => {
     const db       = await admin();
@@ -306,11 +307,26 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
 
     if (!memberId) return EMPTY;
 
-    // Validate the member belongs to the authenticated user's account
+    // Get caller's room_id for security validation
+    const { data: callerMember } = await db
+      .from("members").select("room_id").eq("id", memberId).single();
+    if (!callerMember) return EMPTY;
+
+    // If a partner memberId is requested, validate it belongs to the same room
+    let targetMemberId = memberId;
+    if (data.memberId && data.memberId !== memberId) {
+      const { data: sameRoom } = await db
+        .from("members").select("id")
+        .eq("id", data.memberId).eq("room_id", callerMember.room_id)
+        .maybeSingle();
+      if (sameRoom) targetMemberId = data.memberId;
+      // silently falls back to caller if not in same room
+    }
+
     const { data: member } = await db
       .from("members")
       .select("daily_calorie_target, daily_protein_target, room_id")
-      .eq("id", memberId)
+      .eq("id", targetMemberId)
       .single();
     if (!member) return EMPTY;
 
@@ -320,7 +336,7 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
     const { data: raw } = await db
       .from("meals")
       .select("meal_date, calories, protein, carbs, fat, meal_type")
-      .eq("member_id", memberId)
+      .eq("member_id", targetMemberId)
       .gte("meal_date", prevStart)
       .lte("meal_date", endDate);
 
