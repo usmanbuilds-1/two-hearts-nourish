@@ -1,11 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Plus, Star, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { MEAL_TYPES, addDays, coupleStats, fmt, greeting, totals, usMessages, type Meal, type Member } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet, draftFromMeal } from "@/components/us/MealSheet";
+import {
+  getFavoriteMeals, saveFavoriteMeal, removeFavoriteMeal, type MealFavorite,
+} from "@/lib/meal-operations.functions";
 import { ScanSheet } from "@/components/us/ScanSheet";
 import { BudgetPlanSheet } from "@/components/us/BudgetPlanSheet";
 import { dailyQuote } from "@/lib/quotes";
@@ -44,8 +48,38 @@ function Today() {
   const [scan, setScan] = useState(false);
   const [sheet, setSheet] = useState<{ open: boolean; meal: Meal | null }>({ open: false, meal: null });
   const [budget, setBudget] = useState(false);
-  const [, setFavTick] = useState(0);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
+  const qc = useQueryClient();
+  const { data: favsData = [] } = useQuery<MealFavorite[]>({
+    queryKey: ["meal-favorites"],
+    queryFn: () => getFavoriteMeals(),
+  });
+  const favNames = useMemo(
+    () => new Set(favsData.map((f) => f.food_name.trim().toLowerCase())),
+    [favsData],
+  );
+  async function handleToggleFav(m: Meal) {
+    const isFav = favNames.has(m.food_name.trim().toLowerCase());
+    try {
+      if (isFav) {
+        await removeFavoriteMeal({ data: { foodName: m.food_name } });
+        toast("Removed from favourites");
+      } else {
+        await saveFavoriteMeal({ data: {
+          foodName: m.food_name,
+          servingDescription: m.serving_description ?? "",
+          calories: m.calories,
+          protein: Number(m.protein),
+          carbs: Number(m.carbs),
+          fat: Number(m.fat),
+        } });
+        toast.success("Saved to favourites ⭐");
+      }
+      qc.invalidateQueries({ queryKey: ["meal-favorites"] });
+    } catch {
+      toast.error("Couldn't update favourites.");
+    }
+  }
 
   const todays = useMemo(() => meals.filter((m) => m.meal_date === today), [meals, today]);
   const mine = todays.filter((m) => m.member_id === me.id);
@@ -53,21 +87,6 @@ function Today() {
   const stats = useMemo(() => coupleStats(meals, me, partner, today), [meals, me, partner, today]);
   const y = addDays(today, -1);
   const msgs = usMessages({ me, partner, todayMine: mine, todayTheirs: theirs, yesterdayBoth: stats.bothDays.has(y), yesterdayBothProtein: stats.bothProteinDays.has(y), streak: stats.streak });
-
-  const favKey = `us.fav.${me.id}`;
-  function getFavNames(): string[] {
-    try { return (JSON.parse(localStorage.getItem(favKey) ?? "[]") as { food_name: string }[]).map((f) => f.food_name); } catch { return []; }
-  }
-  function toggleFav(m: Meal) {
-    try {
-      const favs: ReturnType<typeof draftFromMeal>[] = JSON.parse(localStorage.getItem(favKey) ?? "[]");
-      const idx = favs.findIndex((f) => f.food_name === m.food_name);
-      if (idx >= 0) { favs.splice(idx, 1); toast("Removed from favourites"); }
-      else { favs.push(draftFromMeal(m)); toast("Added to favourites ⭐"); }
-      localStorage.setItem(favKey, JSON.stringify(favs));
-      setFavTick((n) => n + 1);
-    } catch { toast.error("Couldn't update favourites."); }
-  }
 
   return (
     <Screen>
@@ -119,7 +138,6 @@ function Today() {
         ) : (
           MEAL_TYPES.map((t) => {
             const list = todays.filter((m) => m.meal_type === t.key);
-            const favNames = getFavNames();
             return (
               <div key={t.key} className="mt-5">
                 <Eyebrow>{t.label} {t.icon}</Eyebrow>
@@ -163,11 +181,11 @@ function Today() {
                           </button>
                           {isMe && (
                             <button
-                              onClick={() => toggleFav(m)}
+                              onClick={() => handleToggleFav(m)}
                               className="shrink-0 p-1 text-muted-foreground hover:text-primary"
-                              aria-label={favNames.includes(m.food_name) ? "Remove from favourites" : "Add to favourites"}
+                              aria-label={favNames.has(m.food_name.trim().toLowerCase()) ? "Remove from favourites" : "Add to favourites"}
                             >
-                              <Star className={cn("size-4", favNames.includes(m.food_name) && "fill-primary text-primary")} />
+                              <Star className={cn("size-4", favNames.has(m.food_name.trim().toLowerCase()) && "fill-primary text-primary")} />
                             </button>
                           )}
                         </div>
