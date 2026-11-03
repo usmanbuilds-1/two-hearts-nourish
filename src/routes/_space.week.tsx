@@ -105,15 +105,16 @@ function WeekView() {
   // quick-log from weight tab
   const [quickKg, setQuickKg]   = useState("");
   const [logging, setLogging]   = useState(false);
-  const [tappedDay, setTappedDay] = useState<string | null>(null);
-  const [lightbox, setLightbox]   = useState<{ src: string; caption: string } | null>(null);
+  const [tappedDay, setTappedDay]           = useState<string | null>(null);
+  const [lightbox, setLightbox]             = useState<{ src: string; caption: string } | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState(() => me.id);
 
   useEffect(() => {
     if (tab === "stats") {
       setStatsLoading(true);
       setStatsError(false);
       setStats(null);
-      getWeeklySummary({ data: { clientDate: localDate(), weekOffset } })
+      getWeeklySummary({ data: { clientDate: localDate(), weekOffset, memberId: selectedMemberId } })
         .then(setStats)
         .catch((err) => { console.error('Failed to load weekly summary:', err); setStatsError(true); })
         .finally(() => setStatsLoading(false));
@@ -122,7 +123,7 @@ function WeekView() {
       setWaLoading(true);
       getWeightAnalytics().then(setWa).catch(() => setWa({ entries: [], rollingAvg: [], latestWeight: null, startWeight: null, avgWeight: null, minWeight: null, maxWeight: null, totalChange: null, trendKgPerWeek: null, plateauDetected: false, plateauDays: 0 })).finally(() => setWaLoading(false));
     }
-  }, [tab, wa, waLoading, weekOffset]);
+  }, [tab, wa, waLoading, weekOffset, selectedMemberId]);
 
   async function quickLog() {
     const val = parseFloat(quickKg.replace(",", "."));
@@ -141,9 +142,9 @@ function WeekView() {
   // ── calorie chart data ──
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)), [today]);
   const rows = useMemo(() => days.map((d) => {
-    const mine  = meals.filter((m) => m.meal_date === d && m.member_id === me.id);
-    const theirs = partner ? meals.filter((m) => m.meal_date === d && m.member_id === partner.id) : [];
-    return { d, mine: totals(mine), theirs: totals(theirs) };
+    const mineMeals  = meals.filter((m) => m.meal_date === d && m.member_id === me.id);
+    const theirMeals = partner ? meals.filter((m) => m.meal_date === d && m.member_id === partner.id) : [];
+    return { d, mine: totals(mineMeals), theirs: totals(theirMeals), mineMeals, theirMeals };
   }), [days, meals, me.id, partner]);
 
   const avg = (sel: (r: typeof rows[0]) => { calories: number; protein: number; count: number }) => {
@@ -156,7 +157,8 @@ function WeekView() {
   const a2   = avg((r) => r.theirs);
   const both = rows.filter((r) => r.mine.count && r.theirs.count).length;
   const max  = Math.max(1, ...rows.flatMap((r) => [r.mine.calories, r.theirs.calories]));
-  const targetPct = me.daily_calorie_target && max > 0 ? Math.min(100, (me.daily_calorie_target / max) * 100) : null;
+  const targetPct        = me.daily_calorie_target && max > 0 ? Math.min(100, (me.daily_calorie_target / max) * 100) : null;
+  const partnerTargetPct = partner?.daily_calorie_target && max > 0 ? Math.min(100, (partner.daily_calorie_target / max) * 100) : null;
   const myProteinTarget    = Number(me.daily_protein_target ?? 0);
   const theirProteinTarget = Number(partner?.daily_protein_target ?? 0);
 
@@ -204,89 +206,244 @@ function WeekView() {
         <div className="space-y-5">
           <div>
             <h1 className="text-3xl">Our Week ❤️</h1>
-            <p className="mt-1 text-muted-foreground">{both} of 7 days you showed up for each other{both === 7 ? " — a perfect week 🌟" : " 💕"}</p>
+            <p className="mt-1 text-muted-foreground">
+              {both} of 7 days you showed up for each other{both === 7 ? " — a perfect week 🌟" : " 💕"}
+            </p>
           </div>
-          <div className="relative flex h-40 items-end gap-2 rounded-2xl border border-border bg-card p-4 overflow-visible" onClick={() => setTappedDay(null)}>
-            {rows.map((r) => (
-              <button
-                key={r.d}
-                className="relative flex h-full flex-1 flex-col items-center justify-end gap-1 focus:outline-none"
-                onClick={(e) => { e.stopPropagation(); setTappedDay(tappedDay === r.d ? null : r.d); }}
-                aria-label={`${parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "long" })}: You ${r.mine.calories} kcal`}
-              >
-                {/* Calorie tooltip on tap */}
-                {tappedDay === r.d && (r.mine.calories > 0 || r.theirs.calories > 0) && (
-                  <div className="absolute -top-10 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-xl bg-foreground px-2.5 py-1.5 text-[10px] leading-snug text-background shadow-lg">
-                    {r.mine.calories > 0 && <div>You: {fmt(r.mine.calories)} kcal</div>}
-                    {r.theirs.calories > 0 && <div>{(partner?.display_name ?? "Partner").split(" ")[0]}: {fmt(r.theirs.calories)} kcal</div>}
-                  </div>
-                )}
-                <div className="flex h-full w-full items-end justify-center gap-0.5">
-                  <div
-                    className={cn("w-1/2 max-w-3 rounded-t bg-primary transition-opacity duration-150",
-                      tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
-                    style={{ height: `${(r.mine.calories / max) * 100}%` }}
-                  />
-                  <div
-                    className={cn("w-1/2 max-w-3 rounded-t bg-partner transition-opacity duration-150",
-                      tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
-                    style={{ height: `${(r.theirs.calories / max) * 100}%` }}
-                  />
-                </div>
-                <div className={cn("text-[10px] uppercase transition-colors",
-                  tappedDay === r.d ? "font-semibold text-foreground" : "text-muted-foreground")}>
-                  {parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "short" })}
-                </div>
-              </button>
-            ))}
-            {targetPct !== null && (
-              <div className="pointer-events-none absolute inset-x-4 border-t border-dashed border-primary/50" style={{ bottom: `calc(${targetPct}% + 1rem)` }}>
-                <span className="absolute -top-4 right-0 text-[10px] text-primary/60">target</span>
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {(["You", partner?.display_name ?? "Partner"] as const).map((l, i) => {
-              const a = i === 0 ? a1 : a2;
-              const c = i === 0 ? "text-primary" : "text-partner";
-              return (
-                <div key={l} className="rounded-2xl border border-border bg-card p-4">
-                  <Eyebrow className={c}>{l}</Eyebrow>
-                  <div className="num mt-2 text-xl font-semibold">{fmt(a.kcal)} <span className="text-sm font-normal text-muted-foreground">avg kcal</span></div>
-                  <div className="num text-sm">{fmt(a.p)}g avg protein</div>
-                  <div className="num text-xs text-muted-foreground">{a.n} meals</div>
-                </div>
-              );
-            })}
-          </div>
-          <Eyebrow>Protein this week</Eyebrow>
-          <div className="space-y-2">
-            {rows.map((r) => {
-              const myPct    = myProteinTarget > 0 ? Math.min(100, (r.mine.protein / myProteinTarget) * 100) : 0;
-              const theirPct = theirProteinTarget > 0 ? Math.min(100, (r.theirs.protein / theirProteinTarget) * 100) : 0;
-              return (
-                <div key={r.d} className="flex items-center gap-2">
-                  <span className="w-8 shrink-0 text-[10px] uppercase text-muted-foreground">
-                    {parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "short" })}
-                  </span>
-                  <div className="flex-1 space-y-1">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${myPct}%` }} />
+
+          {/* ── Calorie chart: date numbers + partner target line ── */}
+          <div>
+            <div
+              className="relative flex h-40 items-end gap-2 rounded-2xl border border-border bg-card p-4 overflow-visible"
+              onClick={() => setTappedDay(null)}
+            >
+              {rows.map((r) => {
+                const myPct    = max > 0 ? (r.mine.calories / max) * 100 : 0;
+                const theirPct = max > 0 ? (r.theirs.calories / max) * 100 : 0;
+                const dayNum   = parseLocalDate(r.d).getDate();
+                const dayLabel = parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "short" });
+                return (
+                  <button
+                    key={r.d}
+                    className="relative flex h-full flex-1 flex-col items-center justify-end gap-0 focus:outline-none"
+                    onClick={(e) => { e.stopPropagation(); setTappedDay(tappedDay === r.d ? null : r.d); }}
+                    aria-label={`${dayLabel} ${dayNum}: You ${r.mine.calories} kcal`}
+                  >
+                    <div className="flex h-full w-full items-end justify-center gap-0.5">
+                      <div
+                        className={cn("w-1/2 max-w-3 rounded-t bg-primary transition-opacity duration-150",
+                          tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
+                        style={{ height: `${myPct}%` }}
+                      />
+                      <div
+                        className={cn("w-1/2 max-w-3 rounded-t bg-partner transition-opacity duration-150",
+                          tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
+                        style={{ height: `${theirPct}%` }}
+                      />
                     </div>
-                    {partner && (
-                      <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                        <div className="h-full rounded-full bg-partner transition-all" style={{ width: `${theirPct}%` }} />
-                      </div>
+                    <div className={cn("text-[10px] uppercase leading-none mt-0.5 transition-colors",
+                      tappedDay === r.d ? "font-bold text-foreground" : "text-muted-foreground")}>
+                      {dayLabel}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground/50 leading-none">{dayNum}</div>
+                  </button>
+                );
+              })}
+              {/* My target line */}
+              {targetPct !== null && (
+                <div className="pointer-events-none absolute inset-x-4 border-t border-dashed border-primary/50"
+                  style={{ bottom: `calc(${targetPct}% + 1rem)` }}>
+                  <span className="absolute -top-3.5 right-0 text-[9px] text-primary/70">Your target</span>
+                </div>
+              )}
+              {/* Partner target line */}
+              {partnerTargetPct !== null && (
+                <div className="pointer-events-none absolute inset-x-4 border-t border-dashed border-partner/40"
+                  style={{ bottom: `calc(${partnerTargetPct}% + 1rem)` }}>
+                  <span className="absolute top-0.5 right-0 text-[9px] text-partner/70">
+                    {(partner?.display_name ?? "Partner").split(" ")[0]}&apos;s target
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-4 mt-2 px-1 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" /> You</span>
+              {partner && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block size-2 rounded-full bg-partner" />
+                  {partner.display_name?.split(" ")[0] ?? "Partner"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ── Day Focus Card — replaces clipped tooltip ── */}
+          {tappedDay && (() => {
+            const r = rows.find((row) => row.d === tappedDay);
+            if (!r) return null;
+            const myTarget    = me.daily_calorie_target ?? 0;
+            const theirTarget = partner?.daily_calorie_target ?? 0;
+            return (
+              <div className="rounded-2xl border border-primary/20 bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Eyebrow className="text-primary">
+                    {parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                  </Eyebrow>
+                  <button onClick={() => setTappedDay(null)} className="text-xs text-muted-foreground hover:text-foreground">✕</button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-semibold text-primary">You</div>
+                    {r.mine.count === 0 ? <p className="text-xs text-muted-foreground">Not logged</p> : (
+                      <>
+                        <div className="num text-lg font-bold leading-tight">{fmt(r.mine.calories)} kcal</div>
+                        {myTarget > 0 && <div className="text-xs text-muted-foreground">{Math.round((r.mine.calories / myTarget) * 100)}% of {fmt(myTarget)} target</div>}
+                        <div className="text-xs text-muted-foreground">P {fmt(r.mine.protein)}g · C {fmt(r.mine.carbs)}g · F {fmt(r.mine.fat)}g</div>
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {r.mineMeals.slice(0, 4).map((m) => (
+                            <span key={m.id} className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
+                              {m.food_name.length > 15 ? m.food_name.slice(0, 14) + "…" : m.food_name} {fmt(m.calories)}
+                            </span>
+                          ))}
+                          {r.mineMeals.length > 4 && <span className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">+{r.mineMeals.length - 4} more</span>}
+                        </div>
+                      </>
                     )}
                   </div>
+                  {partner && (
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-semibold text-partner">{partner.display_name}</div>
+                      {r.theirs.count === 0 ? <p className="text-xs text-muted-foreground">Not logged</p> : (
+                        <>
+                          <div className="num text-lg font-bold leading-tight">{fmt(r.theirs.calories)} kcal</div>
+                          {theirTarget > 0 && <div className="text-xs text-muted-foreground">{Math.round((r.theirs.calories / theirTarget) * 100)}% of {fmt(theirTarget)} target</div>}
+                          <div className="text-xs text-muted-foreground">P {fmt(r.theirs.protein)}g · C {fmt(r.theirs.carbs)}g · F {fmt(r.theirs.fat)}g</div>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {r.theirMeals.slice(0, 4).map((m) => (
+                              <span key={m.id} className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
+                                {m.food_name.length > 15 ? m.food_name.slice(0, 14) + "…" : m.food_name} {fmt(m.calories)}
+                              </span>
+                            ))}
+                            {r.theirMeals.length > 4 && <span className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">+{r.theirMeals.length - 4} more</span>}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            );
+          })()}
+
+          {/* ── Weekly Synergy Card ── */}
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <Eyebrow>Weekly Synergy 💕</Eyebrow>
+            <div className="space-y-2.5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Days logged together</span>
+                <span className="num font-semibold">{both} / 7{both >= 5 ? " 💕" : ""}</span>
+              </div>
+              {partner && a1.kcal > 0 && a2.kcal > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Calorie gap (daily avg)</span>
+                  <span className="num font-semibold">
+                    {fmt(Math.abs(Math.round(a1.kcal - a2.kcal)))} kcal
+                    {" "}<span className="text-muted-foreground text-xs">{a1.kcal > a2.kcal ? `(you eat more)` : `(${partner.display_name?.split(" ")[0]} eats more)`}</span>
+                  </span>
+                </div>
+              )}
+              {me.daily_calorie_target && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Your on-target days</span>
+                  <span className="num font-semibold">
+                    {rows.filter((r) => {
+                      const t = me.daily_calorie_target!;
+                      return r.mine.count > 0 && Math.abs(r.mine.calories - t) <= Math.max(t * 0.1, 150);
+                    }).length} / 7
+                  </span>
+                </div>
+              )}
+              {partner?.daily_calorie_target && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">{partner.display_name?.split(" ")[0]}&apos;s on-target days</span>
+                  <span className="num font-semibold">
+                    {rows.filter((r) => {
+                      const t = partner!.daily_calorie_target!;
+                      return r.theirs.count > 0 && Math.abs(r.theirs.calories - t) <= Math.max(t * 0.1, 150);
+                    }).length} / 7
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" />You: {fmt(a1.p)}g avg{myProteinTarget > 0 ? ` · target ${fmt(myProteinTarget)}g` : ""}</span>
-            {partner && <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-partner" />{partner.display_name}: {fmt(a2.p)}g avg{theirProteinTarget > 0 ? ` · target ${fmt(theirProteinTarget)}g` : ""}</span>}
+
+          {/* ── Macro Meters — You ── */}
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <Eyebrow className="text-primary">You — Avg Macros</Eyebrow>
+            <div className="space-y-3">
+              {(() => {
+                const loggedRows = rows.filter((r) => r.mine.count > 0);
+                const n = Math.max(loggedRows.length, 1);
+                return [
+                  { label: "Protein", val: a1.p, target: myProteinTarget },
+                  { label: "Carbs",   val: Math.round(loggedRows.reduce((a, r) => a + r.mine.carbs, 0) / n), target: Number(me.daily_carbs_target ?? 0) },
+                  { label: "Fat",     val: Math.round(loggedRows.reduce((a, r) => a + r.mine.fat,   0) / n), target: Number(me.daily_fat_target   ?? 0) },
+                ].map(({ label, val, target }) => {
+                  const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0;
+                  return (
+                    <div key={label} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="num font-medium">
+                          {fmt(val)}g{target > 0 ? ` / ${fmt(target)}g (${pct}%)` : ""}
+                        </span>
+                      </div>
+                      {target > 0 && (
+                        <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
+
+          {/* ── Macro Meters — Partner ── */}
+          {partner && a2.kcal > 0 && (
+            <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+              <Eyebrow className="text-partner">{partner.display_name} — Avg Macros</Eyebrow>
+              <div className="space-y-3">
+                {(() => {
+                  const loggedRows = rows.filter((r) => r.theirs.count > 0);
+                  const n = Math.max(loggedRows.length, 1);
+                  return [
+                    { label: "Protein", val: a2.p, target: theirProteinTarget },
+                    { label: "Carbs",   val: Math.round(loggedRows.reduce((a, r) => a + r.theirs.carbs, 0) / n), target: Number(partner.daily_carbs_target ?? 0) },
+                    { label: "Fat",     val: Math.round(loggedRows.reduce((a, r) => a + r.theirs.fat,   0) / n), target: Number(partner.daily_fat_target   ?? 0) },
+                  ].map(({ label, val, target }) => {
+                    const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0;
+                    return (
+                      <div key={label} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">{label}</span>
+                          <span className="num font-medium">
+                            {fmt(val)}g{target > 0 ? ` / ${fmt(target)}g (${pct}%)` : ""}
+                          </span>
+                        </div>
+                        {target > 0 && (
+                          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                            <div className="h-full rounded-full bg-partner transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -370,6 +527,22 @@ function WeekView() {
       {/* ── TAB: STATS ── */}
       {tab === "stats" && (
         <div className="space-y-4">
+
+          {/* Partner toggle */}
+          {partner && (
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-secondary p-1 mb-2">
+              <button type="button" onClick={() => setSelectedMemberId(me.id)}
+                className={cn("rounded-lg py-1.5 text-xs font-medium transition-colors",
+                  selectedMemberId === me.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                You
+              </button>
+              <button type="button" onClick={() => setSelectedMemberId(partner.id)}
+                className={cn("rounded-lg py-1.5 text-xs font-medium transition-colors",
+                  selectedMemberId === partner.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                {partner.display_name}
+              </button>
+            </div>
+          )}
 
           {/* Week carousel */}
           <div className="flex items-center gap-2">
