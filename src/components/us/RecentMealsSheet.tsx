@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Star, Trash2 } from "lucide-react";
 import {
@@ -8,6 +8,7 @@ import { Btn } from "@/components/us/primitives";
 import {
   getRecentMeals,
   getFavoriteMeals,
+  saveFavoriteMeal,
   removeFavoriteMeal,
   type MealFavorite,
 } from "@/lib/meal-operations.functions";
@@ -66,6 +67,11 @@ export function RecentMealsSheet({
     qc.invalidateQueries({ queryKey: ["meal-favorites"] });
     toast.success("Removed from favourites");
   }
+
+  const favNames = useMemo(
+    () => new Set(favs.map((f) => f.food_name.trim().toLowerCase())),
+    [favs],
+  );
 
   const loading = tab === "recents" ? loadingR : loadingF;
   const items   = tab === "recents" ? recents : favs;
@@ -131,6 +137,32 @@ export function RecentMealsSheet({
                     {m.serving_description ? ` · ${m.serving_description}` : ""}
                   </div>
                 </div>
+
+                {/* Star — save/remove favourite (shown in both tabs) */}
+                <button
+                  onClick={async () => {
+                    const isFav = favNames.has(m.food_name.trim().toLowerCase());
+                    if (isFav) {
+                      await removeFavoriteMeal({ data: { foodName: m.food_name } }).catch(() => {});
+                      toast("Removed from favourites");
+                    } else {
+                      await saveFavoriteMeal({ data: {
+                        foodName: m.food_name,
+                        servingDescription: m.serving_description ?? "",
+                        calories: m.calories,
+                        protein: Number(m.protein),
+                        carbs: Number(m.carbs),
+                        fat: Number(m.fat),
+                      } }).catch(() => {});
+                      toast.success("Saved to favourites ⭐");
+                    }
+                    qc.invalidateQueries({ queryKey: ["meal-favorites"] });
+                  }}
+                  className="shrink-0 p-1 text-muted-foreground hover:text-primary transition-colors"
+                  aria-label={favNames.has(m.food_name.trim().toLowerCase()) ? "Remove from favourites" : "Add to favourites"}
+                >
+                  <Star className={cn("size-3.5", favNames.has(m.food_name.trim().toLowerCase()) && "fill-primary text-primary")} />
+                </button>
 
                 {/* Remove fav */}
                 {tab === "favs" && (
