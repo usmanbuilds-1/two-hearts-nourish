@@ -37,7 +37,8 @@ async function admin() {
 type Db = Awaited<ReturnType<typeof admin>>;
 
 async function deviceMemberId(db: Db, uid: string) {
-  const { data } = await db.from("member_devices").select("member_id").eq("auth_user_id", uid).maybeSingle();
+  const { data, error } = await db.from("member_devices").select("member_id").eq("auth_user_id", uid).maybeSingle();
+  if (error) throw new Error("SERVER_ERROR");
   return data?.member_id ?? null;
 }
 
@@ -61,11 +62,46 @@ export const createLinkCode = createServerFn({ method: "POST" })
     return { code, expiresAt: expires };
   });
 
+/** Creates a high-entropy, one-use recovery link for SELF or the other room member. 
+ * This does not expose, rotate, or impersonate anyone's permanent recovery key. */
+export const createRejoinLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { forMember: "self" | "partner" }) => ({
+    forMember: z.enum(["self", "partner"]).parse(i.forMember),
+  }))
+  .handler(async ({ data, context }) => {
+    const db = await admin();
+    const myId = await deviceMemberId(db, context.userId);
+    if (!myId) throw new Error("NOT_MEMBER");
+    const { data: me, error: meError } = await db.from("members")
+      .select("id, room_id").eq("id", myId).single();
+    if (meError || !me) throw new Error("NOT_MEMBER");
+    let recipientId = myId;
+    if (data.forMember === "partner") {
+      const { data: partner, error: partnerError } = await db.from("members")
+        .select("id").eq("room_id", me.room_id).neq("id", myId).maybeSingle();
+      if (partnerError) throw new Error("SERVER_ERROR");
+      if (!partner) throw new Error("NO_PARTNER");
+      recipientId = partner.id;
+    }
+    const { data: room, error: roomError } = await db.from("rooms")
+      .select("room_code").eq("id", me.room_id).single();
+    if (roomError || !room) throw new Error("SERVER_ERROR");
+    const token = randomToken(); // 256 bits; far safer than 6-digit codes
+    const expiresAt = new Date(Date.now() + 20 * 60_000).toISOString();
+    const { error } = await db.from("members").update({
+      link_code_hash: await sha256(`${recipientId}:${token}`),
+      link_code_expires_at: expiresAt,
+    }).eq("id", recipientId);
+    if (error) throw new Error("SERVER_ERROR");
+    return { roomCode: room.room_code, token, expiresAt };
+  });
+
 export const linkDevice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { code: string; linkCode: string }) => ({
     code: codeSchema.parse(i.code),
-    linkCode: z.string().trim().regex(/^\d{6}$/).parse(i.linkCode),
+    linkCode: z.string().trim().regex(/^(?:\d{6}|[a-f0-9]{64})$/i).parse(i.linkCode).toLowerCase(),
   }))
   .handler(async ({ data, context }) => {
     const code = normalizeCode(data.code);
@@ -75,16 +111,46 @@ export const linkDevice = createServerFn({ method: "POST" })
     if (!room) throw new Error("ROOM_NOT_FOUND");
     const { data: members } = await db.from("members").select("id, link_code_hash, link_code_expires_at").eq("room_id", room.id);
     let match: string | null = null;
+    const now = new Date().toISOString();
     for (const m of members ?? []) {
-      if (m.link_code_hash && m.link_code_expires_at && new Date(m.link_code_expires_at) > new Date() && m.link_code_hash === (await sha256(`${m.id}:${data.linkCode}`))) match = m.id;
+      if (m.link_code_hash && m.link_code_expires_at && m.link_code_expires_at > now &&
+          m.link_code_hash === (await sha256(`${m.id}:${data.linkCode}`))) {
+        match = m.id;
+        break;
+      }
     }
     if (!match) throw new Error("INVALID_LINK");
     const current = await deviceMemberId(db, context.userId);
     if (current && current !== match) throw new Error("ALREADY_IN_SPACE");
-    if (!current) await addDevice(db, match, context.userId);
-    // single use
-    await db.from("members").update({ link_code_hash: null, link_code_expires_at: null }).eq("id", match);
-    return { roomCode: code, memberId: match };
+
+    // Allocate a unique durable recovery key for this newly linked device.
+    // This keeps the original member key and all other device keys valid.
+    const newKey = randomToken();
+    const tokenHash = await sha256(newKey);
+    const { error: keyError } = await db.from("member_recovery_keys")
+      .insert({ member_id: match, token_hash: tokenHash });
+    if (keyError) throw new Error("RECOVERY_STORAGE_UNAVAILABLE");
+
+    // Conditional consume: concurrent attempts cannot both redeem a link.
+    const claimHash = await sha256(`${match}:${data.linkCode}`);
+    const { data: claimed, error: claimError } = await db.from("members")
+      .update({ link_code_hash: null, link_code_expires_at: null })
+      .eq("id", match)
+      .eq("link_code_hash", claimHash)
+      .gt("link_code_expires_at", now)
+      .select("id")
+      .maybeSingle();
+    if (claimError || !claimed) {
+      await db.from("member_recovery_keys").delete().eq("token_hash", tokenHash);
+      throw new Error(claimError ? "SERVER_ERROR" : "INVALID_LINK");
+    }
+    try {
+      if (!current) await addDevice(db, match, context.userId);
+    } catch (error) {
+      await db.from("member_recovery_keys").delete().eq("token_hash", tokenHash);
+      throw error;
+    }
+    return { roomCode: code, memberId: match, key: newKey };
   });
 
 export const getRoomPreview = createServerFn({ method: "POST" })
@@ -228,17 +294,32 @@ export const rejoinRoom = createServerFn({ method: "POST" })
     const db = await admin();
     const { data: room } = await db.from("rooms").select("id").eq("room_code", code).maybeSingle();
     if (!room) throw new Error("ROOM_NOT_FOUND");
-    const { data: member } = await db
+    const tokenHash = await sha256(data.key.toLowerCase());
+    const { data: legacy, error: legacyError } = await db
       .from("members")
-      .select("id, auth_user_id")
+      .select("id")
       .eq("room_id", room.id)
-      .eq("participant_token_hash", await sha256(data.key.toLowerCase()))
+      .eq("participant_token_hash", tokenHash)
       .maybeSingle();
-    if (!member) throw new Error("INVALID_KEY");
+    if (legacyError) throw new Error("SERVER_ERROR");
+    let memberId = legacy?.id ?? null;
+    if (!memberId) {
+      // New device-specific recovery keys are separate from original member keys.
+      const { data: record, error: keyError } = await db.from("member_recovery_keys")
+        .select("member_id").eq("token_hash", tokenHash).maybeSingle();
+      if (keyError) throw new Error("RECOVERY_STORAGE_UNAVAILABLE");
+      if (record) {
+        const { data: member, error: memberError } = await db.from("members")
+          .select("id").eq("id", record.member_id).eq("room_id", room.id).maybeSingle();
+        if (memberError) throw new Error("SERVER_ERROR");
+        memberId = member?.id ?? null;
+      }
+    }
+    if (!memberId) throw new Error("INVALID_KEY");
     const current = await deviceMemberId(db, context.userId);
-    if (current && current !== member.id) throw new Error("ALREADY_IN_SPACE");
-    if (!current) await addDevice(db, member.id, context.userId);
-    return { roomCode: code, memberId: member.id, key: data.key.toLowerCase() };
+    if (current && current !== memberId) throw new Error("ALREADY_IN_SPACE");
+    if (!current) await addDevice(db, memberId, context.userId);
+    return { roomCode: code, memberId, key: data.key.toLowerCase() };
   });
 
 export const leaveRoom = createServerFn({ method: "POST" })
