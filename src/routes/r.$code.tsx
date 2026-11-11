@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Btn, Field, TextInput } from "@/components/us/primitives";
 import { getRoomPreview, joinRoom, linkDevice, rejoinRoom } from "@/lib/room.functions";
-import { ensureIdentity, friendlyError, readSession, writeSession } from "@/lib/session";
+import { ensureIdentity, friendlyError, writeSession } from "@/lib/session";
 
 export const Route = createFileRoute("/r/$code")({
   ssr: false,
@@ -39,19 +39,15 @@ function Join() {
     : undefined;
 
   useEffect(() => {
-    const s = readSession();
-    const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const normalizedSessionCode = s?.roomCode?.toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-    // Only auto-redirect if the session is for THIS exact room
-    if (s && normalizedSessionCode === normalizedCode) {
-      void navigate({ to: "/today", replace: true });
-      return;
-    }
+    // A stale local marker must not trap recovery in a /today redirect loop.
+    let mounted = true;
+    setPreview(null);
+    setLoadError(false);
     getRoomPreview({ data: { code } })
-      .then(setPreview)
-      .catch(() => setLoadError(true));
-  }, [code, navigate]);
+      .then((result) => { if (mounted) setPreview(result); })
+      .catch(() => { if (mounted) setLoadError(true); });
+    return () => { mounted = false; };
+  }, [code]);
 
   async function join(e: React.FormEvent) {
     e.preventDefault();

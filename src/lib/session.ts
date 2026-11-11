@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { mergeLinkedSession } from "@/lib/space-entry-policy";
 
 const KEY = "us.session.v1";
 
@@ -16,10 +17,12 @@ export function readSession(): LocalSession | null {
   }
 }
 
+/** Keep an existing recovery key only when this is exactly the same room and member. */
 export function writeSession(s: LocalSession) {
-  localStorage.setItem(KEY, JSON.stringify(s));
+  localStorage.setItem(KEY, JSON.stringify(mergeLinkedSession(s, readSession())));
 }
 
+/** Only call from explicit Leave or Forget actions. */
 export async function clearSession() {
   localStorage.removeItem(KEY);
   await supabase.auth.signOut().catch(() => {});
@@ -27,7 +30,9 @@ export async function clearSession() {
 
 /** Ensures this browser has its own invisible guest identity. */
 export async function ensureIdentity() {
-  const { data } = await supabase.auth.getSession();
+  const { data, error: sessionError } = await supabase.auth.getSession();
+  // A failed refresh or network request is not permission to replace an identity.
+  if (sessionError) throw new Error("OFFLINE_OR_UNAVAILABLE");
   if (data.session) return data.session.user.id;
   const { data: anon, error } = await supabase.auth.signInAnonymously();
   if (error || !anon.user) throw new Error("OFFLINE_OR_UNAVAILABLE");
