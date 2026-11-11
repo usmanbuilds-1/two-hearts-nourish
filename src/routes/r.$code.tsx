@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Btn, Field, TextInput } from "@/components/us/primitives";
 import { getRoomPreview, joinRoom, linkDevice, rejoinRoom } from "@/lib/room.functions";
 import { ensureIdentity, friendlyError, writeSession } from "@/lib/session";
+import { readRejoinToken } from "@/lib/rejoin-links";
 
 export const Route = createFileRoute("/r/$code")({
   ssr: false,
@@ -35,8 +36,8 @@ function Join() {
 
   // Magic re-invite link: ?lc=123456 — partner just taps one button
   const lc = typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search).get("lc") ?? undefined
-    : undefined;
+    ? readRejoinToken(window.location.search, window.location.hash)
+    : null;
 
   useEffect(() => {
     // A stale local marker must not trap recovery in a /today redirect loop.
@@ -88,7 +89,7 @@ function Join() {
       setBusy(true);
       try {
         await ensureIdentity();
-        const r = await linkDevice({ data: { code, linkCode: lc!.replace(/\D/g, "") } });
+        const r = await linkDevice({ data: { code, linkCode: lc! } });
         writeSession(r);
         toast.success("Welcome back ❤️");
         void navigate({ to: "/today", replace: true });
@@ -108,13 +109,13 @@ function Join() {
           <div className="text-6xl mb-6">💕</div>
           <h1 className="text-[2.2rem] leading-tight text-foreground">Welcome back!</h1>
           <p className="mt-3 text-lg text-muted-foreground">
-            Your partner sent you a link to get back into your space.
+            This private link reconnects your existing profile and meals. Open it in the browser where you want to stay signed in.
           </p>
           <Btn size="lg" className="mt-10 w-full" disabled={busy} onClick={magicRejoin}>
             {busy ? "Rejoining…" : "Rejoin our space ❤️"}
           </Btn>
           <p className="mt-4 text-xs text-muted-foreground">
-            This link is valid for 10 minutes · ask your partner for a new one if it expired
+            One-use link · ask your partner for a fresh one if it has expired
           </p>
         </div>
       </main>

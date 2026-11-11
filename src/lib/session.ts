@@ -50,7 +50,9 @@ const MESSAGES: Record<string, string> = {
   INVALID_KEY: "That personal key doesn't match anyone in this space.",
   ALREADY_IN_SPACE: "This phone is already part of a space. Reset it in Settings first.",
   OFFLINE_OR_UNAVAILABLE: "We can't reach the server right now. Check your connection and try again.",
-  INVALID_LINK: "That device code is wrong or expired. Make a new one in Settings on your other phone.",
+  INVALID_LINK: "That recovery link is invalid or already used. Ask for a fresh link in Settings.",
+  NO_PARTNER: "Your partner has not joined this space yet.",
+  RECOVERY_STORAGE_UNAVAILABLE: "Recovery needs a database update. Please contact the app owner.",
   NOT_MEMBER: "Your session has expired. Please rejoin with your invite link.",
 };
 

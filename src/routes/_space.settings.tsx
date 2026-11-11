@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpace } from "@/lib/space";
 import { clearSession, inviteUrl, readSession } from "@/lib/session";
-import { createLinkCode, leaveRoom } from "@/lib/room.functions";
+import { leaveRoom } from "@/lib/room.functions";
+import { RecoveryLinks } from "@/components/us/RecoveryLinks";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
@@ -77,50 +78,6 @@ function SettingsPage() {
     const s = suggest(input);
     setF((prev) => ({ ...prev, kcal: String(s.calories), p: String(s.protein), c: String(s.carbs), fat: String(s.fat) }));
     toast.success("Targets updated ✓ — hit Save to keep them.");
-  }
-
-  // Device link card
-  const [linkCode, setLinkCode] = useState<{ code: string; expiresAt: string } | null>(null);
-  const [linkBusy, setLinkBusy] = useState(false);
-  const [countdown, setCountdown] = useState("");
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  function startCountdown(expiresAt: string) {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      const diff = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
-      if (diff === 0) { setLinkCode(null); if (timerRef.current) clearInterval(timerRef.current); return; }
-      const m = Math.floor(diff / 60), s = diff % 60;
-      setCountdown(`${m}:${s.toString().padStart(2, "0")}`);
-    }, 1000);
-  }
-
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
-
-  async function genLinkCode() {
-    setLinkBusy(true);
-    try {
-      const res = await createLinkCode();
-      setLinkCode(res);
-      startCountdown(res.expiresAt);
-      // Build the magic link — partner just taps it, no typing needed
-      const magicUrl = `${window.location.origin}/r/${room.room_code}?lc=${res.code}`;
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: "Rejoin our space 💕",
-            text: "Tap this to get back into our space!",
-            url: magicUrl,
-          });
-        } catch {
-          // Share cancelled — the card below lets them copy manually
-        }
-      } else {
-        await navigator.clipboard.writeText(magicUrl).catch(() => {});
-        toast.success("Re-invite link copied — send it to your partner!");
-      }
-    } catch { toast.error("Couldn't generate a link. Please try again."); }
-    finally { setLinkBusy(false); }
   }
 
   // Weight log
@@ -324,38 +281,14 @@ function SettingsPage() {
       <div className="mt-10 space-y-3">
         <Eyebrow>Space</Eyebrow>
         <Btn variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(inviteUrl(room.room_code)).then(() => toast.success("Invite link copied"), () => toast.error("Couldn't copy"))}>
-          Copy invite link · {room.room_code}
+          Copy new-partner invite · {room.room_code}
         </Btn>
 
-        {/* Device link card */}
-        <Btn variant="outline" className="w-full" disabled={linkBusy} onClick={genLinkCode}>
-          {linkBusy ? "Generating…" : "Send re-invite link 💌"}
-        </Btn>
-        {linkCode && (
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground">Link ready ✓</p>
-              <p className="text-xs text-muted-foreground">Expires in {countdown}</p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              If the share sheet didn't open, copy the link below and send it manually.
-            </p>
-            <div className="break-all rounded-lg bg-secondary/60 px-3 py-2 font-mono text-xs text-muted-foreground">
-              {window.location.origin}/r/{room.room_code}?lc={linkCode.code}
-            </div>
-            <Btn size="sm" variant="outline" className="w-full" onClick={async () => {
-              const url = `${window.location.origin}/r/${room.room_code}?lc=${linkCode.code}`;
-              await navigator.clipboard.writeText(url).catch(() => {});
-              toast.success("Link copied!");
-            }}>
-              Copy link
-            </Btn>
-          </div>
-        )}
+        <RecoveryLinks partnerName={partner?.display_name ?? null} />
 
         <Btn variant="outline" className="w-full" onClick={toggleTheme}>Theme: {dark ? "Dark" : "Light"}</Btn>
         <div className="rounded-xl border border-border p-4 text-sm">
-          <div className="text-muted-foreground">Your personal key lets you rejoin from a new phone. Keep it private.</div>
+          <div className="text-muted-foreground">Your personal key can restore this profile. Store it somewhere private, away from shared chats.</div>
           {showKey ? <div className="mt-2 break-all font-mono text-xs">{key}</div> : <button className="mt-2 text-primary" onClick={() => setShowKey(true)}>Show my key</button>}
         </div>
         <Btn variant="outline" className="w-full" onClick={reset}>Reset this phone</Btn>

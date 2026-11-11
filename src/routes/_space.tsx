@@ -45,7 +45,7 @@ function ReconnectScreen({ entry }: { entry: FailedEntry }) {
   const description = needsReconnect
     ? "Your connection isn't ready yet. Nothing has been signed out or erased. Please try again."
     : entry.kind === "recover"
-      ? "This phone needs to reconnect securely. Your shared meals are still on the server. Use your personal key or ask your partner for a fresh device link."
+      ? "This phone needs to reconnect securely. Your shared meals are still on the server. Use your personal key or ask your partner to open Settings → Come back to us and send you a private link."
       : "This browser doesn't have a saved connection yet. Use your invitation to join or create a space.";
 
   return (
