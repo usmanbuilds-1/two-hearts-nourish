@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
 import { useSpace } from "@/lib/space";
 import { addDays, coupleStats, daysBetween, milestones } from "@/lib/nutrition";
 import { Eyebrow, Screen } from "@/components/us/primitives";
@@ -12,7 +14,13 @@ export const Route = createFileRoute("/_space/together")({
 
 function Together() {
   const { me, partner, meals, today, room } = useSpace();
-  const s = useMemo(() => coupleStats(meals, me, partner, today), [meals, me, partner, today]);
+  const recent = useMemo(() => coupleStats(meals, me, partner, today), [meals, me, partner, today]);
+  const {data: lifetime} = useQuery({
+    queryKey:["room-life-stats",room.id,today],
+    queryFn:()=>getRoomLifetimeStats({data:{clientDate:today}}),
+    staleTime:120_000,
+  });
+  const s = lifetime ? {...recent, ...lifetime} : recent;
   const since = room.together_since ? daysBetween(room.together_since, today) : daysBetween(room.created_at.slice(0, 10), today) + 1;
   const timeline = Array.from({ length: 7 }, (_, i) => addDays(today, -i)).flatMap((d, i) => {
     const label = i === 0 ? "Today" : i === 1 ? "Yesterday" : `${i} days ago`;

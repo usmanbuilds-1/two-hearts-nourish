@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Meal, Member, Room } from "./nutrition";
-import { localDate } from "./nutrition";
+import { addDays, localDate } from "./nutrition";
 
 type SpaceCtx = {
   room: Room;
@@ -53,15 +54,16 @@ export async function loadSpace(userId: string) {
       .from("meals")
       .select("*")
       .eq("room_id", meRow.room_id)
-      .order("created_at", { ascending: true })
-      .limit(5000),
+      .gte("meal_date", addDays(localDate(), -89))
+      .order("created_at", { ascending: false })
+      .limit(2000),
   ]);
   if (roomRes.error || membersRes.error || mealsRes.error) throw new Error("OFFLINE_OR_UNAVAILABLE");
   return {
     room: roomRes.data as Room,
     me: meRow as Member,
     members: membersRes.data as Member[],
-    meals: mealsRes.data as Meal[],
+    meals: [...(mealsRes.data as Meal[])].reverse(),
   };
 }
 
@@ -72,6 +74,8 @@ export function SpaceProvider({
   initial: { room: Room; me: Member; members: Member[]; meals: Meal[] };
   children: ReactNode;
 }) {
+  const queryClient = useQueryClient();
+  const lastReloadAt = useRef(0);
   const [room, setRoom] = useState(initial.room);
   const [members, setMembers] = useState(initial.members);
   const [meals, setMeals] = useState(initial.meals);
@@ -99,6 +103,8 @@ export function SpaceProvider({
   );
 
   const reload = useCallback(async () => {
+    if (Date.now() - lastReloadAt.current < 10_000) return;
+    lastReloadAt.current = Date.now();
     const { data } = await supabase.auth.getUser();
     if (!data.user) return;
     const s = await loadSpace(data.user.id).catch(() => null);
@@ -117,6 +123,7 @@ export function SpaceProvider({
         "postgres_changes",
         { event: "*", schema: "public", table: "meals", filter: `room_id=eq.${roomId}` },
         (payload) => {
+          void queryClient.invalidateQueries({ queryKey: ["room-life-stats",roomId] });
           if (payload.eventType === "DELETE") {
             const id = (payload.old as { id?: string }).id;
             if (id) removeLocal(id);
@@ -151,7 +158,7 @@ export function SpaceProvider({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [initial.room.id, meId, reload, removeLocal, upsertLocal]);
+  }, [initial.room.id, meId, reload, removeLocal, upsertLocal, queryClient]);
 
   // Offline awareness + catch up after reconnect / tab focus / midnight.
   useEffect(() => {

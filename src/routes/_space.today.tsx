@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Plus, Star, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
+import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
 import { MEAL_TYPES, addDays, coupleStats, fmt, greeting, totals, usMessages, type Meal, type Member } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet, draftFromMeal } from "@/components/us/MealSheet";
@@ -87,8 +88,14 @@ function Today() {
   const mine = todays.filter((m) => m.member_id === me.id && !m.is_planned);
   const theirs = partner ? todays.filter((m) => m.member_id === partner.id && !m.is_planned) : [];
   const stats = useMemo(() => coupleStats(meals, me, partner, today), [meals, me, partner, today]);
+  const {data:lifetime}=useQuery({
+    queryKey:["room-life-stats",room.id,today],
+    queryFn:()=>getRoomLifetimeStats({data:{clientDate:today}}),
+    staleTime:120_000,
+  });
+  const sharedStreak=lifetime?.streak??stats.streak;
   const y = addDays(today, -1);
-  const msgs = usMessages({ me, partner, todayMine: mine, todayTheirs: theirs, yesterdayBoth: stats.bothDays.has(y), yesterdayBothProtein: stats.bothProteinDays.has(y), streak: stats.streak });
+  const msgs = usMessages({ me, partner, todayMine: mine, todayTheirs: theirs, yesterdayBoth: stats.bothDays.has(y), yesterdayBothProtein: stats.bothProteinDays.has(y), streak: sharedStreak });
 
   return (
     <Screen>
@@ -96,9 +103,9 @@ function Today() {
       <div className="mt-1 text-muted-foreground">You & {partner?.display_name ?? "your partner (invite pending)"}</div>
 
       {/* Streak badge */}
-      {stats.streak >= 2 && (
+      {sharedStreak >= 2 && (
         <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
-          🔥 Day {stats.streak} streak together!
+          🔥 Day {sharedStreak} streak together!
         </div>
       )}
 

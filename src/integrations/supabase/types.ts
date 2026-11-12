@@ -490,6 +490,7 @@ export type Database = {
     Functions: {
       my_member_id: { Args: never; Returns: string }
       my_room_id: { Args: never; Returns: string }
+      room_activity_rollup: { Args: { p_room_id: string; p_today: string }; Returns: Json }
       rotate_member_recovery: {
         Args: { p_actor_auth_user_id: string; p_replacement_hash: string; p_revoke_device_id?: string | null };
         Returns: boolean
