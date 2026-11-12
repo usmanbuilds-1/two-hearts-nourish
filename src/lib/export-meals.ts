@@ -2,7 +2,7 @@ export function csvCell(value:unknown):string {
   const text=String(value??"");
   // Spreadsheet tools may evaluate cells beginning with formula operators, even when quoted.
   // Preserve data while forcing spreadsheet-text interpretation.
-  const safe = /^[\\t\\r\\n ]*[=+@-]/.test(text) ? "'"+text : text;
+  const safe = /^[\t\r\n ]*[=+@-]/.test(text) ? "'"+text : text;
   return '"'+safe.replace(/"/g,'""')+'"';
 }
 export function mealsToCsv(rows:Array<Record<string,unknown>>):string {
