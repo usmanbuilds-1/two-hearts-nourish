@@ -89,11 +89,11 @@ export const createRejoinLink = createServerFn({ method: "POST" })
     if (roomError || !room) throw new Error("SERVER_ERROR");
     const token = randomToken(); // 256 bits; far safer than 6-digit codes
     const expiresAt = new Date(Date.now() + 20 * 60_000).toISOString();
-    const { error } = await db.from("members").update({
+    const { data: updated, error } = await db.from("members").update({
       link_code_hash: await sha256(`${recipientId}:${token}`),
       link_code_expires_at: expiresAt,
-    }).eq("id", recipientId);
-    if (error) throw new Error("SERVER_ERROR");
+    }).eq("id", recipientId).select("id").maybeSingle();
+    if (error || !updated) throw new Error("SERVER_ERROR");
     return { roomCode: room.room_code, token, expiresAt };
   });
 

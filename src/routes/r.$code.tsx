@@ -33,8 +33,9 @@ function Join() {
   const [rejoin, setRejoin] = useState(false);
   const [key, setKey] = useState("");
   const [useKey, setUseKey] = useState(false);
+  const [ignoreMagicLink, setIgnoreMagicLink] = useState(false);
 
-  // Magic re-invite link: ?lc=123456 — partner just taps one button
+  // Modern one-use links use a high-entropy fragment. Old ?lc= codes remain supported.
   const lc = typeof window !== "undefined"
     ? readRejoinToken(window.location.search, window.location.hash)
     : null;
@@ -84,7 +85,7 @@ function Join() {
   }
 
   // ── Magic link: one-tap rejoin ────────────────────────────────────────
-  if (lc) {
+  if (lc && !ignoreMagicLink) {
     async function magicRejoin() {
       setBusy(true);
       try {
@@ -117,6 +118,12 @@ function Join() {
           <p className="mt-4 text-xs text-muted-foreground">
             One-use link · ask your partner for a fresh one if it has expired
           </p>
+          <Btn variant="outline" className="mt-5 w-full" onClick={() => {
+            window.history.replaceState(window.history.state, "", window.location.pathname);
+            setIgnoreMagicLink(true);
+            setRejoin(true);
+            setUseKey(true);
+          }}>Use my personal recovery key instead</Btn>
         </div>
       </main>
     );
@@ -157,7 +164,7 @@ function Join() {
           <TextInput value={key} onChange={(e) => setKey(e.target.value)} placeholder="64-character key" className="font-mono text-sm" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
         </Field>
       ) : (
-        <Field label="6-digit device code" hint="On a phone that's already in this space: Settings → Add another device.">
+        <Field label="Older 6-digit device code" hint="For old codes only. New secure rejoin links are sent from Settings → Come back to us.">
           <TextInput value={key} onChange={(e) => setKey(e.target.value)} inputMode="numeric" maxLength={7} placeholder="123456" className="num text-2xl tracking-[0.3em]" autoComplete="one-time-code" />
         </Field>
       )}
@@ -165,7 +172,7 @@ function Join() {
         {busy ? "Checking…" : "Add this device ❤️"}
       </Btn>
       <button type="button" onClick={() => { setUseKey(!useKey); setKey(""); }} className="w-full py-2 text-sm text-muted-foreground hover:underline">
-        {useKey ? "Use a 6-digit device code instead" : "Lost your other device? Use your personal key"}
+        {useKey ? "I have an older 6-digit code" : "Use my personal key instead"}
       </button>
     </form>
   );
@@ -173,9 +180,9 @@ function Join() {
   if (preview.status === "full")
     return shell(
       <>
-        <h1 className="text-3xl leading-tight text-foreground">This space already belongs to two people ❤️</h1>
+        <h1 className="text-3xl leading-tight text-foreground">Welcome back to your space</h1>
         <p className="mt-3 text-muted-foreground">
-          If you're one of them, add this device with a code from your other phone.
+          If you lost access, ask your partner to send a secure link from Settings → Come back to us. You can also use your saved personal key.
         </p>
         {rejoinForm}
       </>,

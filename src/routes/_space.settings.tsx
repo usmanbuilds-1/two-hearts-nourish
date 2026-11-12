@@ -280,9 +280,9 @@ function SettingsPage() {
 
       <div className="mt-10 space-y-3">
         <Eyebrow>Space</Eyebrow>
-        <Btn variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(inviteUrl(room.room_code)).then(() => toast.success("Invite link copied"), () => toast.error("Couldn't copy"))}>
-          Copy new-partner invite · {room.room_code}
-        </Btn>
+        {!partner && <Btn variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(inviteUrl(room.room_code)).then(() => toast.success("Invite link copied"), () => toast.error("Couldn't copy"))}>
+          Invite your partner to join · {room.room_code}
+        </Btn>}
 
         <RecoveryLinks partnerName={partner?.display_name ?? null} />
 
