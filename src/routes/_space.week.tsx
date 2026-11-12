@@ -783,7 +783,7 @@ function WeekView() {
               {/* Meal Ideas */}
               <div className="flex items-center justify-between pt-1">
                 <span className="text-sm text-muted-foreground">Need inspiration?</span>
-                <Btn size="sm" onClick={() => setSuggestOpen(true)}>
+                <Btn size="md" onClick={() => setSuggestOpen(true)}>
                   <Sparkles className="size-3.5 mr-1" /> Meal Ideas
                 </Btn>
               </div>
@@ -812,7 +812,7 @@ function WeekView() {
               className="flex-1 bg-transparent text-sm focus:outline-none"
             />
             <span className="shrink-0 text-sm text-muted-foreground">kg</span>
-            <Btn size="sm" onClick={quickLog} disabled={logging || !quickKg}>
+            <Btn size="md" onClick={quickLog} disabled={logging || !quickKg}>
               {logging ? "…" : "Log"}
             </Btn>
           </div>

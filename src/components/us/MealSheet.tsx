@@ -28,10 +28,10 @@ export type MealDraft = {
   ai_confidence: "low" | "medium" | "high" | null;
   photo_url?: string | null;
   portion_percentage: number;
-  nominal_calories?: number;
-  nominal_protein?: number;
-  nominal_carbs?: number;
-  nominal_fat?: number;
+  nominal_calories?: number | undefined;
+  nominal_protein?: number | undefined;
+  nominal_carbs?: number | undefined;
+  nominal_fat?: number | undefined;
 };
 
 export function emptyDraft(): MealDraft {

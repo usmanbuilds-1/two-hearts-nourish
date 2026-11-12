@@ -154,6 +154,13 @@ export type Database = {
           room_id: string
           serving_description: string | null
           updated_at: string
+          is_planned: boolean
+          photo_url: string | null
+          portion_percentage: number
+          nominal_calories: number | null
+          nominal_protein: number | null
+          nominal_carbs: number | null
+          nominal_fat: number | null
         }
         Insert: {
           ai_confidence?: string | null
@@ -170,6 +177,13 @@ export type Database = {
           room_id: string
           serving_description?: string | null
           updated_at?: string
+          is_planned?: boolean
+          photo_url?: string | null
+          portion_percentage?: number
+          nominal_calories?: number | null
+          nominal_protein?: number | null
+          nominal_carbs?: number | null
+          nominal_fat?: number | null
         }
         Update: {
           ai_confidence?: string | null
@@ -186,6 +200,13 @@ export type Database = {
           room_id?: string
           serving_description?: string | null
           updated_at?: string
+          is_planned?: boolean
+          photo_url?: string | null
+          portion_percentage?: number
+          nominal_calories?: number | null
+          nominal_protein?: number | null
+          nominal_carbs?: number | null
+          nominal_fat?: number | null
         }
         Relationships: [
           {
