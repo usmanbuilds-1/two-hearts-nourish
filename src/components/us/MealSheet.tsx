@@ -13,6 +13,8 @@ import {
 } from "@/lib/meal-operations.functions";
 import { useSpace } from "@/lib/space";
 import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
+import { FoodSearchSheet } from "./FoodSearchSheet";
+import type { PackagedFood } from "@/lib/off-food";
 import { cn } from "@/lib/utils";
 
 export type MealDraft = {
@@ -76,6 +78,7 @@ export function MealFields({
 }) {
   const set = (k: keyof MealDraft) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...draft, [k]: e.target.value });
   const [lookingUp, setLookingUp] = useState(false);
+  const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const qc = useQueryClient();
 
   // Favourites — Supabase-backed (replaces localStorage)
@@ -100,6 +103,25 @@ export function MealFields({
   async function removeFav(foodName: string) {
     await removeFavoriteMeal({ data: { foodName } }).catch(() => {});
     qc.invalidateQueries({ queryKey: ["meal-favorites"] });
+  }
+
+  function applyPackagedFood(food:PackagedFood,amount:number) {
+    const factor=amount/100;
+    onChange({
+      ...draft,
+      food_name: [food.brand,food.name].filter(Boolean).join(" ").slice(0,200),
+      serving_description: `${amount} g/ml · Open Food Facts (check label)`,
+      calories:String(Math.round(food.calories*factor)),
+      protein:String(Math.round(food.protein*factor*10)/10),
+      carbs:String(Math.round(food.carbs*factor*10)/10),
+      fat:String(Math.round(food.fat*factor*10)/10),
+      ai_confidence:null,
+      portion_percentage:100,
+      nominal_calories:undefined,
+      nominal_protein:undefined,
+      nominal_carbs:undefined,
+      nominal_fat:undefined,
+    });
   }
 
   // Portion percentage
@@ -201,7 +223,15 @@ export function MealFields({
         ))}
       </div>
 
-      {/* Food name with AI lookup */}
+      {isNew&&(
+        <>
+          <Btn variant="outline" className="w-full" onClick={()=>setFoodSearchOpen(true)}>
+            Search food labels or scan a barcode
+          </Btn>
+          <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyPackagedFood}/>
+        </>
+      )}
+      {/* Food name with optional AI lookup */}
       <Field label="Food">
         <div className="flex gap-2">
           <TextInput
