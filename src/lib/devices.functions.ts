@@ -37,7 +37,7 @@ export const listMyDevices = createServerFn({method:"POST"})
     if(!current)throw new Error("NOT_MEMBER");
     const now=new Date().toISOString();
     const {error:touchError}=await db.from("member_devices").update({
-      last_seen_at:now,...(shouldUpgradeDeviceLabel(current.device_label,data.currentLabel)?{device_label:data.currentLabel}:{})
+      last_seen_at:now,...(shouldUpgradeDeviceLabel(current.device_label,data.currentLabel)&&data.currentLabel?{device_label:data.currentLabel}:{})
     }).eq("id",current.id);
     if(touchError)throw new Error("SERVER_ERROR");
     const {data:devices,error}=await db.from("member_devices")
@@ -63,7 +63,7 @@ export const markMyDeviceActive = createServerFn({method:"POST"})
     if(error||!device)return {ok:false};
     const {error:updateError}=await db.from("member_devices").update({
       last_seen_at:new Date().toISOString(),
-      ...(shouldUpgradeDeviceLabel(device.device_label,data.deviceLabel)?{device_label:data.deviceLabel}:{})
+      ...(shouldUpgradeDeviceLabel(device.device_label,data.deviceLabel)&&data.deviceLabel?{device_label:data.deviceLabel}:{})
     }).eq("id",device.id);
     return {ok:!updateError};
   });
