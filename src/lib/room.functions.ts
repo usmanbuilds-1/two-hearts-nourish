@@ -47,21 +47,6 @@ async function addDevice(db: Db, memberId: string, uid: string) {
   if (error) throw new Error("SERVER_ERROR");
 }
 
-/** Short-lived 6-digit code (10 min, single use) for adding another phone/laptop. */
-export const createLinkCode = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const db = await admin();
-    const id = await deviceMemberId(db, context.userId);
-    if (!id) throw new Error("NOT_MEMBER");
-    const n = crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000;
-    const code = String(n).padStart(6, "0");
-    const expires = new Date(Date.now() + 10 * 60_000).toISOString();
-    const { error } = await db.from("members").update({ link_code_hash: await sha256(`${id}:${code}`), link_code_expires_at: expires }).eq("id", id);
-    if (error) throw new Error("SERVER_ERROR");
-    return { code, expiresAt: expires };
-  });
-
 /** Creates a high-entropy, one-use recovery link for SELF or the other room member. 
  * This does not expose, rotate, or impersonate anyone's permanent recovery key. */
 export const createRejoinLink = createServerFn({ method: "POST" })
@@ -101,7 +86,7 @@ export const linkDevice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { code: string; linkCode: string }) => ({
     code: codeSchema.parse(i.code),
-    linkCode: z.string().trim().regex(/^(?:\d{6}|[a-f0-9]{64})$/i).parse(i.linkCode).toLowerCase(),
+    linkCode: z.string().trim().regex(/^[a-f0-9]{64}$/i).parse(i.linkCode).toLowerCase(),
   }))
   .handler(async ({ data, context }) => {
     const code = normalizeCode(data.code);

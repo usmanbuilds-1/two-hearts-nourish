@@ -120,7 +120,7 @@ function Onboarding() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const c = normalizeCode(code);
-                  if (!c) return void toast.error("That code should look like 7KQ4-M2PX or a 6-digit number.");
+                  if (!c) return void toast.error("That room code should look like 7KQ4-M2PX.");
                   void navigate({ to: "/r/$code", params: { code: c } });
                 }}
               >
