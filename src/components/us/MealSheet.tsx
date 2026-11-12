@@ -83,9 +83,9 @@ export function MealFields({
 
   // Favourites — Supabase-backed (replaces localStorage)
   const { data: favs = [] } = useQuery<MealFavorite[]>({
-    queryKey: ["meal-favorites"],
+    queryKey: ["meal-favorites",meId],
     queryFn:  () => getFavoriteMeals(),
-    enabled:  isNew === true,
+    enabled:  isNew === true && Boolean(meId),
   });
 
   function applyFav(f: MealFavorite) {
@@ -311,6 +311,7 @@ export function MealFields({
 
 export function useSaveMeal() {
   const { me, room, today, upsertLocal } = useSpace();
+  const qc=useQueryClient();
   return async (d: MealDraft, existing?: Meal) => {
     // Only include photo_url when it is set — omitting it entirely keeps saves
     // working even if migration 0011 (ADD COLUMN photo_url) hasn't been run yet.
@@ -337,6 +338,8 @@ export function useSaveMeal() {
       const { data, error } = await supabase.from("meals").update(payload).eq("id", existing.id).select().single();
       if (error || !data) { console.error("[MealSheet update]", error); throw new Error(error?.message ?? "update"); }
       upsertLocal(data as Meal);
+      void qc.invalidateQueries({queryKey:["quick-meals",me.id]});
+      void qc.invalidateQueries({queryKey:["recent-meals",me.id]});
       return data as Meal;
     }
     const { data, error } = await supabase
@@ -346,6 +349,8 @@ export function useSaveMeal() {
       .single();
     if (error || !data) { console.error("[MealSheet insert]", error); throw new Error(error?.message ?? "save"); }
     upsertLocal(data as Meal);
+    void qc.invalidateQueries({queryKey:["quick-meals",me.id]});
+    void qc.invalidateQueries({queryKey:["recent-meals",me.id]});
     return data as Meal;
   };
 }
