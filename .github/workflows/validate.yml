@@ -23,6 +23,6 @@ jobs:
       - name: Strict TypeScript typecheck
         run: bun x tsc --noEmit
       - name: Semantic lint
-        run: bun x eslint . --rule 'prettier/prettier: off'
+        run: bun x eslint . --rule 'prettier/prettier:off'
       - name: Production build
         run: bun run build
