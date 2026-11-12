@@ -1,52 +1,69 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { listMyDevices, rotateMyRecoveryKeys, type KnownDevice } from "@/lib/devices.functions";
+import { listMyDevices, renameMyDevice, rotateMyRecoveryKeys, type KnownDevice } from "@/lib/devices.functions";
 import { friendlyDeviceLabel } from "@/lib/device-label";
 import { readSession, writeSession } from "@/lib/session";
-import { Btn } from "./primitives";
+import { Btn, TextInput } from "./primitives";
+
+const deviceLabel=()=>friendlyDeviceLabel(navigator.userAgent);
 
 export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void}) {
   const [devices,setDevices]=useState<KnownDevice[]>([]);
   const [loading,setLoading]=useState(true);
+  const [error,setError]=useState(false);
   const [busy,setBusy]=useState(false);
+  const [newName,setNewName]=useState("");
+  const [editing,setEditing]=useState(false);
   const [latestKey,setLatestKey]=useState<string|null>(null);
-  async function refresh() {
-    const rows=await listMyDevices({ data: {
-      currentLabel: friendlyDeviceLabel(navigator.userAgent)
-    }});
+  const refresh=useCallback(async()=>{
+    const rows=await listMyDevices({data:{currentLabel:deviceLabel()}});
     setDevices(rows);
-  }
-  useEffect(()=>{
-    let alive=true;
-    listMyDevices({data:{currentLabel:friendlyDeviceLabel(navigator.userAgent)}})
-      .then(rows=>{if(alive)setDevices(rows);})
-      .catch(()=>{if(alive)toast.error("Couldn't load connected devices.");})
-      .finally(()=>{if(alive)setLoading(false);});
-    return ()=>{alive=false;};
+    setError(false);
   },[]);
+
+  useEffect(()=>{
+    let active=true;
+    listMyDevices({data:{currentLabel:deviceLabel()}})
+      .then(rows=>{if(active)setDevices(rows);})
+      .catch(()=>{if(active)setError(true);})
+      .finally(()=>{if(active)setLoading(false);});
+    return ()=>{active=false;};
+  },[]);
+
+  async function rename(){
+    const name=newName.trim();
+    if(name.length<2||name.length>40)return toast.error("Use 2–40 characters for the name.");
+    setBusy(true);
+    try{
+      await renameMyDevice({data:{label:name}});
+      await refresh();
+      setEditing(false);
+      toast.success("Device name updated");
+    }catch{toast.error("Couldn't rename this device.");}
+    finally{setBusy(false);}
+  }
 
   async function rotate(targetId?:string) {
     const explanation=targetId
-      ? "Revoke this device? For safety, ALL saved recovery keys for your profile will change. Other devices stay signed in but will need fresh recovery links if signed out."
-      : "Replace all your recovery keys? Other devices stay signed in, but their old saved recovery keys will stop working.";
+      ? "Remove this sign-in? Every old recovery key for YOUR profile will be invalidated, including keys saved on your other devices. Your partner's profile is unaffected. Save the replacement key before leaving Settings."
+      : "Replace all recovery keys for YOUR profile? Other devices remain signed in but cannot recover with their old keys. Save the replacement key.";
     if(!window.confirm(explanation))return;
+    const existing=readSession();
+    if(!existing)return toast.error("No local session found. Don't remove this browser's data.");
     setBusy(true);
     try {
-      const existing=readSession();
-      if(!existing)throw new Error("NO_LOCAL_SESSION");
       const {key}=await rotateMyRecoveryKeys({data:targetId?{revokeDeviceId:targetId}:{}});
-      // Always display the freshly rotated secret even if local persistence fails.
       setLatestKey(key);
       onKeyRotated(key);
-      try {
-        writeSession({...existing,key});
-      }catch {
-        toast.error("Security change succeeded, but this browser could not save your key. Copy it now.");
-      }
-      await refresh().catch(()=>{});
-      toast.success(targetId?"Device access revoked":"Recovery keys rotated");
+      let stored=true;
+      try {writeSession({...existing,key});} catch {stored=false;}
+      await refresh().catch(()=>{setError(true);});
+      if(stored) toast.success(targetId?"Device revoked. Save your new key.":"Keys rotated. Save your new key.");
+      else toast.error("Change succeeded but key couldn't be saved on this browser. Copy it now.");
     }catch{
-      toast.error("Couldn't complete this safely. Nothing was changed on this phone; reopen Settings to check server status.");
+      // The remote transaction may have succeeded even if the response was lost.
+      toast.error("Couldn't confirm the change. Check this list again; don't clear this browser.");
+      await refresh().catch(()=>setError(true));
     }finally{setBusy(false);}
   }
 
@@ -54,42 +71,77 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
     if(!latestKey)return;
     try{
       await navigator.clipboard.writeText(latestKey);
-      toast.success("Recovery key copied. Save it privately.");
+      toast.success("Recovery key copied. Store it privately.");
     }catch{toast.error("Couldn't copy your key.");}
   }
-
+  const current=devices.find(d=>d.current);
   return (
-    <section className="space-y-3 rounded-2xl border border-border p-4" aria-label="Connected devices">
-      <h2 className="font-display text-xl">Your connected devices</h2>
-      <p className="text-sm text-muted-foreground">
-        Only your devices are shown. You can remove a lost phone without changing your partner's profile.
+    <section className="space-y-3 border-t border-border pt-5" aria-label="My connected devices">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-xl">My devices</h2>
+        <button type="button" disabled={busy||loading} onClick={()=>void refresh().catch(()=>setError(true))}
+          className="min-h-11 text-sm font-medium text-primary disabled:opacity-50">
+          Refresh
+        </button>
+      </div>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        These sign-ins belong to your profile, not your partner's. A device is recorded when it joins your profile; it isn't a live activity tracker.
       </p>
-      {loading ? <p className="text-sm text-muted-foreground">Loading devices…</p> : (
-        <div className="space-y-2">
+      {loading&&<p role="status" className="py-3 text-sm text-muted-foreground">Loading your devices…</p>}
+      {error&&(
+        <div className="border-y border-border py-3">
+          <p role="alert" className="text-sm">Couldn't verify your device list.</p>
+          <Btn variant="outline" className="mt-2" onClick={()=>void refresh().catch(()=>setError(true))}>Try again</Btn>
+        </div>
+      )}
+      {!loading&&!error&&(
+        <div className="divide-y divide-border border-y border-border">
           {devices.map(d=>(
-            <div key={d.id} className="flex items-center justify-between gap-2 border-t border-border py-3">
+            <div key={d.id} className="flex min-h-16 items-center justify-between gap-3 py-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{d.label}{d.current?" · This device":""}</p>
-                <p className="text-xs text-muted-foreground">
-                  Connected {new Date(d.createdAt).toLocaleDateString()}
-                  {d.lastSeenAt?" · Seen "+new Date(d.lastSeenAt).toLocaleDateString():""}
+                <p className="truncate text-sm font-medium">
+                  {d.label}{d.current&&<span className="ml-2 text-xs font-normal text-primary">This device</span>}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Added {new Date(d.createdAt).toLocaleDateString()}
+                  {d.lastSeenAt?" · Settings opened "+new Date(d.lastSeenAt).toLocaleDateString():""}
                 </p>
               </div>
-              {!d.current && <Btn variant="outline" disabled={busy}
-                onClick={()=>void rotate(d.id)}>Revoke</Btn>}
+              {d.current?(
+                <button type="button" disabled={busy} onClick={()=>{setNewName(d.label);setEditing(v=>!v);}}
+                  className="min-h-11 shrink-0 text-sm font-medium text-primary">
+                  Rename
+                </button>
+              ):(
+                <Btn size="md" variant="outline" disabled={busy} onClick={()=>void rotate(d.id)}>Revoke</Btn>
+              )}
             </div>
           ))}
         </div>
       )}
-      <Btn variant="outline" className="w-full" disabled={busy} onClick={()=>void rotate()}>
-        Rotate all my recovery keys
+      {editing&&current&&(
+        <form className="flex items-center gap-2" onSubmit={e=>{e.preventDefault();void rename();}}>
+          <TextInput value={newName} maxLength={40} onChange={e=>setNewName(e.target.value)}
+            aria-label="Name this device" placeholder="e.g. My personal phone" className="min-w-0 flex-1"/>
+          <Btn disabled={busy||newName.trim().length<2}>Save</Btn>
+        </form>
+      )}
+      {!loading&&!error&&devices.some(d=>!d.current&&!d.lastSeenAt)&&(
+        <p className="text-xs text-muted-foreground">
+          Older devices may show generic names until they open Settings. Do not revoke an unfamiliar entry without checking.
+        </p>
+      )}
+      <Btn variant="outline" className="w-full" disabled={busy||loading||error} onClick={()=>void rotate()}>
+        Replace all my recovery keys
       </Btn>
-      {latestKey && (
-        <div className="space-y-2 rounded-xl border border-primary/30 p-3">
-          <p className="text-sm font-medium">Your new private recovery key</p>
-          <p className="break-all font-mono text-xs">{latestKey}</p>
-          <p className="text-xs text-muted-foreground">Store this somewhere private. Never send it in a shared room link.</p>
-          <Btn className="w-full" variant="outline" onClick={()=>void copyKey()}>Copy new key</Btn>
+      {latestKey&&(
+        <div className="space-y-3 border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-semibold">Important: save your new recovery key</p>
+          <p className="break-all font-mono text-xs" role="status">{latestKey}</p>
+          <p className="text-xs text-muted-foreground">
+            All previous recovery keys for your profile no longer work. Keep this one private and safe.
+          </p>
+          <Btn className="w-full" onClick={()=>void copyKey()}>Copy replacement key</Btn>
         </div>
       )}
     </section>
