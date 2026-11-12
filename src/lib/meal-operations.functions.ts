@@ -140,6 +140,30 @@ export const removeFavoriteMeal = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** A bounded, fresh snapshot for quick-logging one member's recent and repeated foods.
+ *  Never read partner meals; this endpoint is entirely scoped to the authenticated device.
+ */
+export const getQuickMeals = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i:{clientDate:string})=>({
+    clientDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
+  }))
+  .handler(async ({data,context}):Promise<Meal[]>=>{
+    const db=await admin();
+    const memberId=await deviceMemberId(db,context.userId);
+    if(!memberId)throw new Error("NOT_MEMBER");
+    const {data:rows,error}=await db.from("meals")
+      .select("*")
+      .eq("member_id",memberId)
+      .eq("is_planned",false)
+      .gte("meal_date",addDays(data.clientDate,-120))
+      .lte("meal_date",data.clientDate)
+      .order("created_at",{ascending:false})
+      .limit(240);
+    if(error)throw new Error("QUICK_MEALS_UNAVAILABLE");
+    return (rows??[]) as Meal[];
+  });
+
 export const getRecentMeals = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Meal[]> => {
@@ -181,6 +205,14 @@ export const copyMealToDay = createServerFn({ method: "POST" })
         meal_type: meal.meal_type,
         meal_date: data.targetDate,
         ai_confidence: meal.ai_confidence,
+        // Preserve exact serving proportions from the source snapshot.
+        portion_percentage: meal.portion_percentage ?? 100,
+        nominal_calories: meal.nominal_calories ?? null,
+        nominal_protein: meal.nominal_protein ?? null,
+        nominal_carbs: meal.nominal_carbs ?? null,
+        nominal_fat: meal.nominal_fat ?? null,
+        is_planned: meal.is_planned ?? false,
+        // A historical photo is not a photograph of the new serving.
       })
       .select()
       .single();
