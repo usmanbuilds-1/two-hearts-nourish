@@ -32,13 +32,18 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
     if(!window.confirm(explanation))return;
     setBusy(true);
     try {
-      const {key}=await rotateMyRecoveryKeys({data:targetId?{revokeDeviceId:targetId}:{}});
       const existing=readSession();
       if(!existing)throw new Error("NO_LOCAL_SESSION");
-      writeSession({...existing,key});
+      const {key}=await rotateMyRecoveryKeys({data:targetId?{revokeDeviceId:targetId}:{}});
+      // Always display the freshly rotated secret even if local persistence fails.
       setLatestKey(key);
       onKeyRotated(key);
-      await refresh();
+      try {
+        writeSession({...existing,key});
+      }catch {
+        toast.error("Security change succeeded, but this browser could not save your key. Copy it now.");
+      }
+      await refresh().catch(()=>{});
       toast.success(targetId?"Device access revoked":"Recovery keys rotated");
     }catch{
       toast.error("Couldn't complete this safely. Nothing was changed on this phone; reopen Settings to check server status.");

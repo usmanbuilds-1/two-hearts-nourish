@@ -33,7 +33,7 @@ export async function uploadMealPhoto(roomId: string, dataUrl: string): Promise<
 
     const { error } = await supabase.storage
       .from("meal-photos")
-      .upload(name, blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+      .upload(name, blob, { contentType: "image/jpeg", cacheControl: "60" });
 
     if (error) { console.error("Storage upload failed", error); return null; }
 
