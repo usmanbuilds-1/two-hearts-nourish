@@ -199,7 +199,7 @@ export function MealFields({
                 <button
                   type="button"
                   onClick={() => removeFav(f.food_name)}
-                  className="ml-1 text-muted-foreground hover:text-destructive"
+                  className="ml-1 flex size-10 items-center justify-center rounded-full text-muted-foreground hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={`Remove ${f.food_name} from favourites`}
                 >
                   ✕
@@ -273,7 +273,7 @@ export function MealFields({
                 type="button"
                 onClick={() => applyPortion(pct)}
                 className={cn(
-                  "flex-1 rounded-xl border py-1.5 text-xs font-semibold transition-all",
+                  "flex-1 min-h-11 rounded-xl border px-1 py-2 text-xs font-semibold transition-all focus-visible:ring-2 focus-visible:ring-ring",
                   draft.portion_percentage === pct
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:border-primary/50",

@@ -190,15 +190,11 @@ function Today() {
                       const isMe = m.member_id === me.id;
                       return (
                         <div key={m.id} className={cn("flex w-full items-center gap-2 rounded-xl border border-border bg-card p-3", fresh.has(m.id) && "animate-arrive")}>
-                          <button
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                            onClick={() => setSheet({ open: true, meal: m })}
-                          >
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
                             {m.photo_url ? (
                               <button
-                                className="shrink-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                className="flex size-11 shrink-0 items-center justify-center rounded-xl focus-visible:ring-2 focus-visible:ring-ring"
+                                onClick={() => {
                                   void signedMealPhotoUrl(m.photo_url!, room.id).then((url) => {
                                     if (url) setLightbox({ src: url, caption: `${m.food_name} · ${fmt(m.calories)} kcal` });
                                     else toast.error("This photo is not available.");
@@ -215,7 +211,10 @@ function Today() {
                             ) : (
                               <span className={cn("size-2 shrink-0 rounded-full", isMe ? "bg-primary" : "bg-partner")} />
                             )}
-                            <div className="min-w-0 flex-1">
+                            <button type="button" className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left"
+                              onClick={() => setSheet({ open: true, meal: m })}
+                              aria-label={`View ${m.food_name} meal details`}>
+                              <div className="min-w-0 flex-1">
                               <div className="truncate">{m.food_name}</div>
                               <div className="text-xs text-muted-foreground">{isMe ? "You" : partner?.display_name}{m.is_planned ? " · Planned, not eaten" : ""}</div>
                             </div>
@@ -223,11 +222,12 @@ function Today() {
                               <div>{fmt(m.calories)} kcal</div>
                               <div className="text-xs text-muted-foreground">{fmt(Number(m.protein))}g protein</div>
                             </div>
-                          </button>
+                            </button>
+                          </div>
                           {isMe && (
                             <button
                               onClick={() => handleToggleFav(m)}
-                              className="shrink-0 p-1 text-muted-foreground hover:text-primary"
+                              className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
                               aria-label={favNames.has(m.food_name.trim().toLowerCase()) ? "Remove from favourites" : "Add to favourites"}
                             >
                               <Star className={cn("size-4", favNames.has(m.food_name.trim().toLowerCase()) && "fill-primary text-primary")} />
