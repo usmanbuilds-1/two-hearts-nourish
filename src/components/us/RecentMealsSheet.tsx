@@ -14,6 +14,7 @@ import {
 } from "@/lib/meal-operations.functions";
 import { useSaveMeal, emptyDraft } from "@/components/us/MealSheet";
 import { fmt } from "@/lib/nutrition";
+import { useSpace } from "@/lib/space";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Meal } from "@/lib/nutrition";
@@ -29,16 +30,17 @@ export function RecentMealsSheet({
 }) {
   const [tab, setTab] = useState<"recents" | "favs">("recents");
   const save = useSaveMeal();
+  const {me}=useSpace();
   const qc   = useQueryClient();
 
   const { data: recents = [], isLoading: loadingR } = useQuery<Meal[]>({
-    queryKey: ["recent-meals"],
+    queryKey: ["recent-meals",me.id],
     queryFn:  () => getRecentMeals(),
     enabled:  open,
   });
 
   const { data: favs = [], isLoading: loadingF } = useQuery<MealFavorite[]>({
-    queryKey: ["meal-favorites"],
+    queryKey: ["meal-favorites",me.id],
     queryFn:  () => getFavoriteMeals(),
     enabled:  open,
   });

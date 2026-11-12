@@ -159,6 +159,7 @@ export const getQuickMeals = createServerFn({ method: "POST" })
       .eq("is_planned",false)
       .gte("meal_date",addDays(data.clientDate,-120))
       .lte("meal_date",data.clientDate)
+      .order("meal_date",{ascending:false})
       .order("created_at",{ascending:false})
       .limit(240);
     if(error)throw new Error("QUICK_MEALS_UNAVAILABLE");

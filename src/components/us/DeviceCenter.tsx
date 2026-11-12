@@ -44,9 +44,14 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
   }
 
   async function rotate(targetId?:string) {
-    const explanation=targetId
-      ? "Remove this sign-in? Every old recovery key for YOUR profile will be invalidated, including keys saved on your other devices. Your partner's profile is unaffected. Save the replacement key before leaving Settings."
-      : "Replace all recovery keys for YOUR profile? Other devices remain signed in but cannot recover with their old keys. Save the replacement key.";
+    const target=targetId?devices.find(d=>d.id===targetId):null;
+    if(targetId&&(!target||target.current)){
+      toast.error("That sign-in is not available to revoke. Refresh your device list.");
+      return;
+    }
+    const explanation=target
+      ? `Remove access for "${target.label}" (added ${new Date(target.createdAt).toLocaleDateString()})? This invalidates ALL old recovery keys for your profile, including keys saved on other devices. Your partner is unaffected. Save the new key before leaving Settings.`
+      : "Replace all recovery keys for YOUR profile? Your other signed-in devices will stay signed in, but their old recovery keys will stop working. Save the replacement key.";
     if(!window.confirm(explanation))return;
     const existing=readSession();
     if(!existing){toast.error("No local session found. Don't remove this browser's data.");return;}
@@ -85,7 +90,7 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
         </button>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
-        These sign-ins belong to your profile, not your partner's. A device is recorded when it joins your profile; it isn't a live activity tracker.
+        Only sign-ins linked to your profile appear here. Your partner manages her own devices. This is a record of linked browsers, not live online status.
       </p>
       {loading&&<p role="status" className="py-3 text-sm text-muted-foreground">Loading your devices…</p>}
       {error&&(
@@ -104,7 +109,7 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Added {new Date(d.createdAt).toLocaleDateString()}
-                  {d.lastSeenAt?" · Settings opened "+new Date(d.lastSeenAt).toLocaleDateString():""}
+                  {d.lastSeenAt?" · Last checked in Settings "+new Date(d.lastSeenAt).toLocaleDateString():" · Not checked recently"}
                 </p>
               </div>
               {d.current?(
@@ -113,7 +118,7 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
                   Rename
                 </button>
               ):(
-                <Btn size="md" variant="outline" disabled={busy} onClick={()=>void rotate(d.id)}>Revoke</Btn>
+                <Btn size="md" variant="outline" disabled={busy} onClick={()=>void rotate(d.id)}>Remove access</Btn>
               )}
             </div>
           ))}
@@ -128,7 +133,7 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
       )}
       {!loading&&!error&&devices.some(d=>!d.current&&!d.lastSeenAt)&&(
         <p className="text-xs text-muted-foreground">
-          Older devices may show generic names until they open Settings. Do not revoke an unfamiliar entry without checking.
+          Unnamed sign-ins are older browsers that have not identified themselves here. Check before removing access.
         </p>
       )}
       <Btn variant="outline" className="w-full" disabled={busy||loading||error} onClick={()=>void rotate()}>

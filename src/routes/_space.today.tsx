@@ -60,7 +60,7 @@ function Today() {
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
   const qc = useQueryClient();
   const { data: favsData = [] } = useQuery<MealFavorite[]>({
-    queryKey: ["meal-favorites"],
+    queryKey: ["meal-favorites",me.id],
     queryFn: () => getFavoriteMeals(),
   });
   const favNames = useMemo(
@@ -101,9 +101,10 @@ function Today() {
     quickMealSuggestions(quick.data??[],me.id,today),
     [quick.data,me.id,today]
   );
-  const shownUsuals=quickPicks.usuals.filter(p=>
-    !quickPicks.latest||mealSignature(p.meal)!==mealSignature(quickPicks.latest)
-  ).slice(0,2);
+  const shownSuggestions=quickPicks.suggested
+    .filter(meal=>!quickPicks.latest||mealSignature(meal)!==mealSignature(quickPicks.latest))
+    .slice(0,2);
+  const repeatCounts=new Map(quickPicks.usuals.map(x=>[mealSignature(x.meal),x.times]));
 
   async function repeatMeal(meal:Meal) {
     if(repeatId)return;
@@ -187,16 +188,16 @@ function Today() {
           </button>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Log your own favourite portions again, without re-entering the numbers.
+          Your own familiar meals, with the same portions ready to log again.
         </p>
-        {quick.isFetching ? (
+        {quick.isPending || (quick.isFetching && !quick.data) ? (
           <p className="mt-4 text-sm text-muted-foreground" role="status">Checking your latest meals…</p>
         ) : quick.isError ? (
           <div className="mt-4 flex items-center justify-between gap-2 border-t border-border py-3">
             <p className="text-sm text-muted-foreground">Couldn't refresh your meals.</p>
             <Btn variant="outline" onClick={()=>void quick.refetch()}>Retry</Btn>
           </div>
-        ) : quickPicks.latest || shownUsuals.length>0 ? (
+        ) : quickPicks.latest || shownSuggestions.length>0 ? (
           <div className="mt-3 divide-y divide-border border-t border-border">
             {quickPicks.latest&&(
               <div className="flex items-center gap-3 py-3">
@@ -210,10 +211,14 @@ function Today() {
                 </Btn>
               </div>
             )}
-            {shownUsuals.map(({meal,times})=>(
+            {shownSuggestions.map(meal=>(
               <div key={meal.id} className="flex items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">{times} times with this portion</p>
+                  <p className="text-xs text-muted-foreground">
+                    {repeatCounts.has(mealSignature(meal))
+                      ? `${repeatCounts.get(mealSignature(meal))} times with this portion`
+                      : `Previously eaten · ${meal.meal_date}`}
+                  </p>
                   <p className="mt-0.5 truncate text-sm font-medium">{meal.food_name}</p>
                   <p className="text-xs text-muted-foreground">{meal.serving_description?meal.serving_description+" · ":""}{fmt(meal.calories)} kcal</p>
                 </div>
@@ -226,7 +231,7 @@ function Today() {
         ) : (
           <button type="button" onClick={()=>setQuickOpen(true)}
             className="mt-3 min-h-11 w-full border-t border-border py-3 text-left text-sm text-primary">
-            Browse your recently eaten and saved foods
+            Find a meal you have eaten before
           </button>
         )}
       </section>

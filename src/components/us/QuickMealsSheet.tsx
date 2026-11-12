@@ -9,7 +9,7 @@ import { fmt, defaultMealType, type Meal } from "@/lib/nutrition";
 import { mealSignature, quickMealSuggestions } from "@/lib/quick-meals";
 import { cn } from "@/lib/utils";
 
-type Tab = "usuals" | "recent" | "saved";
+type Tab = "mine" | "recent" | "saved";
 export function QuickMealsSheet({
   open,onOpenChange,meals,memberId,today,onCopy,busyId
 }:{
@@ -21,7 +21,7 @@ export function QuickMealsSheet({
   onCopy:(meal:Meal)=>Promise<void>;
   busyId:string|null;
 }) {
-  const [tab,setTab]=useState<Tab>("usuals");
+  const [tab,setTab]=useState<Tab>("mine");
   const [favoriteBusy,setFavoriteBusy]=useState<string|null>(null);
   const save=useSaveMeal();
   const qc=useQueryClient();
@@ -71,21 +71,21 @@ export function QuickMealsSheet({
     finally{setFavoriteBusy(null);}
   }
 
-  const source:Meal[]=tab==="usuals"?picks.usuals.map(u=>u.meal):picks.recents;
+  const source:Meal[]=tab==="mine"?picks.suggested:picks.recents;
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="mx-auto max-h-[88dvh] max-w-xl border-border bg-background">
         <DrawerHeader className="text-left">
           <DrawerTitle className="font-display text-2xl font-normal">Meals you know by heart</DrawerTitle>
-          <DrawerDescription>One tap logs the same serving and nutrition again. Only your own meals appear here.</DrawerDescription>
+          <DrawerDescription>One tap adds a portion you have eaten before. Your partner has their own list.</DrawerDescription>
         </DrawerHeader>
         <div className="flex gap-5 border-b border-border px-5" role="tablist" aria-label="Quick meal categories">
-          {(["usuals","recent","saved"] as const).map(key=>(
+          {(["mine","recent","saved"] as const).map(key=>(
             <button key={key} type="button" role="tab" aria-selected={tab===key}
               onClick={()=>setTab(key)}
               className={cn("min-h-11 border-b-2 text-sm font-medium capitalize",
                 tab===key?"border-primary text-foreground":"border-transparent text-muted-foreground")}>
-              {key==="usuals"?"Usuals":key==="recent"?"Recently eaten":"Saved"}
+              {key==="mine"?"My meals":key==="recent"?"History":"Saved"}
             </button>
           ))}
         </div>
@@ -113,7 +113,7 @@ export function QuickMealsSheet({
               </div>
             ))
           ):source.length===0 ? <p className="py-8 text-sm text-muted-foreground">
-            {tab==="usuals"?"When you log a meal twice, its usual serving appears here. For now, try Recently eaten or Saved.":"No recent eaten meals yet."}
+            {tab==="mine"?"Log a meal once and it will be ready here next time.":"No meals found in recent history."}
           </p>:source.map(m=>{
             const regular=picks.usuals.find(u=>mealSignature(u.meal)===mealSignature(m));
             const marked=savedNames.has(m.food_name.trim().toLocaleLowerCase());

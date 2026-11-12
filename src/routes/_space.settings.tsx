@@ -308,7 +308,7 @@ function SettingsPage() {
         </Btn>}
 
         <RecoveryLinks partnerName={partner?.display_name ?? null} />
-        <DeviceCenter onKeyRotated={setPersonalKey} />
+        <DeviceCenter key={me.id} onKeyRotated={setPersonalKey} />
 
         <Btn variant="outline" className="w-full" onClick={toggleTheme}>Theme: {dark ? "Dark" : "Light"}</Btn>
         <div className="rounded-xl border border-border p-4 text-sm">
