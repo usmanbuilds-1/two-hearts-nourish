@@ -7,6 +7,7 @@ import { clearSession, inviteUrl, readSession } from "@/lib/session";
 import { leaveRoom } from "@/lib/room.functions";
 import { RecoveryLinks } from "@/components/us/RecoveryLinks";
 import { DeviceCenter } from "@/components/us/DeviceCenter";
+import { exportMyMealsCsv } from "@/lib/export-meals.functions";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
@@ -138,6 +139,25 @@ function SettingsPage() {
     setMember(a.data as Member);
     setRoom(b.data as Room);
     toast.success("Saved ❤️");
+  }
+
+  async function exportMeals() {
+    try {
+      const csv=await exportMyMealsCsv();
+      const blob=new Blob(["\\uFEFF".replace("\\\\u","\\u")+csv],{type:"text/csv;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement("a");
+      anchor.href=url;
+      anchor.download="my-meals.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+      toast.success("Your meals are ready");
+    }catch(error){
+      toast.error(String(error).includes("EXPORT_TOO_LARGE")?
+        "Export exceeds the current limit. Contact the app owner.":"Couldn't export your meals.");
+    }
   }
 
   function toggleTheme() {
@@ -295,6 +315,7 @@ function SettingsPage() {
           <div className="text-muted-foreground">Your personal key can restore this profile. Store it somewhere private, away from shared chats.</div>
           {showKey ? <div className="mt-2 break-all font-mono text-xs">{key}</div> : <button className="mt-2 text-primary" onClick={() => setShowKey(true)}>Show my key</button>}
         </div>
+        <Btn variant="outline" className="w-full" onClick={()=>void exportMeals()}>Export my meals (CSV)</Btn>
         <Btn variant="outline" className="w-full" onClick={reset}>Reset this phone</Btn>
         <Btn variant="danger" className="w-full" onClick={leave}>Leave space</Btn>
       </div>

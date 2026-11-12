@@ -19,6 +19,7 @@ import { Lightbox } from "@/components/us/Lightbox";
 import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
 import { signedMealPhotoUrl } from "@/lib/private-photo";
 import { cn } from "@/lib/utils";
+import { copyMealToDay } from "@/lib/meal-operations.functions";
 
 export const Route = createFileRoute("/_space/today")({
   head: () => ({ meta: [{ title: "Today — Us" }, { name: "description", content: "Your shared day of meals." }, { property: "og:title", content: "Today — Us" }, { property: "og:description", content: "Your shared day of meals." }] }),
@@ -47,8 +48,9 @@ function PersonCard({ label, member, meals, partner }: { label: string; member: 
 }
 
 function Today() {
-  const { me, partner, meals, today, room, fresh } = useSpace();
+  const { me, partner, meals, today, room, fresh, upsertLocal } = useSpace();
   const [scan, setScan] = useState(false);
+  const [repeating, setRepeating] = useState(false);
   const [sheet, setSheet] = useState<{ open: boolean; meal: Meal | null }>({ open: false, meal: null });
   const [budget, setBudget] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
@@ -84,6 +86,19 @@ function Today() {
     }
   }
 
+  const lastMine = useMemo(() => meals
+    .filter(m=>m.member_id===me.id&&!m.is_planned&&m.meal_date<today)
+    .sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]??null,[meals,me.id,today]);
+  async function repeatLast() {
+    if(!lastMine||repeating)return;
+    setRepeating(true);
+    try {
+      const result=await copyMealToDay({data:{mealId:lastMine.id,targetDate:today}});
+      upsertLocal(result.meal);
+      toast.success("Meal added to today");
+    }catch{toast.error("Couldn't repeat that meal.");}
+    finally{setRepeating(false);}
+  }
   const todays = useMemo(() => meals.filter((m) => m.meal_date === today), [meals, today]);
   const mine = todays.filter((m) => m.member_id === me.id && !m.is_planned);
   const theirs = partner ? todays.filter((m) => m.member_id === partner.id && !m.is_planned) : [];
@@ -118,6 +133,18 @@ function Today() {
         <PersonCard label={partner?.display_name ?? "Partner"} member={partner} meals={theirs} partner />
       </div>
 
+      {!partner&&(
+        <div className="mt-5 rounded-2xl border border-border bg-card p-4">
+          <p className="font-medium">Invite your person</p>
+          <p className="mt-1 text-sm text-muted-foreground">Share your private room link so you can log meals together.</p>
+          <Btn variant="outline" className="mt-3 w-full" onClick={()=>void navigator.clipboard.writeText(
+            `${window.location.origin}/r/${room.room_code}`
+          ).then(()=>toast.success("Invitation copied"),()=>toast.error("Couldn't copy the invite."))}>
+            Copy invitation link
+          </Btn>
+        </div>
+      )}
+
       {/* Weight log — always visible, self-contained */}
       <div className="mt-4">
         <WeightCard />
@@ -131,6 +158,13 @@ function Today() {
           setBudget(true);
         }}><Wallet className="size-4" /> Plan</Btn>
       </div>
+
+      {lastMine&&(
+        <button type="button" onClick={()=>void repeatLast()} disabled={repeating}
+          className="mt-3 min-h-11 w-full text-left text-sm text-primary disabled:opacity-50">
+          {repeating?"Adding…":`Repeat my last meal: ${lastMine.food_name}`}
+        </button>
+      )}
 
       <section className="mt-8">
         <Eyebrow>Us today ❤️</Eyebrow>
