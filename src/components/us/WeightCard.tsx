@@ -5,6 +5,7 @@ import { getWeightLog, logWeight } from "@/lib/weight.functions";
 import { Btn } from "@/components/us/primitives";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { localDate } from "@/lib/nutrition";
 
 function todayStr() {
   const d = new Date();
@@ -45,7 +46,7 @@ export function WeightCard() {
     }
     setBusy(true);
     try {
-      await logWeight({ data: { weightKg: val } });
+      await logWeight({ data: { weightKg: val, clientDate: localDate() } });
       setLogged(val);
       setEditing(false);
       toast.success("Weight logged ✓");

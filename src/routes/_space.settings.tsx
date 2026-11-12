@@ -10,6 +10,7 @@ import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitiv
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
+import { localDate } from "@/lib/nutrition";
 
 export const Route = createFileRoute("/_space/settings")({
   head: () => ({ meta: [{ title: "Settings — Us" }, { name: "description", content: "Names, targets and your shared message." }, { property: "og:title", content: "Settings — Us" }, { property: "og:description", content: "Names, targets and your shared message." }] }),
@@ -94,7 +95,7 @@ function SettingsPage() {
     if (!isFinite(kg) || kg < 20 || kg > 400) return void toast.error("Enter a valid weight in kg (20–400).");
     setWeightBusy(true);
     try {
-      await logWeight({ data: { weightKg: kg } });
+      await logWeight({ data: { weightKg: kg, clientDate: localDate() } });
       setWeightInput("");
       const r = await getWeightLog();
       setWeightLog(r.entries);

@@ -94,7 +94,7 @@ function InnerLayout() {
     <div className="flex min-h-[100dvh] flex-col bg-background text-foreground">
       {!online && (
         <div className="flex items-center justify-center gap-2 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-          <WifiOff className="size-3.5" /> Offline — changes will sync when you reconnect
+          <WifiOff className="size-3.5" /> Offline — saved changes require a connection. Reopen to refresh after reconnecting.
         </div>
       )}
       <main className="flex-1 overflow-y-auto pb-24">

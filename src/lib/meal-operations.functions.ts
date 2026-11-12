@@ -333,13 +333,15 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
     const calorieTarget = member.daily_calorie_target ?? 0;
 
     // Fetch both current + previous window in one query (no UTC toISOString)
-    const { data: raw } = await db
+    const { data: raw, error: mealError } = await db
       .from("meals")
       .select("meal_date, calories, protein, carbs, fat, meal_type")
       .eq("member_id", targetMemberId)
+      .eq("is_planned", false)
       .gte("meal_date", prevStart)
       .lte("meal_date", endDate);
 
+    if (mealError) throw new Error("SERVER_ERROR");
     const allMeals = raw ?? [];
     const curMeals  = allMeals.filter(m => m.meal_date >= startDate && m.meal_date <= endDate);
     const prevMeals = allMeals.filter(m => m.meal_date >= prevStart  && m.meal_date <= prevEndDate);
@@ -497,13 +499,15 @@ export const getWeeklyHistory = createServerFn({ method: "POST" })
     const endDate   = addDays(data.clientDate, -7);
     const startDate = addDays(endDate, -(wb * 7 - 1));
 
-    const { data: raw } = await db
+    const { data: raw, error: mealError } = await db
       .from("meals")
       .select("meal_date, calories")
       .eq("member_id", memberId)
+      .eq("is_planned", false)
       .gte("meal_date", startDate)
       .lte("meal_date", endDate);
 
+    if (mealError) throw new Error("SERVER_ERROR");
     const meals = raw ?? [];
     const results: WeekHistoryEntry[] = [];
 

@@ -82,8 +82,8 @@ function Today() {
   }
 
   const todays = useMemo(() => meals.filter((m) => m.meal_date === today), [meals, today]);
-  const mine = todays.filter((m) => m.member_id === me.id);
-  const theirs = partner ? todays.filter((m) => m.member_id === partner.id) : [];
+  const mine = todays.filter((m) => m.member_id === me.id && !m.is_planned);
+  const theirs = partner ? todays.filter((m) => m.member_id === partner.id && !m.is_planned) : [];
   const stats = useMemo(() => coupleStats(meals, me, partner, today), [meals, me, partner, today]);
   const y = addDays(today, -1);
   const msgs = usMessages({ me, partner, todayMine: mine, todayTheirs: theirs, yesterdayBoth: stats.bothDays.has(y), yesterdayBothProtein: stats.bothProteinDays.has(y), streak: stats.streak });
@@ -172,7 +172,7 @@ function Today() {
                             )}
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{m.food_name}</div>
-                              <div className="text-xs text-muted-foreground">{isMe ? "You" : partner?.display_name}</div>
+                              <div className="text-xs text-muted-foreground">{isMe ? "You" : partner?.display_name}{m.is_planned ? " · Planned, not eaten" : ""}</div>
                             </div>
                             <div className="num text-right text-sm">
                               <div>{fmt(m.calories)} kcal</div>

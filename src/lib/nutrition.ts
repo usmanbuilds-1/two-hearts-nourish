@@ -99,6 +99,7 @@ const empty = (): Totals => ({ calories: 0, protein: 0, carbs: 0, fat: 0, count:
 export function totals(meals: Meal[]): Totals {
   const t = empty();
   for (const m of meals) {
+    if (m.is_planned) continue;
     t.calories += m.calories;
     t.protein += Number(m.protein);
     t.carbs += Number(m.carbs);
@@ -114,6 +115,7 @@ export const fmt = (n: number) => Math.round(n).toLocaleString();
 export function indexByDay(meals: Meal[]) {
   const map = new Map<string, Map<string, Meal[]>>();
   for (const m of meals) {
+    if (m.is_planned) continue;
     let day = map.get(m.meal_date);
     if (!day) map.set(m.meal_date, (day = new Map()));
     const list = day.get(m.member_id) ?? [];
@@ -163,7 +165,7 @@ export function coupleStats(meals: Meal[], me: Member, partner: Member | null, t
   }
   const sorted = [...bothDays].sort();
   return {
-    totalMeals: meals.length,
+    totalMeals: meals.filter(m => !m.is_planned).length,
     daysActive: byDay.size,
     daysBoth: bothDays.size,
     daysBothProtein: bothProteinDays.size,

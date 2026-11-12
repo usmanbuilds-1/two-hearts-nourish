@@ -121,7 +121,7 @@ function WeekView() {
     }
     if (tab === "weight" && !wa) {
       setWaLoading(true);
-      getWeightAnalytics().then(setWa).catch(() => setWa({ entries: [], rollingAvg: [], latestWeight: null, startWeight: null, avgWeight: null, minWeight: null, maxWeight: null, totalChange: null, trendKgPerWeek: null, plateauDetected: false, plateauDays: 0 })).finally(() => setWaLoading(false));
+      getWeightAnalytics({ data: { clientDate: localDate() } }).then(setWa).catch(() => setWa({ entries: [], rollingAvg: [], latestWeight: null, startWeight: null, avgWeight: null, minWeight: null, maxWeight: null, totalChange: null, trendKgPerWeek: null, plateauDetected: false, plateauDays: 0 })).finally(() => setWaLoading(false));
     }
   }, [tab, wa, waLoading, weekOffset, selectedMemberId]);
 
@@ -130,7 +130,7 @@ function WeekView() {
     if (isNaN(val) || val < 20 || val > 400) { toast.error("Enter a valid weight (20–400 kg)"); return; }
     setLogging(true);
     try {
-      await logWeight({ data: { weightKg: val } });
+      await logWeight({ data: { weightKg: val, clientDate: localDate() } });
       toast.success("Weight logged ✓");
       setQuickKg("");
       // refresh: clear wa first, waLoading will be set true by the effect
