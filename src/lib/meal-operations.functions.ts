@@ -232,11 +232,20 @@ export const getMealTemplates = createServerFn({ method: "GET" })
     return (data ?? []) as unknown as MealTemplate[];
   });
 
+const mealTemplateItemsSchema = z.array(z.object({
+  food_name: z.string().trim().min(1).max(200),
+  calories: z.number().finite().min(0).max(20000),
+  protein: z.number().finite().min(0).max(2000),
+  carbs: z.number().finite().min(0).max(2000),
+  fat: z.number().finite().min(0).max(2000),
+  meal_type: z.enum(["breakfast","lunch","snack","dinner"])
+})).max(30);
+
 export const saveMealTemplate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { name: string; meals: any[] }) => ({
+  .inputValidator((i: { name: string; meals: MealTemplate["meals"] }) => ({
     name: z.string().trim().min(1).max(100).parse(i.name),
-    meals: z.array(z.any()).parse(i.meals),
+    meals: mealTemplateItemsSchema.parse(i.meals),
   }))
   .handler(async ({ data, context }) => {
     const db = await admin();
@@ -249,6 +258,26 @@ export const saveMealTemplate = createServerFn({ method: "POST" })
     });
     if (error) throw new Error("SAVE_FAILED");
     return { ok: true };
+  });
+
+/** Update the original recipe in place; never delete it before saving replacement data. */
+export const updateMealTemplate = createServerFn({ method:"POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i:{templateId:string;meals:MealTemplate["meals"]})=>({
+    templateId:z.string().uuid().parse(i.templateId),
+    meals:mealTemplateItemsSchema.parse(i.meals),
+  }))
+  .handler(async({data,context})=>{
+    const db=await admin();
+    const memberId=await deviceMemberId(db,context.userId);
+    if(!memberId)throw new Error("NOT_MEMBER");
+    const {data:updated,error}=await db.from("meal_templates")
+      .update({meals:data.meals})
+      .eq("id",data.templateId)
+      .eq("member_id",memberId)
+      .select("id").maybeSingle();
+    if(error||!updated)throw new Error("SAVE_FAILED");
+    return {ok:true};
   });
 
 export const deleteMealTemplate = createServerFn({ method: "POST" })

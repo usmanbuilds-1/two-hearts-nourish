@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus, Trash2, Utensils, Check } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getMealTemplates, deleteMealTemplate, saveMealTemplate } from "@/lib/meal-operations.functions";
+import { getMealTemplates, deleteMealTemplate, saveMealTemplate, updateMealTemplate, type MealTemplate } from "@/lib/meal-operations.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpace } from "@/lib/space";
 import { Btn, Screen, Eyebrow, TextInput } from "@/components/us/primitives";
-import { MealType } from "@/lib/nutrition";
+import { localDate, type Meal, type MealType } from "@/lib/nutrition";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_space/recipes")({
@@ -64,7 +64,7 @@ function RecipesView() {
     }
   };
 
-  const handleAddItemToRecipe = async (templateId: string, currentMeals: any[], recipeName: string) => {
+  const handleAddItemToRecipe = async (templateId: string, currentMeals: MealTemplate["meals"]) => {
     if (!itemFoodName.trim()) {
       toast.error("Food name required");
       return;
@@ -79,13 +79,8 @@ function RecipesView() {
     };
 
     try {
-      // delete existing template and resave with new item
-      await deleteMealTemplate({ data: { templateId } });
-      await saveMealTemplate({
-        data: {
-          name: recipeName,
-          meals: [...currentMeals, newItem],
-        },
+      await updateMealTemplate({
+        data: {templateId,meals:[...currentMeals,newItem]}
       });
       queryClient.invalidateQueries({ queryKey: ["meal-templates"] });
       setAddingMealTo(null);
@@ -105,30 +100,24 @@ function RecipesView() {
       toast.error("Recipe has no items to log");
       return;
     }
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const today = localDate();
     try {
-      for (const item of recipe.meals) {
-        const { data, error } = await supabase
-          .from("meals")
-          .insert({
-            room_id: room.id,
-            member_id: me.id,
-            meal_date: today,
-            food_name: item.food_name,
-            calories: Math.round(item.calories || 0),
-            protein: Math.round((item.protein || 0) * 10) / 10,
-            carbs: Math.round((item.carbs || 0) * 10) / 10,
-            fat: Math.round((item.fat || 0) * 10) / 10,
-            meal_type: item.meal_type ?? "lunch",
-            serving_description: `From recipe: ${recipe.name}`,
-          })
-          .select()
-          .single();
-
-        if (error || !data) throw error;
-        upsertLocal(data as any);
-      }
+      // One database statement is atomic. A partial recipe cannot be logged.
+      const payload = recipe.meals.map(item => ({
+        room_id: room.id,
+        member_id: me.id,
+        meal_date: today,
+        food_name: item.food_name,
+        calories: Math.round(item.calories || 0),
+        protein: Math.round((item.protein || 0)*10)/10,
+        carbs: Math.round((item.carbs || 0)*10)/10,
+        fat: Math.round((item.fat || 0)*10)/10,
+        meal_type: item.meal_type,
+        serving_description: `From recipe: ${recipe.name}`
+      }));
+      const {data:added,error}=await supabase.from("meals").insert(payload).select();
+      if(error||!added||added.length!==payload.length)throw new Error("SAVE_FAILED");
+      for(const item of added)upsertLocal(item as Meal);
       toast.success(`Logged "${recipe.name}" to today's meals ❤️`);
     } catch (err) {
       toast.error("Failed to log recipe items");
@@ -241,7 +230,7 @@ function RecipesView() {
                         />
                       </div>
                       <div className="flex gap-2 pt-1">
-                        <Btn size="md" onClick={() => handleAddItemToRecipe(t.id, t.meals, t.name)} className="flex-1">
+                        <Btn size="md" onClick={() => handleAddItemToRecipe(t.id, t.meals)} className="flex-1">
                           <Check className="w-3.5 h-3.5 mr-1" /> Save Item
                         </Btn>
                         <Btn size="md" variant="ghost" onClick={() => setAddingMealTo(null)} className="flex-1">
