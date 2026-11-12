@@ -18,12 +18,10 @@ export function usePrivateMealPhoto(stored: string | null | undefined, roomId: s
       if (active) setUrl(signed);
     }
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 90_000);
     const visible = () => { if (document.visibilityState === "visible") void refresh(); };
     document.addEventListener("visibilitychange", visible);
     return () => {
       active = false;
-      window.clearInterval(timer);
       document.removeEventListener("visibilitychange", visible);
     };
   }, [stored, roomId]);

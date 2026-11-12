@@ -5,7 +5,6 @@ import { isPlausibleNutrition } from "./ai-estimate";
 import { claimAiQuota } from "./ai-quota.server";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
-const LOVABLE_MODEL  = "google/gemini-3.8-flash"; // Lovable gateway model ID
 const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 
 // ── System prompt ─────────────────────────────────────────────────────────
@@ -67,6 +66,8 @@ function parseEstimate(text: string): FoodEstimate | null {
   const parsed = resultSchema.safeParse(raw);
   if (!parsed.success) return null;
   const r    = parsed.data;
+  if (![r.calories,r.protein,r.carbs,r.fat].every(v=>Number.isFinite(v)&&v>=0)) return null;
+  if (r.calories>10000||r.protein>1000||r.carbs>1000||r.fat>1000) return null;
   const name = r.food_name.trim().slice(0, 120);
   if (!name) return null;
   const conf = r.confidence.toLowerCase();
