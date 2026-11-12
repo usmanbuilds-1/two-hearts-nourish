@@ -12,6 +12,9 @@ import {
   type MealFavorite,
 } from "@/lib/meal-operations.functions";
 import { useSpace } from "@/lib/space";
+import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
+import { FoodSearchSheet } from "./FoodSearchSheet";
+import type { PackagedFood } from "@/lib/off-food";
 import { cn } from "@/lib/utils";
 
 export type MealDraft = {
@@ -25,10 +28,10 @@ export type MealDraft = {
   ai_confidence: "low" | "medium" | "high" | null;
   photo_url?: string | null;
   portion_percentage: number;
-  nominal_calories?: number;
-  nominal_protein?: number;
-  nominal_carbs?: number;
-  nominal_fat?: number;
+  nominal_calories?: number | undefined;
+  nominal_protein?: number | undefined;
+  nominal_carbs?: number | undefined;
+  nominal_fat?: number | undefined;
 };
 
 export function emptyDraft(): MealDraft {
@@ -75,6 +78,7 @@ export function MealFields({
 }) {
   const set = (k: keyof MealDraft) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...draft, [k]: e.target.value });
   const [lookingUp, setLookingUp] = useState(false);
+  const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const qc = useQueryClient();
 
   // Favourites — Supabase-backed (replaces localStorage)
@@ -99,6 +103,25 @@ export function MealFields({
   async function removeFav(foodName: string) {
     await removeFavoriteMeal({ data: { foodName } }).catch(() => {});
     qc.invalidateQueries({ queryKey: ["meal-favorites"] });
+  }
+
+  function applyPackagedFood(food:PackagedFood,amount:number) {
+    const factor=amount/100;
+    onChange({
+      ...draft,
+      food_name: [food.brand,food.name].filter(Boolean).join(" ").slice(0,200),
+      serving_description: `${amount} g/ml · Open Food Facts (check label)`,
+      calories:String(Math.round(food.calories*factor)),
+      protein:String(Math.round(food.protein*factor*10)/10),
+      carbs:String(Math.round(food.carbs*factor*10)/10),
+      fat:String(Math.round(food.fat*factor*10)/10),
+      ai_confidence:null,
+      portion_percentage:100,
+      nominal_calories:undefined,
+      nominal_protein:undefined,
+      nominal_carbs:undefined,
+      nominal_fat:undefined,
+    });
   }
 
   // Portion percentage
@@ -138,7 +161,7 @@ export function MealFields({
     try {
       const res = await lookupFood({ data: { description: q } });
       if (!res.ok) {
-        const msg = res.error === "AI_CREDITS" ? "AI estimates are paused — the AI allowance is used up. You can still type the numbers yourself." : res.error === "AI_BUSY" ? "AI is busy, try again." : "Couldn't estimate — check the name and try again.";
+        const msg = res.error === "AI_CREDITS" ? "AI estimates are paused — the AI allowance is used up. You can still type the numbers yourself." : res.error === "AI_BUSY" ? "AI is busy, try again." : res.error === "AI_LIMIT" ? "Daily AI allowance reached. Enter the numbers manually." : "Couldn't estimate — check the name and try again.";
         toast.error(msg);
         return;
       }
@@ -176,7 +199,7 @@ export function MealFields({
                 <button
                   type="button"
                   onClick={() => removeFav(f.food_name)}
-                  className="ml-1 text-muted-foreground hover:text-destructive"
+                  className="ml-1 flex size-10 items-center justify-center rounded-full text-muted-foreground hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={`Remove ${f.food_name} from favourites`}
                 >
                   ✕
@@ -200,7 +223,15 @@ export function MealFields({
         ))}
       </div>
 
-      {/* Food name with AI lookup */}
+      {isNew&&(
+        <>
+          <Btn variant="outline" className="w-full" onClick={()=>setFoodSearchOpen(true)}>
+            Search food labels or scan a barcode
+          </Btn>
+          <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyPackagedFood}/>
+        </>
+      )}
+      {/* Food name with optional AI lookup */}
       <Field label="Food">
         <div className="flex gap-2">
           <TextInput
@@ -242,7 +273,7 @@ export function MealFields({
                 type="button"
                 onClick={() => applyPortion(pct)}
                 className={cn(
-                  "flex-1 rounded-xl border py-1.5 text-xs font-semibold transition-all",
+                  "flex-1 min-h-11 rounded-xl border px-1 py-2 text-xs font-semibold transition-all focus-visible:ring-2 focus-visible:ring-ring",
                   draft.portion_percentage === pct
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:border-primary/50",
@@ -414,7 +445,7 @@ export function MealSheet({
               <div className="space-y-4">
                 {meal.photo_url && (
                   <div className="overflow-hidden rounded-2xl border border-border">
-                    <img src={meal.photo_url} alt={meal.food_name} className="h-48 w-full object-cover" />
+                    <PrivateMealPhoto stored={meal.photo_url} roomId={meal.room_id} alt={meal.food_name} className="h-48 w-full object-cover" />
                   </div>
                 )}
                 {meal.serving_description && <p className="text-muted-foreground">{meal.serving_description}</p>}

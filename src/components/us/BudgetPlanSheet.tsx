@@ -198,7 +198,11 @@ export function BudgetPlanSheet({
                         <input
                           type="checkbox"
                           checked={checked.has(item)}
-                          onChange={() => setChecked((s) => { const n = new Set(s); n.has(item) ? n.delete(item) : n.add(item); return n; })}
+                          onChange={() => setChecked((s) => {
+                            const n = new Set(s);
+                            if (n.has(item)) n.delete(item); else n.add(item);
+                            return n;
+                          })}
                           className="size-4 rounded"
                         />
                         <span className={checked.has(item) ? "line-through text-muted-foreground" : ""}>{item}</span>

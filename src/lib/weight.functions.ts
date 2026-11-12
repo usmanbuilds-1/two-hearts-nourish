@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { calendarDaysAgo, calendarRollingAverage, dayNumber, weightTrendKgPerWeek } from "./weight-math";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -38,14 +39,19 @@ const EMPTY_ANALYTICS: WeightAnalytics = {
 // ── log (upsert today) ────────────────────────────────────────────────────
 export const logWeight = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { weightKg: number }) => ({
+  .inputValidator((i: { weightKg: number; clientDate: string }) => ({
     weightKg: z.number().min(20).max(400).parse(i.weightKg),
+    clientDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
   }))
   .handler(async ({ data, context }) => {
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
-    const today = new Date().toISOString().slice(0, 10);
+    // Respect the phone calendar (including users near midnight in other time zones).
+    // Reject dates well outside the UTC-neighboring local day window.
+    const today = data.clientDate;
+    const clockDistance = Math.abs(Date.now() - (dayNumber(today) * 86400000 + 12*3600000));
+    if (!Number.isFinite(clockDistance) || clockDistance > 48*3600000) throw new Error("INVALID_DATE");
     const { error } = await db
       .from("weight_logs")
       .upsert(
@@ -73,25 +79,24 @@ export const getWeightLog = createServerFn({ method: "GET" })
   });
 
 // ── full analytics (90 days, ascending) ─────────────────────────────────
-export const getWeightAnalytics = createServerFn({ method: "GET" })
+export const getWeightAnalytics = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<WeightAnalytics> => {
+  .inputValidator((i: { clientDate: string }) => ({ clientDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate) }))
+  .handler(async ({ data, context }): Promise<WeightAnalytics> => {
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) return EMPTY_ANALYTICS;
 
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 90);
-    const fromDate = cutoff.toISOString().slice(0, 10);
+    const fromDate = calendarDaysAgo(data.clientDate, 90);
 
-    const { data } = await db
+    const { data: weightRows } = await db
       .from("weight_logs")
       .select("logged_date, weight_kg")
       .eq("member_id", memberId)
       .gte("logged_date", fromDate)
       .order("logged_date", { ascending: true });
 
-    const entries: WeightEntry[] = (data ?? []).map((e) => ({
+    const entries: WeightEntry[] = (weightRows ?? []).map((e) => ({
       logged_date: e.logged_date as string,
       weight_kg:  Number(e.weight_kg),
     }));
@@ -108,33 +113,11 @@ export const getWeightAnalytics = createServerFn({ method: "GET" })
     const maxWeight    = Math.max(...weights);
     const totalChange  = Math.round((latestWeight - startWeight) * 100) / 100;
 
-    // 7-day rolling average
-    const rollingAvg = entries.map((e, i) => {
-      const window = entries.slice(Math.max(0, i - 6), i + 1);
-      const avg = window.reduce((a, b) => a + b.weight_kg, 0) / window.length;
-      return { logged_date: e.logged_date, avg: Math.round(avg * 10) / 10 };
-    });
-
-    // Linear regression → trend kg/week
-    let trendKgPerWeek: number | null = null;
-    if (n >= 3) {
-      const xs = entries.map((_, i) => i);
-      const ys = weights;
-      const sumX  = xs.reduce((a, b) => a + b, 0);
-      const sumY  = ys.reduce((a, b) => a + b, 0);
-      const sumXY = xs.reduce((a, x, i) => a + x * (ys[i] ?? 0), 0);
-      const sumX2 = xs.reduce((a, x) => a + x * x, 0);
-      const denom = n * sumX2 - sumX * sumX;
-      if (denom !== 0) {
-        const slopePerEntry = (n * sumXY - sumX * sumY) / denom;
-        trendKgPerWeek = Math.round(slopePerEntry * 7 * 100) / 100;
-      }
-    }
+    const rollingAvg = calendarRollingAverage(entries);
+    const trendKgPerWeek = weightTrendKgPerWeek(entries);
 
     // Plateau: last 14 days, ≥3 entries, range < 0.5 kg
-    const p14 = new Date();
-    p14.setDate(p14.getDate() - 14);
-    const p14str = p14.toISOString().slice(0, 10);
+    const p14str = calendarDaysAgo(data.clientDate, 14);
     const recent = entries.filter((e) => e.logged_date >= p14str);
     let plateauDetected = false;
     let plateauDays = 0;

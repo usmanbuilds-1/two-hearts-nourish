@@ -7,6 +7,8 @@ import { addDays, fmt, parseLocalDate, totals } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MacroSuggestions } from "@/components/us/MacroSuggestions";
 import { Lightbox } from "@/components/us/Lightbox";
+import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
+import { signedMealPhotoUrl } from "@/lib/private-photo";
 import { getWeeklySummary, type WeeklySummary } from "@/lib/meal-operations.functions";
 import { localDate } from "@/lib/nutrition";
 import { getWeightAnalytics, logWeight, type WeightAnalytics } from "@/lib/weight.functions";
@@ -92,7 +94,7 @@ function WeightChart({ analytics }: { analytics: WeightAnalytics }) {
 
 // ── main view ───────────────────────────────────────────────────────────
 function WeekView() {
-  const { me, partner, meals, today } = useSpace();
+  const { me, partner, meals, today, room } = useSpace();
   const [tab, setTab]           = useState<Tab>("week");
   const [selected, setSelected] = useState<string | null>(null);
   const [stats, setStats]       = useState<WeeklySummary | null>(null);
@@ -121,7 +123,7 @@ function WeekView() {
     }
     if (tab === "weight" && !wa) {
       setWaLoading(true);
-      getWeightAnalytics().then(setWa).catch(() => setWa({ entries: [], rollingAvg: [], latestWeight: null, startWeight: null, avgWeight: null, minWeight: null, maxWeight: null, totalChange: null, trendKgPerWeek: null, plateauDetected: false, plateauDays: 0 })).finally(() => setWaLoading(false));
+      getWeightAnalytics({ data: { clientDate: localDate() } }).then(setWa).catch(() => setWa({ entries: [], rollingAvg: [], latestWeight: null, startWeight: null, avgWeight: null, minWeight: null, maxWeight: null, totalChange: null, trendKgPerWeek: null, plateauDetected: false, plateauDays: 0 })).finally(() => setWaLoading(false));
     }
   }, [tab, wa, waLoading, weekOffset, selectedMemberId]);
 
@@ -130,7 +132,7 @@ function WeekView() {
     if (isNaN(val) || val < 20 || val > 400) { toast.error("Enter a valid weight (20–400 kg)"); return; }
     setLogging(true);
     try {
-      await logWeight({ data: { weightKg: val } });
+      await logWeight({ data: { weightKg: val, clientDate: localDate() } });
       toast.success("Weight logged ✓");
       setQuickKg("");
       // refresh: clear wa first, waLoading will be set true by the effect
@@ -487,9 +489,12 @@ function WeekView() {
                           {m.photo_url && (
                             <button
                               className="shrink-0"
-                              onClick={() => setLightbox({ src: m.photo_url!, caption: `${m.food_name} · ${fmt(m.calories)} kcal` })}
+                              onClick={() => void signedMealPhotoUrl(m.photo_url!, room.id).then(url => {
+                                 if (url) setLightbox({ src: url, caption: `${m.food_name} · ${fmt(m.calories)} kcal` });
+                                 else toast.error("This photo is not available.");
+                               })}
                             >
-                              <img src={m.photo_url} alt="" className="size-9 rounded-lg object-cover border border-border" />
+                              <PrivateMealPhoto stored={m.photo_url} roomId={room.id} className="size-9 rounded-lg object-cover border border-border" />
                             </button>
                           )}
                           <span className="flex-1 truncate">{m.food_name}</span>
@@ -506,9 +511,12 @@ function WeekView() {
                           {m.photo_url && (
                             <button
                               className="shrink-0"
-                              onClick={() => setLightbox({ src: m.photo_url!, caption: `${m.food_name} · ${fmt(m.calories)} kcal` })}
+                              onClick={() => void signedMealPhotoUrl(m.photo_url!, room.id).then(url => {
+                                 if (url) setLightbox({ src: url, caption: `${m.food_name} · ${fmt(m.calories)} kcal` });
+                                 else toast.error("This photo is not available.");
+                               })}
                             >
-                              <img src={m.photo_url} alt="" className="size-9 rounded-lg object-cover border border-border" />
+                              <PrivateMealPhoto stored={m.photo_url} roomId={room.id} className="size-9 rounded-lg object-cover border border-border" />
                             </button>
                           )}
                           <span className="flex-1 truncate">{m.food_name}</span>
@@ -775,7 +783,7 @@ function WeekView() {
               {/* Meal Ideas */}
               <div className="flex items-center justify-between pt-1">
                 <span className="text-sm text-muted-foreground">Need inspiration?</span>
-                <Btn size="sm" onClick={() => setSuggestOpen(true)}>
+                <Btn size="md" onClick={() => setSuggestOpen(true)}>
                   <Sparkles className="size-3.5 mr-1" /> Meal Ideas
                 </Btn>
               </div>
@@ -804,7 +812,7 @@ function WeekView() {
               className="flex-1 bg-transparent text-sm focus:outline-none"
             />
             <span className="shrink-0 text-sm text-muted-foreground">kg</span>
-            <Btn size="sm" onClick={quickLog} disabled={logging || !quickKg}>
+            <Btn size="md" onClick={quickLog} disabled={logging || !quickKg}>
               {logging ? "…" : "Log"}
             </Btn>
           </div>

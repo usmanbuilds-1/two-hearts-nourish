@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
 import { useSpace } from "@/lib/space";
 import { addDays, coupleStats, daysBetween, milestones } from "@/lib/nutrition";
 import { Eyebrow, Screen } from "@/components/us/primitives";
 import { cn } from "@/lib/utils";
+import { recentCoupleWeek, sharedRegularMeals } from "@/lib/couple-insights";
 
 export const Route = createFileRoute("/_space/together")({
   head: () => ({ meta: [{ title: "Together — Us" }, { name: "description", content: "Your shared milestones." }, { property: "og:title", content: "Together — Us" }, { property: "og:description", content: "Your shared milestones." }] }),
@@ -12,7 +15,15 @@ export const Route = createFileRoute("/_space/together")({
 
 function Together() {
   const { me, partner, meals, today, room } = useSpace();
-  const s = useMemo(() => coupleStats(meals, me, partner, today), [meals, me, partner, today]);
+  const recent = useMemo(() => coupleStats(meals, me, partner, today), [meals, me, partner, today]);
+  const {data: lifetime} = useQuery({
+    queryKey:["room-life-stats",room.id,today],
+    queryFn:()=>getRoomLifetimeStats({data:{clientDate:today}}),
+    staleTime:120_000,
+  });
+  const s = lifetime ? {...recent, ...lifetime} : recent;
+  const recap = partner ? recentCoupleWeek(meals,me.id,partner.id,today) : null;
+  const regulars = partner ? sharedRegularMeals(meals,me.id,partner.id) : [];
   const since = room.together_since ? daysBetween(room.together_since, today) : daysBetween(room.created_at.slice(0, 10), today) + 1;
   const timeline = Array.from({ length: 7 }, (_, i) => addDays(today, -i)).flatMap((d, i) => {
     const label = i === 0 ? "Today" : i === 1 ? "Yesterday" : `${i} days ago`;
@@ -41,6 +52,28 @@ function Together() {
         ))}
       </div>
 
+      {recap&&(
+        <section className="mt-8 space-y-2">
+          <Eyebrow>Our last seven days</Eyebrow>
+          <p className="text-sm text-muted-foreground">
+            You both logged on <span className="font-medium text-foreground">{recap.daysBoth}</span> of the last seven days.
+            {recap.sharedDinnerDays>0?` You shared dinner logging on ${recap.sharedDinnerDays} of those days.`:""}
+          </p>
+          <p className="text-xs text-muted-foreground">A shared day means each of you logged at least one eaten meal, not necessarily the same meal.</p>
+        </section>
+      )}
+      {regulars.length>0&&(
+        <section className="mt-8 space-y-2">
+          <Eyebrow>Our regular meals · recent months</Eyebrow>
+          {regulars.map(food=>(
+            <div key={food.name} className="flex items-center justify-between gap-3 border-b border-border py-2">
+              <span className="text-sm">{food.name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{food.times} logs</span>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">Each partner logs their own portion; your calorie estimates are never copied to theirs.</p>
+        </section>
+      )}
       <section className="mt-8">
         <Eyebrow>Milestones</Eyebrow>
         <div className="mt-3 space-y-2">

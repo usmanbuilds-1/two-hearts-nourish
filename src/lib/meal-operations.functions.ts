@@ -232,11 +232,20 @@ export const getMealTemplates = createServerFn({ method: "GET" })
     return (data ?? []) as unknown as MealTemplate[];
   });
 
+const mealTemplateItemsSchema = z.array(z.object({
+  food_name: z.string().trim().min(1).max(200),
+  calories: z.number().finite().min(0).max(20000),
+  protein: z.number().finite().min(0).max(2000),
+  carbs: z.number().finite().min(0).max(2000),
+  fat: z.number().finite().min(0).max(2000),
+  meal_type: z.enum(["breakfast","lunch","snack","dinner"])
+})).max(30);
+
 export const saveMealTemplate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { name: string; meals: any[] }) => ({
+  .inputValidator((i: { name: string; meals: MealTemplate["meals"] }) => ({
     name: z.string().trim().min(1).max(100).parse(i.name),
-    meals: z.array(z.any()).parse(i.meals),
+    meals: mealTemplateItemsSchema.parse(i.meals),
   }))
   .handler(async ({ data, context }) => {
     const db = await admin();
@@ -249,6 +258,26 @@ export const saveMealTemplate = createServerFn({ method: "POST" })
     });
     if (error) throw new Error("SAVE_FAILED");
     return { ok: true };
+  });
+
+/** Update the original recipe in place; never delete it before saving replacement data. */
+export const updateMealTemplate = createServerFn({ method:"POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i:{templateId:string;meals:MealTemplate["meals"]})=>({
+    templateId:z.string().uuid().parse(i.templateId),
+    meals:mealTemplateItemsSchema.parse(i.meals),
+  }))
+  .handler(async({data,context})=>{
+    const db=await admin();
+    const memberId=await deviceMemberId(db,context.userId);
+    if(!memberId)throw new Error("NOT_MEMBER");
+    const {data:updated,error}=await db.from("meal_templates")
+      .update({meals:data.meals})
+      .eq("id",data.templateId)
+      .eq("member_id",memberId)
+      .select("id").maybeSingle();
+    if(error||!updated)throw new Error("SAVE_FAILED");
+    return {ok:true};
   });
 
 export const deleteMealTemplate = createServerFn({ method: "POST" })
@@ -333,13 +362,15 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
     const calorieTarget = member.daily_calorie_target ?? 0;
 
     // Fetch both current + previous window in one query (no UTC toISOString)
-    const { data: raw } = await db
+    const { data: raw, error: mealError } = await db
       .from("meals")
       .select("meal_date, calories, protein, carbs, fat, meal_type")
       .eq("member_id", targetMemberId)
+      .eq("is_planned", false)
       .gte("meal_date", prevStart)
       .lte("meal_date", endDate);
 
+    if (mealError) throw new Error("SERVER_ERROR");
     const allMeals = raw ?? [];
     const curMeals  = allMeals.filter(m => m.meal_date >= startDate && m.meal_date <= endDate);
     const prevMeals = allMeals.filter(m => m.meal_date >= prevStart  && m.meal_date <= prevEndDate);
@@ -450,7 +481,7 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
       // Fallback: dinner dominance
       if (!observation) {
         const dinnerCal = curMeals
-          .filter(m => (m as any).meal_type === "dinner")
+          .filter(m => m.meal_type === "dinner")
           .reduce((a, m) => a + m.calories, 0);
         if (totCal > 0) {
           const dinnerPct = Math.round((dinnerCal / totCal) * 100);
@@ -497,13 +528,15 @@ export const getWeeklyHistory = createServerFn({ method: "POST" })
     const endDate   = addDays(data.clientDate, -7);
     const startDate = addDays(endDate, -(wb * 7 - 1));
 
-    const { data: raw } = await db
+    const { data: raw, error: mealError } = await db
       .from("meals")
       .select("meal_date, calories")
       .eq("member_id", memberId)
+      .eq("is_planned", false)
       .gte("meal_date", startDate)
       .lte("meal_date", endDate);
 
+    if (mealError) throw new Error("SERVER_ERROR");
     const meals = raw ?? [];
     const results: WeekHistoryEntry[] = [];
 

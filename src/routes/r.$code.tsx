@@ -32,10 +32,9 @@ function Join() {
   const [busy, setBusy] = useState(false);
   const [rejoin, setRejoin] = useState(false);
   const [key, setKey] = useState("");
-  const [useKey, setUseKey] = useState(false);
   const [ignoreMagicLink, setIgnoreMagicLink] = useState(false);
 
-  // Modern one-use links use a high-entropy fragment. Old ?lc= codes remain supported.
+  // Only long random one-use links from the URL fragment are valid.
   const lc = typeof window !== "undefined"
     ? readRejoinToken(window.location.search, window.location.hash)
     : null;
@@ -73,7 +72,7 @@ function Join() {
     try {
       await ensureIdentity();
       const v = key.trim();
-      const r = useKey ? await rejoinRoom({ data: { code, key: v } }) : await linkDevice({ data: { code, linkCode: v.replace(/\D/g, "") } });
+      const r = await rejoinRoom({ data: { code, key: v } });
       writeSession(r);
       toast.success("Welcome back ❤️");
       void navigate({ to: "/today", replace: true });
@@ -122,7 +121,6 @@ function Join() {
             window.history.replaceState(window.history.state, "", window.location.pathname);
             setIgnoreMagicLink(true);
             setRejoin(true);
-            setUseKey(true);
           }}>Use my personal recovery key instead</Btn>
         </div>
       </main>
@@ -159,21 +157,13 @@ function Join() {
 
   const rejoinForm = (
     <form onSubmit={doRejoin} className="mt-8 space-y-4">
-      {useKey ? (
-        <Field label="Your personal key" hint="You'll find it in Settings on your other device.">
-          <TextInput value={key} onChange={(e) => setKey(e.target.value)} placeholder="64-character key" className="font-mono text-sm" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-        </Field>
-      ) : (
-        <Field label="Older 6-digit device code" hint="For old codes only. New secure rejoin links are sent from Settings → Come back to us.">
-          <TextInput value={key} onChange={(e) => setKey(e.target.value)} inputMode="numeric" maxLength={7} placeholder="123456" className="num text-2xl tracking-[0.3em]" autoComplete="one-time-code" />
-        </Field>
-      )}
+      <Field label="Your private recovery key" hint="A 64-character key stored privately on your device. If you lost it, ask your partner for a new recovery link from Settings.">
+        <TextInput value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="64-character recovery key" className="font-mono text-sm" autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="off" />
+      </Field>
       <Btn size="lg" className="w-full" disabled={!key.trim() || busy}>
         {busy ? "Checking…" : "Add this device ❤️"}
       </Btn>
-      <button type="button" onClick={() => { setUseKey(!useKey); setKey(""); }} className="w-full py-2 text-sm text-muted-foreground hover:underline">
-        {useKey ? "I have an older 6-digit code" : "Use my personal key instead"}
-      </button>
+
     </form>
   );
 

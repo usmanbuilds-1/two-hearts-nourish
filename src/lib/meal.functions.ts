@@ -171,11 +171,20 @@ export const getMealTemplates = createServerFn({ method: "GET" })
     return (data ?? []) as unknown as MealTemplate[];
   });
 
+const mealTemplateItemsSchema = z.array(z.object({
+  food_name:z.string().trim().min(1).max(200),
+  calories:z.number().finite().min(0).max(20000),
+  protein:z.number().finite().min(0).max(2000),
+  carbs:z.number().finite().min(0).max(2000),
+  fat:z.number().finite().min(0).max(2000),
+  meal_type:z.enum(["breakfast","lunch","snack","dinner"])
+})).max(30);
+
 export const saveMealTemplate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { name: string; meals: any[] }) => ({
+  .inputValidator((i: { name: string; meals: MealTemplate["meals"] }) => ({
     name: z.string().trim().min(1).max(100).parse(i.name),
-    meals: z.array(z.any()).parse(i.meals),
+    meals: mealTemplateItemsSchema.parse(i.meals),
   }))
   .handler(async ({ data, context }) => {
     const db = await admin();

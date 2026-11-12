@@ -154,6 +154,13 @@ export type Database = {
           room_id: string
           serving_description: string | null
           updated_at: string
+          is_planned: boolean
+          photo_url: string | null
+          portion_percentage: number
+          nominal_calories: number | null
+          nominal_protein: number | null
+          nominal_carbs: number | null
+          nominal_fat: number | null
         }
         Insert: {
           ai_confidence?: string | null
@@ -170,6 +177,13 @@ export type Database = {
           room_id: string
           serving_description?: string | null
           updated_at?: string
+          is_planned?: boolean
+          photo_url?: string | null
+          portion_percentage?: number
+          nominal_calories?: number | null
+          nominal_protein?: number | null
+          nominal_carbs?: number | null
+          nominal_fat?: number | null
         }
         Update: {
           ai_confidence?: string | null
@@ -186,6 +200,13 @@ export type Database = {
           room_id?: string
           serving_description?: string | null
           updated_at?: string
+          is_planned?: boolean
+          photo_url?: string | null
+          portion_percentage?: number
+          nominal_calories?: number | null
+          nominal_protein?: number | null
+          nominal_carbs?: number | null
+          nominal_fat?: number | null
         }
         Relationships: [
           {
@@ -210,18 +231,21 @@ export type Database = {
           member_id: string
           token_hash: string
           created_at: string
+          device_id: string | null
         }
         Insert: {
           id?: string
           member_id: string
           token_hash: string
           created_at?: string
+          device_id?: string | null
         }
         Update: {
           id?: string
           member_id?: string
           token_hash?: string
           created_at?: string
+          device_id?: string | null
         }
         Relationships: [
           {
@@ -233,24 +257,36 @@ export type Database = {
           },
         ]
       }
+      ai_usage_daily: {
+        Row: { member_id: string; usage_date: string; scan_requests: number; text_requests: number }
+        Insert: { member_id: string; usage_date?: string; scan_requests?: number; text_requests?: number }
+        Update: { member_id?: string; usage_date?: string; scan_requests?: number; text_requests?: number }
+        Relationships: []
+      }
       member_devices: {
         Row: {
           auth_user_id: string
           created_at: string
           id: string
           member_id: string
+          device_label: string | null
+          last_seen_at: string | null
         }
         Insert: {
           auth_user_id: string
           created_at?: string
           id?: string
           member_id: string
+          device_label?: string | null
+          last_seen_at?: string | null
         }
         Update: {
           auth_user_id?: string
           created_at?: string
           id?: string
           member_id?: string
+          device_label?: string | null
+          last_seen_at?: string | null
         }
         Relationships: [
           {
@@ -481,6 +517,12 @@ export type Database = {
     Functions: {
       my_member_id: { Args: never; Returns: string }
       my_room_id: { Args: never; Returns: string }
+      claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
+      room_activity_rollup: { Args: { p_room_id: string; p_today: string }; Returns: Json }
+      rotate_member_recovery: {
+        Args: { p_actor_auth_user_id: string; p_replacement_hash: string; p_revoke_device_id?: string | null };
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

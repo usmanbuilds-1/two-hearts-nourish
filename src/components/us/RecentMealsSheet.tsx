@@ -127,7 +127,7 @@ export function RecentMealsSheet({
           <div className="space-y-2">
             {items.map((m) => (
               <div
-                key={"id" in m ? m.id : m.food_name}
+                key={m.id}
                 className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
               >
                 <div className="min-w-0 flex-1">
@@ -175,7 +175,7 @@ export function RecentMealsSheet({
                   </button>
                 )}
 
-                <Btn size="sm" onClick={() => logMeal(m)}>
+                <Btn size="md" onClick={() => logMeal(m)}>
                   Add
                 </Btn>
               </div>

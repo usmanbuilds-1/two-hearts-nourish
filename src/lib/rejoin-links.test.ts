@@ -12,8 +12,8 @@ describe("scoped recovery link", () => {
   it("recognizes 256-bit recovery links", () => {
     expect(readRejoinToken("", "#rejoin=" + token)).toBe(token.toLowerCase());
   });
-  it("keeps old 6-digit rejoin links functional", () => {
-    expect(readRejoinToken("?lc=123456", "")).toBe("123456");
+  it("refuses guessing-prone six-digit links", () => {
+    expect(readRejoinToken("?lc=123456", "")).toBeNull();
   });
   it("rejects malformed fragment without using query fallback", () => {
     expect(readRejoinToken("?lc=123456", "#rejoin=bad")).toBeNull();

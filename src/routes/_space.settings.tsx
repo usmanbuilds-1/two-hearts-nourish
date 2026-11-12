@@ -6,10 +6,13 @@ import { useSpace } from "@/lib/space";
 import { clearSession, inviteUrl, readSession } from "@/lib/session";
 import { leaveRoom } from "@/lib/room.functions";
 import { RecoveryLinks } from "@/components/us/RecoveryLinks";
+import { DeviceCenter } from "@/components/us/DeviceCenter";
+import { exportMyMealsCsv } from "@/lib/export-meals.functions";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
+import { localDate } from "@/lib/nutrition";
 
 export const Route = createFileRoute("/_space/settings")({
   head: () => ({ meta: [{ title: "Settings — Us" }, { name: "description", content: "Names, targets and your shared message." }, { property: "og:title", content: "Settings — Us" }, { property: "og:description", content: "Names, targets and your shared message." }] }),
@@ -35,6 +38,7 @@ function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [dark, setDark] = useState(true);
   const [showKey, setShowKey] = useState(false);
+  const [personalKey, setPersonalKey] = useState(() => readSession()?.key ?? "");
 
   // Health calculator
   const [showCalc, setShowCalc] = useState(false);
@@ -94,7 +98,7 @@ function SettingsPage() {
     if (!isFinite(kg) || kg < 20 || kg > 400) return void toast.error("Enter a valid weight in kg (20–400).");
     setWeightBusy(true);
     try {
-      await logWeight({ data: { weightKg: kg } });
+      await logWeight({ data: { weightKg: kg, clientDate: localDate() } });
       setWeightInput("");
       const r = await getWeightLog();
       setWeightLog(r.entries);
@@ -137,6 +141,25 @@ function SettingsPage() {
     toast.success("Saved ❤️");
   }
 
+  async function exportMeals() {
+    try {
+      const csv=await exportMyMealsCsv();
+      const blob=new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement("a");
+      anchor.href=url;
+      anchor.download="my-meals.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+      toast.success("Your meals are ready");
+    }catch(error){
+      toast.error(String(error).includes("EXPORT_TOO_LARGE")?
+        "Export exceeds the current limit. Contact the app owner.":"Couldn't export your meals.");
+    }
+  }
+
   function toggleTheme() {
     const next = !dark;
     document.documentElement.classList.toggle("dark", next);
@@ -153,7 +176,7 @@ function SettingsPage() {
     await clearSession(); navigate({ to: "/" });
   }
 
-  const key = readSession()?.key ?? "";
+  const key = personalKey;
 
   return (
     <Screen>
@@ -285,12 +308,14 @@ function SettingsPage() {
         </Btn>}
 
         <RecoveryLinks partnerName={partner?.display_name ?? null} />
+        <DeviceCenter onKeyRotated={setPersonalKey} />
 
         <Btn variant="outline" className="w-full" onClick={toggleTheme}>Theme: {dark ? "Dark" : "Light"}</Btn>
         <div className="rounded-xl border border-border p-4 text-sm">
           <div className="text-muted-foreground">Your personal key can restore this profile. Store it somewhere private, away from shared chats.</div>
           {showKey ? <div className="mt-2 break-all font-mono text-xs">{key}</div> : <button className="mt-2 text-primary" onClick={() => setShowKey(true)}>Show my key</button>}
         </div>
+        <Btn variant="outline" className="w-full" onClick={()=>void exportMeals()}>Export my meals (CSV)</Btn>
         <Btn variant="outline" className="w-full" onClick={reset}>Reset this phone</Btn>
         <Btn variant="danger" className="w-full" onClick={leave}>Leave space</Btn>
       </div>
