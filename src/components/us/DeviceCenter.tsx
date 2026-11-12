@@ -32,7 +32,7 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
 
   async function rename(){
     const name=newName.trim();
-    if(name.length<2||name.length>40)return toast.error("Use 2–40 characters for the name.");
+    if(name.length<2||name.length>40){toast.error("Use 2–40 characters for the name.");return;}
     setBusy(true);
     try{
       await renameMyDevice({data:{label:name}});
