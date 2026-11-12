@@ -48,7 +48,7 @@ const MESSAGES: Record<string, string> = {
   ROOM_NOT_FOUND: "We couldn't find a space with that code.",
   INVALID_CODE: "That code doesn't look right. It should look like 7KQ4-M2PX.",
   INVALID_KEY: "That personal key doesn't match anyone in this space.",
-  ALREADY_IN_SPACE: "This phone is already part of a space. Reset it in Settings first.",
+  ALREADY_IN_SPACE: "This browser is already connected to a space. Open Today instead; we never erase your existing space to create a new one.",
   OFFLINE_OR_UNAVAILABLE: "We can't reach the server right now. Check your connection and try again.",
   INVALID_LINK: "That recovery link is invalid or already used. Ask for a fresh link in Settings.",
   NO_PARTNER: "Your partner has not joined this space yet.",

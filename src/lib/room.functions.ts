@@ -27,6 +27,7 @@ export function normalizeCode(raw: string) {
 }
 
 const nameSchema = z.string().trim().min(1).max(40);
+const deviceLabelSchema = z.string().trim().min(2).max(40).optional();
 const codeSchema = z.string().max(20);
 
 async function admin() {
@@ -42,8 +43,11 @@ async function deviceMemberId(db: Db, uid: string) {
   return data?.member_id ?? null;
 }
 
-async function addDevice(db: Db, memberId: string, uid: string) {
-  const { error } = await db.from("member_devices").insert({ member_id: memberId, auth_user_id: uid });
+async function addDevice(db: Db, memberId: string, uid: string, deviceLabel?: string) {
+  const { error } = await db.from("member_devices").insert({
+    member_id: memberId, auth_user_id: uid,
+    device_label: deviceLabel ?? null, last_seen_at: new Date().toISOString()
+  });
   if (error) throw new Error("SERVER_ERROR");
 }
 
@@ -84,9 +88,10 @@ export const createRejoinLink = createServerFn({ method: "POST" })
 
 export const linkDevice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { code: string; linkCode: string }) => ({
+  .inputValidator((i: { code: string; linkCode: string; deviceLabel?: string }) => ({
     code: codeSchema.parse(i.code),
     linkCode: z.string().trim().regex(/^[a-f0-9]{64}$/i).parse(i.linkCode).toLowerCase(),
+    deviceLabel: deviceLabelSchema.parse(i.deviceLabel),
   }))
   .handler(async ({ data, context }) => {
     const code = normalizeCode(data.code);
@@ -127,7 +132,8 @@ export const linkDevice = createServerFn({ method: "POST" })
       deviceId = device.id;
     } else {
       const { data: device, error } = await db.from("member_devices")
-        .insert({ member_id: match, auth_user_id: context.userId })
+        .insert({ member_id: match, auth_user_id: context.userId,
+          device_label: data.deviceLabel ?? null, last_seen_at: new Date().toISOString() })
         .select("id").single();
       if (error || !device) throw new Error("SERVER_ERROR");
       deviceId = device.id;
@@ -162,24 +168,15 @@ export const getRoomPreview = createServerFn({ method: "POST" })
 
 export const createRoom = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { name: string }) => ({ name: nameSchema.parse(i.name) }))
+  .inputValidator((i: { name: string; deviceLabel?: string }) => ({
+    name: nameSchema.parse(i.name), deviceLabel: deviceLabelSchema.parse(i.deviceLabel)
+  }))
   .handler(async ({ data, context }) => {
     const db = await admin();
     const existingId = await deviceMemberId(db, context.userId);
-    if (existingId) {
-      const { data: existingMember } = await db.from("members").select("id, room_id").eq("id", existingId).maybeSingle();
-      if (existingMember) {
-        const { count } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
-        if ((count ?? 0) <= 1) {
-          await db.from("members").delete().eq("id", existingMember.id);
-          const { count: rem } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
-          if ((rem ?? 0) === 0) await db.from("rooms").delete().eq("id", existingMember.room_id);
-        } else {
-          throw new Error("ALREADY_IN_SPACE");
-        }
-      }
-      await db.from("member_devices").delete().eq("auth_user_id", context.userId);
-    }
+    // Never destroy an existing single-member room when a returning user
+    // loses the local room marker and mistakenly taps Create.
+    if (existingId) throw new Error("ALREADY_IN_SPACE");
 
     let room: { id: string; room_code: string } | null = null;
     for (let i = 0; i < 5 && !room; i++) {
@@ -208,15 +205,16 @@ export const createRoom = createServerFn({ method: "POST" })
       await db.from("rooms").delete().eq("id", room.id);
       throw new Error("SERVER_ERROR");
     }
-    await addDevice(db, member.id, context.userId);
+    await addDevice(db, member.id, context.userId, data.deviceLabel);
     return { roomCode: room.room_code, memberId: member.id, key: token };
   });
 
 export const joinRoom = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { code: string; name: string }) => ({
+  .inputValidator((i: { code: string; name: string; deviceLabel?: string }) => ({
     code: codeSchema.parse(i.code),
     name: nameSchema.parse(i.name),
+    deviceLabel: deviceLabelSchema.parse(i.deviceLabel),
   }))
   .handler(async ({ data, context }) => {
     const code = normalizeCode(data.code);
@@ -232,16 +230,9 @@ export const joinRoom = createServerFn({ method: "POST" })
         if (existingMember.room_id === room.id) {
           return { roomCode: code, memberId: existingMember.id };
         }
-        const { count: memberCount } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
-        if ((memberCount ?? 0) <= 1) {
-          await db.from("members").delete().eq("id", existingMember.id);
-          const { count: rem } = await db.from("members").select("id", { count: "exact", head: true }).eq("room_id", existingMember.room_id);
-          if ((rem ?? 0) === 0) await db.from("rooms").delete().eq("id", existingMember.room_id);
-        } else {
-          throw new Error("ALREADY_IN_SPACE");
-        }
+        throw new Error("ALREADY_IN_SPACE");
       }
-      await db.from("member_devices").delete().eq("auth_user_id", context.userId);
+      throw new Error("ALREADY_IN_SPACE");
     }
 
     const { count } = await db
@@ -264,15 +255,16 @@ export const joinRoom = createServerFn({ method: "POST" })
       .single();
     // unique(room_id, seat) guards against two people racing for seat 2
     if (error || !member) throw new Error("ROOM_FULL");
-    await addDevice(db, member.id, context.userId);
+    await addDevice(db, member.id, context.userId, data.deviceLabel);
     return { roomCode: code, memberId: member.id, key: token };
   });
 
 export const rejoinRoom = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { code: string; key: string }) => ({
+  .inputValidator((i: { code: string; key: string; deviceLabel?: string }) => ({
     code: codeSchema.parse(i.code),
     key: z.string().trim().regex(/^[a-f0-9]{64}$/i).parse(i.key),
+    deviceLabel: deviceLabelSchema.parse(i.deviceLabel),
   }))
   .handler(async ({ data, context }) => {
     const code = normalizeCode(data.code);
@@ -289,22 +281,37 @@ export const rejoinRoom = createServerFn({ method: "POST" })
       .maybeSingle();
     if (legacyError) throw new Error("SERVER_ERROR");
     let memberId = legacy?.id ?? null;
+    let linkedDeviceId: string | null = null;
     if (!memberId) {
       // New device-specific recovery keys are separate from original member keys.
       const { data: record, error: keyError } = await db.from("member_recovery_keys")
-        .select("member_id").eq("token_hash", tokenHash).maybeSingle();
+        .select("member_id,device_id").eq("token_hash", tokenHash).maybeSingle();
       if (keyError) throw new Error("RECOVERY_STORAGE_UNAVAILABLE");
       if (record) {
         const { data: member, error: memberError } = await db.from("members")
           .select("id").eq("id", record.member_id).eq("room_id", room.id).maybeSingle();
         if (memberError) throw new Error("SERVER_ERROR");
         memberId = member?.id ?? null;
+        if (memberId) linkedDeviceId = record.device_id;
       }
     }
     if (!memberId) throw new Error("INVALID_KEY");
     const current = await deviceMemberId(db, context.userId);
     if (current && current !== memberId) throw new Error("ALREADY_IN_SPACE");
-    if (!current) await addDevice(db, memberId, context.userId);
+    if (!current) {
+      if (linkedDeviceId) {
+        // Recover the SAME device slot after an anonymous auth token was lost.
+        // Merely inserting a new row here produced many stale "devices".
+        const {data:rebound,error:rebindError}=await db.from("member_devices")
+          .update({auth_user_id:context.userId,last_seen_at:new Date().toISOString()})
+          .eq("id",linkedDeviceId).eq("member_id",memberId)
+          .select("id").maybeSingle();
+        if(rebindError||!rebound)throw new Error("RECOVERY_STORAGE_UNAVAILABLE");
+      } else {
+        // Original legacy member keys were not tied to any one device.
+        await addDevice(db,memberId,context.userId,data.deviceLabel);
+      }
+    }
     return { roomCode: code, memberId, key: data.key.toLowerCase() };
   });
 
