@@ -38,6 +38,11 @@ CREATE TABLE public.member_recovery_keys (
  token_hash text NOT NULL UNIQUE,
  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- 0013 already ran in production, so mirror its RLS configuration in this fixture.
+ALTER TABLE public.member_recovery_keys ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.member_recovery_keys FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.member_recovery_keys TO service_role;
+
 CREATE TABLE public.meals (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  room_id uuid NOT NULL REFERENCES public.rooms(id),
