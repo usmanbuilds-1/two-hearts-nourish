@@ -23,14 +23,13 @@ export async function compressImage(file: File, maxSide = 1024, quality = 0.78):
   }
 }
 
-/** Converts a compressed data URL to a blob and uploads to Supabase Storage.
- *  Returns the public CDN URL, or null if the upload fails (non-blocking). */
+/** Uploads to the private room bucket and returns the storage path, not a public URL. */
 export async function uploadMealPhoto(roomId: string, dataUrl: string): Promise<string | null> {
   try {
     const { supabase } = await import("@/integrations/supabase/client");
     const res  = await fetch(dataUrl);
     const blob = await res.blob();
-    const name = `${roomId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`;
+    const name = `${roomId}/${crypto.randomUUID()}.jpg`;
 
     const { error } = await supabase.storage
       .from("meal-photos")
@@ -38,8 +37,7 @@ export async function uploadMealPhoto(roomId: string, dataUrl: string): Promise<
 
     if (error) { console.error("Storage upload failed", error); return null; }
 
-    const { data } = supabase.storage.from("meal-photos").getPublicUrl(name);
-    return data.publicUrl;
+    return name;
   } catch (err) {
     console.error("Photo upload error", err);
     return null;

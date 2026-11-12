@@ -12,6 +12,7 @@ import {
   type MealFavorite,
 } from "@/lib/meal-operations.functions";
 import { useSpace } from "@/lib/space";
+import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
 import { cn } from "@/lib/utils";
 
 export type MealDraft = {
@@ -414,7 +415,7 @@ export function MealSheet({
               <div className="space-y-4">
                 {meal.photo_url && (
                   <div className="overflow-hidden rounded-2xl border border-border">
-                    <img src={meal.photo_url} alt={meal.food_name} className="h-48 w-full object-cover" />
+                    <PrivateMealPhoto stored={meal.photo_url} roomId={meal.room_id} alt={meal.food_name} className="h-48 w-full object-cover" />
                   </div>
                 )}
                 {meal.serving_description && <p className="text-muted-foreground">{meal.serving_description}</p>}

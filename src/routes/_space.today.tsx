@@ -15,6 +15,8 @@ import { BudgetPlanSheet } from "@/components/us/BudgetPlanSheet";
 import { dailyQuote } from "@/lib/quotes";
 import { WeightCard } from "@/components/us/WeightCard";
 import { Lightbox } from "@/components/us/Lightbox";
+import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
+import { signedMealPhotoUrl } from "@/lib/private-photo";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_space/today")({
@@ -156,15 +158,17 @@ function Today() {
                                 className="shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setLightbox({ src: m.photo_url!, caption: `${m.food_name} · ${fmt(m.calories)} kcal` });
+                                  void signedMealPhotoUrl(m.photo_url!, room.id).then((url) => {
+                                    if (url) setLightbox({ src: url, caption: `${m.food_name} · ${fmt(m.calories)} kcal` });
+                                    else toast.error("This photo is not available.");
+                                  });
                                 }}
                                 aria-label="View photo full screen"
                               >
-                                <img
-                                  src={m.photo_url}
-                                  alt=""
+                                <PrivateMealPhoto
+                                  stored={m.photo_url}
+                                  roomId={room.id}
                                   className="size-11 rounded-xl object-cover border border-border transition-opacity hover:opacity-90"
-                                  loading="lazy"
                                 />
                               </button>
                             ) : (
