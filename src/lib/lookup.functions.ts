@@ -139,6 +139,7 @@ export const lookupFood = createServerFn({ method: "POST" })
       .eq("auth_user_id", context.userId)
       .maybeSingle();
     if (!me) return { ok: false, error: "NOT_MEMBER" };
+    if (!process.env["GEMINI_API_KEY"]) return {ok:false,error:"AI_UNAVAILABLE"};
     // Token limits are enforced in Postgres across server instances.
     if (!(await claimAiQuota(me.member_id, "text"))) {
       return {ok:false,error:"AI_LIMIT"};
@@ -149,11 +150,11 @@ export const lookupFood = createServerFn({ method: "POST" })
     const geminiKey = process.env["GEMINI_API_KEY"];
 
     if (!geminiKey) return {ok:false,error:"AI_UNAVAILABLE"};
-      try {
+    try {
         text = await callGeminiDirect(geminiKey, SYSTEM, [
           { text: data.description },
         ]);
-      } catch (e) {
+    } catch (e) {
         const status = errorStatus(e);
         console.error("lookupFood (direct) failed", status, e);
         if (status === 429) return { ok: false, error: "AI_BUSY" };

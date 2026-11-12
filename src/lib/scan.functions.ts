@@ -154,6 +154,7 @@ export const analyzeFood = createServerFn({ method: "POST" })
       .eq("auth_user_id", context.userId)
       .maybeSingle();
     if (!me) return { ok: false, error: "NOT_MEMBER" };
+    if (!process.env["GEMINI_API_KEY"]) return {ok:false,error:"AI_UNAVAILABLE"};
     // Token limits are enforced in Postgres across server instances.
     if (!(await claimAiQuota(me.member_id, "scan"))) {
       return {ok:false,error:"AI_LIMIT"};
@@ -164,11 +165,15 @@ export const analyzeFood = createServerFn({ method: "POST" })
     const geminiKey = process.env["GEMINI_API_KEY"];
 
     if (!geminiKey) return {ok:false,error:"AI_UNAVAILABLE"};
-      try {
+    const match = data.image.match(/^data:(image\/[a-z]+);base64,(.+)$/s);
+    const mimeType = match?.[1];
+    const rawBase64 = match?.[2];
+    if (!mimeType || !rawBase64) return {ok:false,error:"INVALID_IMAGE"};
+    try {
         text = await callGeminiDirect(geminiKey, SYSTEM, [
           { inline_data: { mime_type: mimeType, data: rawBase64 } },
         ]);
-      } catch (e) {
+    } catch (e) {
         const status = errorStatus(e);
         console.error("analyzeFood (direct) failed", status, e);
         if (status === 429) return { ok: false, error: "AI_BUSY" };
