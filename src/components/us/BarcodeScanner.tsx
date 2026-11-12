@@ -91,7 +91,7 @@ export function BarcodeScanner({onSelect}:{
       <Btn variant="outline" className="w-full" onClick={()=>cameraOn?stopCamera():void startCamera()}>
         {cameraOn?"Stop camera":"Try camera scanner"}
       </Btn>
-      {cameraOn&&<video ref={videoRef} muted playsInline autoPlay className="max-h-48 w-full rounded-xl bg-black object-cover"/>}
+      <video ref={videoRef} muted playsInline autoPlay className={cameraOn ? "max-h-48 w-full rounded-xl bg-black object-cover" : "hidden"} />
       <form className="flex gap-2" onSubmit={e=>{
         e.preventDefault();
         if(/^\d{8,14}$/.test(code))void find(code);

@@ -8,8 +8,7 @@ const fields = "code,product_name,brands,nutriments,serving_size";
 type Result = { ok:true; foods:PackagedFood[] } | { ok:false; error:"NOT_FOUND"|"UPSTREAM_UNAVAILABLE"|"RATE_LIMIT"|"NOT_MEMBER" };
 const cache = new Map<string,{at:number;foods:PackagedFood[]}>();
 const requests = new Map<string,{reset:number;count:number}>();
-const UA = process.env["OPEN_FOOD_FACTS_USER_AGENT"] ??
-  "TwoHeartsNourish/1.0 (https://github.com/usmanbuilds-1/two-hearts-nourish)";
+const DEFAULT_UA = "TwoHeartsNourish/1.0 (https://github.com/usmanbuilds-1/two-hearts-nourish)";
 
 function quota(id:string, kind:"search"|"barcode"):boolean {
   const key = id+":"+kind;
@@ -34,7 +33,7 @@ async function authorizedMember(uid:string):Promise<boolean> {
 
 async function offFetch(path:string):Promise<unknown> {
   const response=await fetch(API+path,{
-    headers:{"User-Agent":UA,"Accept":"application/json"},
+    headers:{"User-Agent":process.env["OPEN_FOOD_FACTS_USER_AGENT"] ?? DEFAULT_UA,"Accept":"application/json"},
     signal:AbortSignal.timeout(8000),
   });
   if(response.status===429||response.status===503)throw new Error("RATE_LIMIT");

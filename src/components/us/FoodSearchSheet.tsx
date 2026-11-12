@@ -52,8 +52,8 @@ export function FoodSearchSheet({
         </DrawerHeader>
         <div className="space-y-3 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <div className="grid grid-cols-2 gap-2">
-            <Btn variant={mode==="name"?"default":"outline"} onClick={()=>setMode("name")}>Search name</Btn>
-            <Btn variant={mode==="barcode"?"default":"outline"} onClick={()=>setMode("barcode")}>Barcode</Btn>
+            <Btn variant={mode==="name"?"primary":"outline"} onClick={()=>setMode("name")}>Search name</Btn>
+            <Btn variant={mode==="barcode"?"primary":"outline"} onClick={()=>setMode("barcode")}>Barcode</Btn>
           </div>
           {mode==="barcode"?(
             <BarcodeScanner onSelect={choose}/>
