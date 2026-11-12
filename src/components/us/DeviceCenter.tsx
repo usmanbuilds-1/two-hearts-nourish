@@ -49,7 +49,7 @@ export function DeviceCenter({ onKeyRotated }: {onKeyRotated: (key:string)=>void
       : "Replace all recovery keys for YOUR profile? Other devices remain signed in but cannot recover with their old keys. Save the replacement key.";
     if(!window.confirm(explanation))return;
     const existing=readSession();
-    if(!existing)return toast.error("No local session found. Don't remove this browser's data.");
+    if(!existing){toast.error("No local session found. Don't remove this browser's data.");return;}
     setBusy(true);
     try {
       const {key}=await rotateMyRecoveryKeys({data:targetId?{revokeDeviceId:targetId}:{}});
