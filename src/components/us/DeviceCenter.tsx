@@ -158,8 +158,8 @@ export function DeviceCenter({onKeyRotated}:{onKeyRotated:(key:string)=>void}) {
                   </p>
                   <div>{older.map(d=>deviceRow(d))}</div>
                   <Btn variant="outline" className="w-full" disabled={busy}
-                    onClick={()=>void rotate(undefined,older.map(d=>d.id))}>
-                    Remove these {older.length} sign-ins
+                    onClick={()=>void rotate(undefined,older.slice(0,50).map(d=>d.id))}>
+                    Remove {Math.min(older.length,50)} of these sign-ins
                   </Btn>
                 </>
               )}
@@ -167,8 +167,8 @@ export function DeviceCenter({onKeyRotated}:{onKeyRotated:(key:string)=>void}) {
           )}
           {devices.length>1&&(
             <Btn variant="outline" className="w-full" disabled={busy}
-              onClick={()=>void rotate(undefined,devices.filter(d=>!d.current).map(d=>d.id))}>
-              Remove all other sign-ins
+              onClick={()=>void rotate(undefined,devices.filter(d=>!d.current).slice(0,50).map(d=>d.id))}>
+              {devices.length>51?"Remove 50 other sign-ins":"Remove all other sign-ins"}
             </Btn>
           )}
         </>

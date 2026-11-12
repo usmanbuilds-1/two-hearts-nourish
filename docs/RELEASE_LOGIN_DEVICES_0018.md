@@ -25,10 +25,12 @@ SELECT
   to_regprocedure('public.rotate_member_recovery_many(uuid,text,uuid[])') IS NOT NULL AS bulk_cleanup_exists,
   has_function_privilege('authenticated','public.rotate_member_recovery_many(uuid,text,uuid[])','EXECUTE') AS browser_can_bulk_cleanup,
   has_function_privilege('service_role','public.rotate_member_recovery_many(uuid,text,uuid[])','EXECUTE') AS server_can_bulk_cleanup,
+  has_function_privilege('authenticated','public.rebind_member_device(uuid,uuid,uuid,boolean)','EXECUTE') AS browser_can_rebind_anyone,
+  has_function_privilege('service_role','public.rebind_member_device(uuid,uuid,uuid,boolean)','EXECUTE') AS server_can_rebind,
   (SELECT public FROM storage.buckets WHERE id='meal-photos') AS meal_photos_public;
 ```
 
-Expected: true, false, true, false. Check the correct Supabase project.
+Expected: true, false, true, false, true, false. Check the correct Supabase project.
 
 5. Merge PR only once CI succeeds and production migration is applied; publish the updated frontend AND TanStack server immediately after merge.
 6. Smoke test on two real browsers: returning with intact session, missing local room marker, lost anonymous auth but saved private key, one-use link to new device, partner rejoin, and rejoin after token loss. Confirm same key rebind does not increase device count.
