@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { recoveryBinding } from "@/lib/device-recovery-policy";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 chars → unbiased mod
 
@@ -297,9 +298,9 @@ export const rejoinRoom = createServerFn({ method: "POST" })
     }
     if (!memberId) throw new Error("INVALID_KEY");
     const current = await deviceMemberId(db, context.userId);
-    if (current && current !== memberId) throw new Error("ALREADY_IN_SPACE");
-    if (!current) {
-      if (linkedDeviceId) {
+    const binding=recoveryBinding(current,memberId,linkedDeviceId);
+    if (binding !== "existing") {
+      if (binding === "rebind" && linkedDeviceId) {
         // Recover the SAME device slot after an anonymous auth token was lost.
         // Merely inserting a new row here produced many stale "devices".
         const {data:rebound,error:rebindError}=await db.from("member_devices")
