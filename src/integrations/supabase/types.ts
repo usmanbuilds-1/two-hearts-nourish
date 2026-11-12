@@ -204,6 +204,35 @@ export type Database = {
           },
         ]
       }
+      member_recovery_keys: {
+        Row: {
+          id: string
+          member_id: string
+          token_hash: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          member_id: string
+          token_hash: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          member_id?: string
+          token_hash?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_recovery_keys_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_devices: {
         Row: {
           auth_user_id: string

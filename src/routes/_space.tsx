@@ -1,24 +1,13 @@
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { BookOpen, CalendarDays, Heart, Settings, Sun, WifiOff } from "lucide-react";
-import { SpaceProvider, loadSpace, useSpace } from "@/lib/space";
-import { supabase } from "@/integrations/supabase/client";
-import { readSession, clearSession } from "@/lib/session";
+import { SpaceProvider, useSpace } from "@/lib/space";
+import { loadSpaceEntry } from "@/lib/space-entry";
 
 export const Route = createFileRoute("/_space")({
   ssr: false,
   component: SpaceLayout,
-  loader: async () => {
-    const session = readSession();
-    if (!session) return null;
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) return null;
-    try {
-      return await loadSpace(data.user.id);
-    } catch {
-      return null;
-    }
-  },
+  loader: loadSpaceEntry,
 });
 
 const NAV = [
@@ -29,19 +18,68 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-function SpaceLayout() {
-  const data = Route.useLoaderData();
-  const navigate = useNavigate();
+type FailedEntry = Exclude<Awaited<ReturnType<typeof loadSpaceEntry>>, { kind: "ready" }>;
+
+function ReconnectScreen({ entry }: { entry: FailedEntry }) {
+  const router = useRouter();
+  const needsReconnect = entry.kind === "retry";
+  const savedCode = entry.kind !== "new" ? entry.roomCode : null;
 
   useEffect(() => {
-    if (!data) {
-      void clearSession().finally(() => navigate({ to: "/", replace: true }));
-    }
-  }, [data, navigate]);
+    if (!needsReconnect) return;
+    const retry = () => { void router.invalidate(); };
+    const whenVisible = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", whenVisible);
+    return () => {
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", whenVisible);
+    };
+  }, [needsReconnect, router]);
 
-  if (!data) return null;
+  const heading = needsReconnect
+    ? "Reconnecting to our space"
+    : entry.kind === "recover" ? "Let's get you back in" : "Welcome to your space";
+  const description = needsReconnect
+    ? "Your connection isn't ready yet. Nothing has been signed out or erased. Please try again."
+    : entry.kind === "recover"
+      ? "This phone needs to reconnect securely. Your shared meals are still on the server. Use your personal key or ask your partner to open Settings → Come back to us and send you a private link."
+      : "This browser doesn't have a saved connection yet. Use your invitation to join or create a space.";
+
   return (
-    <SpaceProvider initial={data}>
+    <main className="flex min-h-[100dvh] items-center justify-center bg-background px-6 py-12 text-foreground">
+      <div className="w-full max-w-md">
+        <div className="mb-4 text-sm tracking-wide text-muted-foreground">us.</div>
+        <h1 className="font-display text-3xl leading-tight">{heading}</h1>
+        <p className="mt-3 leading-relaxed text-muted-foreground">{description}</p>
+        {needsReconnect && (
+          <button type="button" onClick={() => void router.invalidate()}
+            className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-6 font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            Try again
+          </button>
+        )}
+        {savedCode ? (
+          <Link to="/r/$code" params={{ code: savedCode }}
+            className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-input px-5 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            Rejoin with a personal key or device link
+          </Link>
+        ) : (
+          <Link to="/" className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-5 text-primary-foreground">
+            Open invitations
+          </Link>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function SpaceLayout() {
+  const entry = Route.useLoaderData();
+  if (entry.kind !== "ready") return <ReconnectScreen entry={entry} />;
+  return (
+    <SpaceProvider initial={entry.space}>
       <InnerLayout />
     </SpaceProvider>
   );

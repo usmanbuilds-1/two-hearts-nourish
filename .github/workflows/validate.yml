@@ -1,0 +1,29 @@
+name: Test and build
+on:
+  push:
+    branches:
+      - "fix/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Unit tests
+        run: bun run test
+      - name: Typecheck (advisory until baseline is clean)
+        run: bun x tsc --noEmit
+        continue-on-error: true
+      - name: Lint (advisory, pre-existing 1496-error baseline)
+        run: bun run lint
+        continue-on-error: true
+      - name: Production build
+        run: bun run build
