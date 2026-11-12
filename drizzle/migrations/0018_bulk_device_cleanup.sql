@@ -66,7 +66,7 @@ CREATE OR REPLACE FUNCTION public.rebind_member_device(
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, pg_temp
-AS $
+AS $device_rebind$
 DECLARE
   v_old_auth uuid;
 BEGIN
@@ -85,7 +85,7 @@ BEGIN
   END IF;
   RETURN true;
 END;
-$;
+$device_rebind$;
 REVOKE ALL ON FUNCTION public.rebind_member_device(uuid,uuid,uuid,boolean)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rebind_member_device(uuid,uuid,uuid,boolean)
