@@ -481,7 +481,7 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
       // Fallback: dinner dominance
       if (!observation) {
         const dinnerCal = curMeals
-          .filter(m => (m as any).meal_type === "dinner")
+          .filter(m => m.meal_type === "dinner")
           .reduce((a, m) => a + m.calories, 0);
         if (totCal > 0) {
           const dinnerPct = Math.round((dinnerCal / totCal) * 100);
