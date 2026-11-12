@@ -14,6 +14,23 @@ describe("quick meal suggestions",()=>{
     const newest=meal({id:"newer",meal_date:"2026-11-13",created_at:"2026-11-13T13:00:00Z"});
     expect(quickMealSuggestions([older,newest],"me","2026-11-13").latest?.id).toBe("newer");
   });
+  it("prefers the day eaten over the timestamp of a backfilled diary entry",()=>{
+    const yesterday=meal({id:"yesterday",meal_date:"2026-11-12",created_at:"2026-11-12T06:00:00Z"});
+    const backfilled=meal({id:"backfill",meal_date:"2026-11-01",created_at:"2026-11-13T20:00:00Z"});
+    const result=quickMealSuggestions([backfilled,yesterday],"me","2026-11-13");
+    expect(result.latest?.id).toBe("yesterday");
+    expect(result.recents[0]?.id).toBe("yesterday");
+  });
+  it("makes single-logged portions reusable without waiting for a second log",()=>{
+    const result=quickMealSuggestions([meal({id:"first",meal_date:"2026-11-12"})],"me","2026-11-13");
+    expect(result.usuals).toHaveLength(0);
+    expect(result.suggested.map(x=>x.id)).toEqual(["first"]);
+  });
+  it("does not advertise an eight-day-old meal as fresh",()=>{
+    const result=quickMealSuggestions([meal({meal_date:"2026-11-05"})],"me","2026-11-13");
+    expect(result.latest).toBeNull();
+  });
+
   it("never offers someone else's meals, planned food or future food",()=>{
     const picks=quickMealSuggestions([
       meal({id:"partner",member_id:"partner"}),
