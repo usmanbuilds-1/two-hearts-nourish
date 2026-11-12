@@ -89,14 +89,14 @@ export const getWeightAnalytics = createServerFn({ method: "POST" })
 
     const fromDate = calendarDaysAgo(data.clientDate, 90);
 
-    const { data } = await db
+    const { data: weightRows } = await db
       .from("weight_logs")
       .select("logged_date, weight_kg")
       .eq("member_id", memberId)
       .gte("logged_date", fromDate)
       .order("logged_date", { ascending: true });
 
-    const entries: WeightEntry[] = (data ?? []).map((e) => ({
+    const entries: WeightEntry[] = (weightRows ?? []).map((e) => ({
       logged_date: e.logged_date as string,
       weight_kg:  Number(e.weight_kg),
     }));
