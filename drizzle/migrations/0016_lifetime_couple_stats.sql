@@ -1,6 +1,9 @@
 -- Calculate lifetime couple metrics without sending the entire meal history to phones.
 -- Only the authenticated server's service_role may call this RPC.
 BEGIN;
+ALTER TABLE public.meals ADD COLUMN IF NOT EXISTS is_planned boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS meals_planned_idx
+  ON public.meals (member_id,meal_date,is_planned);
 CREATE OR REPLACE FUNCTION public.room_activity_rollup(
   p_room_id uuid, p_today date
 ) RETURNS jsonb
