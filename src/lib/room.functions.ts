@@ -276,13 +276,22 @@ export const rejoinRoom = createServerFn({ method: "POST" })
     const tokenHash = await sha256(data.key.toLowerCase());
     const { data: legacy, error: legacyError } = await db
       .from("members")
-      .select("id")
+      .select("id,auth_user_id")
       .eq("room_id", room.id)
       .eq("participant_token_hash", tokenHash)
       .maybeSingle();
     if (legacyError) throw new Error("SERVER_ERROR");
     let memberId = legacy?.id ?? null;
     let linkedDeviceId: string | null = null;
+    if(memberId && legacy?.auth_user_id){
+      // The original personal key is also tied to the founding/joining
+      // browser via the member's primary auth pointer.
+      const {data:original,error:originalError}=await db.from("member_devices")
+        .select("id").eq("member_id",memberId)
+        .eq("auth_user_id",legacy.auth_user_id).maybeSingle();
+      if(originalError)throw new Error("SERVER_ERROR");
+      linkedDeviceId=original?.id??null;
+    }
     if (!memberId) {
       // New device-specific recovery keys are separate from original member keys.
       const { data: record, error: keyError } = await db.from("member_recovery_keys")
@@ -303,10 +312,12 @@ export const rejoinRoom = createServerFn({ method: "POST" })
       if (binding === "rebind" && linkedDeviceId) {
         // Recover the SAME device slot after an anonymous auth token was lost.
         // Merely inserting a new row here produced many stale "devices".
-        const {data:rebound,error:rebindError}=await db.from("member_devices")
-          .update({auth_user_id:context.userId,last_seen_at:new Date().toISOString()})
-          .eq("id",linkedDeviceId).eq("member_id",memberId)
-          .select("id").maybeSingle();
+        const {data:rebound,error:rebindError}=await db.rpc("rebind_member_device",{
+          p_member_id:memberId,
+          p_device_id:linkedDeviceId,
+          p_new_auth_user_id:context.userId,
+          p_update_primary:Boolean(legacy)
+        });
         if(rebindError||!rebound)throw new Error("RECOVERY_STORAGE_UNAVAILABLE");
       } else {
         // Original legacy member keys were not tied to any one device.

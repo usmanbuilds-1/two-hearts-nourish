@@ -55,4 +55,39 @@ REVOKE ALL ON FUNCTION public.rotate_member_recovery_many(uuid,text,uuid[])
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rotate_member_recovery_many(uuid,text,uuid[])
   TO service_role;
+-- Server-only transaction: move a recovery-key-bound session back onto its
+-- original device record, preserving the same device count and (if requested)
+-- updating the primary member auth pointer for the original personal key.
+CREATE OR REPLACE FUNCTION public.rebind_member_device(
+  p_member_id uuid,
+  p_device_id uuid,
+  p_new_auth_user_id uuid,
+  p_update_primary boolean DEFAULT false
+) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $
+DECLARE
+  v_old_auth uuid;
+BEGIN
+  SELECT auth_user_id INTO v_old_auth
+    FROM public.member_devices
+    WHERE id=p_device_id AND member_id=p_member_id
+    FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'DEVICE_NOT_FOUND'; END IF;
+  UPDATE public.member_devices
+    SET auth_user_id=p_new_auth_user_id, last_seen_at=now()
+    WHERE id=p_device_id AND member_id=p_member_id;
+  IF p_update_primary THEN
+    UPDATE public.members
+      SET auth_user_id=p_new_auth_user_id
+      WHERE id=p_member_id AND auth_user_id=v_old_auth;
+  END IF;
+  RETURN true;
+END;
+$;
+REVOKE ALL ON FUNCTION public.rebind_member_device(uuid,uuid,uuid,boolean)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rebind_member_device(uuid,uuid,uuid,boolean)
+  TO service_role;
 COMMIT;

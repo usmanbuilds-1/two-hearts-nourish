@@ -22,6 +22,8 @@ BEGIN
     THEN RAISE EXCEPTION 'Device rotation exposed'; END IF;
   IF has_function_privilege('authenticated','public.rotate_member_recovery_many(uuid,text,uuid[])','EXECUTE')
     THEN RAISE EXCEPTION 'Bulk revocation exposed'; END IF;
+  IF has_function_privilege('authenticated','public.rebind_member_device(uuid,uuid,uuid,boolean)','EXECUTE')
+    THEN RAISE EXCEPTION 'Device rebinding exposed'; END IF;
   IF has_function_privilege('authenticated','public.room_activity_rollup(uuid,date)','EXECUTE')
     THEN RAISE EXCEPTION 'Room stats exposed'; END IF;
   IF has_function_privilege('authenticated','public.claim_ai_request(uuid,text,integer)','EXECUTE')
@@ -55,6 +57,18 @@ BEGIN
   SELECT public.claim_ai_request(member_a,'scan',2) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'Quota exceeded'; END IF;
 
+  -- Device-specific login recovery must move an existing slot, not insert a row.
+  UPDATE public.members SET auth_user_id=actor WHERE id=member_a;
+  SELECT public.rebind_member_device(
+    member_a,device_a,'44444444-4444-4444-8444-444444444444',true
+  ) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Rebind failed'; END IF;
+  IF (SELECT auth_user_id FROM public.members WHERE id=member_a)
+     <> '44444444-4444-4444-8444-444444444444'::uuid
+    THEN RAISE EXCEPTION 'Original auth pointer not rebound'; END IF;
+  IF (SELECT count(*) FROM public.member_devices WHERE member_id=member_a)<>2
+    THEN RAISE EXCEPTION 'Rebind created a duplicate device'; END IF;
+  SELECT public.rebind_member_device(member_a,device_a,actor,true) INTO succeeded;
   SELECT public.rotate_member_recovery(actor,repeat('d',64),device_b) INTO succeeded;
   IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Rotation failed'; END IF;
   IF EXISTS(SELECT 1 FROM public.member_devices WHERE id=device_b)
