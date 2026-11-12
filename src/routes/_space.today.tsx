@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { quickMealSuggestions, mealSignature } from "@/lib/quick-meals";
+import { getQuickMeals } from "@/lib/meal-operations.functions";
+import { QuickMealsSheet } from "@/components/us/QuickMealsSheet";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Plus, Star, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
-import { MEAL_TYPES, addDays, coupleStats, fmt, greeting, totals, usMessages, type Meal, type Member } from "@/lib/nutrition";
+import { MEAL_TYPES, addDays, coupleStats, fmt, totals, type Meal, type Member } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet, draftFromMeal } from "@/components/us/MealSheet";
 import {
@@ -13,7 +16,7 @@ import {
 } from "@/lib/meal-operations.functions";
 import { ScanSheet } from "@/components/us/ScanSheet";
 import { BudgetPlanSheet } from "@/components/us/BudgetPlanSheet";
-import { dailyQuote } from "@/lib/quotes";
+
 import { WeightCard } from "@/components/us/WeightCard";
 import { Lightbox } from "@/components/us/Lightbox";
 import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
@@ -50,7 +53,8 @@ function PersonCard({ label, member, meals, partner }: { label: string; member: 
 function Today() {
   const { me, partner, meals, today, room, fresh, upsertLocal } = useSpace();
   const [scan, setScan] = useState(false);
-  const [repeating, setRepeating] = useState(false);
+  const [repeatId, setRepeatId] = useState<string | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
   const [sheet, setSheet] = useState<{ open: boolean; meal: Meal | null }>({ open: false, meal: null });
   const [budget, setBudget] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
@@ -86,18 +90,33 @@ function Today() {
     }
   }
 
-  const lastMine = useMemo(() => meals
-    .filter(m=>m.member_id===me.id&&!m.is_planned&&m.meal_date<today)
-    .sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]??null,[meals,me.id,today]);
-  async function repeatLast() {
-    if(!lastMine||repeating)return;
-    setRepeating(true);
+  const quick = useQuery<Meal[]>({
+    queryKey:["quick-meals",me.id,today],
+    queryFn:()=>getQuickMeals({data:{clientDate:today}}),
+    refetchOnMount:"always",
+    refetchOnWindowFocus:true,
+    staleTime:0,
+  });
+  const quickPicks = useMemo(()=>
+    quickMealSuggestions(quick.data??[],me.id,today),
+    [quick.data,me.id,today]
+  );
+  const shownUsuals=quickPicks.usuals.filter(p=>
+    !quickPicks.latest||mealSignature(p.meal)!==mealSignature(quickPicks.latest)
+  ).slice(0,2);
+
+  async function repeatMeal(meal:Meal) {
+    if(repeatId)return;
+    setRepeatId(meal.id);
     try {
-      const result=await copyMealToDay({data:{mealId:lastMine.id,targetDate:today}});
+      const result=await copyMealToDay({data:{mealId:meal.id,targetDate:today}});
       upsertLocal(result.meal);
-      toast.success("Meal added to today");
-    }catch{toast.error("Couldn't repeat that meal.");}
-    finally{setRepeating(false);}
+      await qc.invalidateQueries({queryKey:["quick-meals",me.id]});
+      toast.success(`${meal.food_name} added using the same portion`);
+      setQuickOpen(false);
+    }catch{
+      toast.error("Couldn't repeat that meal. Check your connection and try again.");
+    }finally{setRepeatId(null);}
   }
   const todays = useMemo(() => meals.filter((m) => m.meal_date === today), [meals, today]);
   const mine = todays.filter((m) => m.member_id === me.id && !m.is_planned);
@@ -109,24 +128,29 @@ function Today() {
     staleTime:120_000,
   });
   const sharedStreak=lifetime?.streak??stats.streak;
-  const y = addDays(today, -1);
-  const msgs = usMessages({ me, partner, todayMine: mine, todayTheirs: theirs, yesterdayBoth: stats.bothDays.has(y), yesterdayBothProtein: stats.bothProteinDays.has(y), streak: sharedStreak });
+  const bothLoggedToday = stats.bothDays.has(today);
 
   return (
     <Screen>
-      <h1 className="text-3xl leading-tight">{greeting()}, {me.display_name} ❤️</h1>
-      <div className="mt-1 text-muted-foreground">You & {partner?.display_name ?? "your partner (invite pending)"}</div>
-
-      {/* Streak badge */}
-      {sharedStreak >= 2 && (
-        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
-          🔥 Day {sharedStreak} streak together!
+      <header className="border-b border-border pb-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Two hearts, one table</p>
+        <h1 className="mt-2 font-display text-4xl font-normal leading-tight tracking-tight">Today, together.</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{me.display_name}</span>
+          <span aria-hidden="true" className="text-primary">♡</span>
+          <span className="font-medium text-foreground">{partner?.display_name ?? "Your person"}</span>
         </div>
-      )}
-
-      <p className="mt-3 text-sm text-foreground/80">{msgs[0]}</p>
-      {room.couple_message && <p className="mt-2 font-display text-sm italic text-muted-foreground md:hidden">"{room.couple_message}"</p>}
-      <p className="mt-2 font-display text-sm italic text-muted-foreground">✨ {dailyQuote()}</p>
+        {room.couple_message ? (
+          <p className="mt-3 font-display text-base italic text-foreground/80">“{room.couple_message}”</p>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {bothLoggedToday?"You've both added to today's little food story.":"Your everyday meals, remembered for you."}
+          </p>
+        )}
+        {sharedStreak >= 2 && (
+          <p className="mt-2 text-xs text-primary">{sharedStreak} days of logging together</p>
+        )}
+      </header>
 
       <div className="mt-6 grid grid-cols-2 gap-3">
         <PersonCard label="You" member={me} meals={mine} />
@@ -145,11 +169,6 @@ function Today() {
         </div>
       )}
 
-      {/* Weight log — always visible, self-contained */}
-      <div className="mt-4">
-        <WeightCard />
-      </div>
-
       <div className="mt-4 grid grid-cols-3 gap-2">
         <Btn size="lg" onClick={() => setScan(true)}><Camera className="size-4" /> Scan</Btn>
         <Btn size="lg" variant="outline" onClick={() => setSheet({ open: true, meal: null })}><Plus className="size-4" /> Add</Btn>
@@ -159,18 +178,58 @@ function Today() {
         }}><Wallet className="size-4" /> Plan</Btn>
       </div>
 
-      {lastMine&&(
-        <button type="button" onClick={()=>void repeatLast()} disabled={repeating}
-          className="mt-3 min-h-11 w-full text-left text-sm text-primary disabled:opacity-50">
-          {repeating?"Adding…":`Repeat my last meal: ${lastMine.food_name}`}
-        </button>
-      )}
-
-      <section className="mt-8">
-        <Eyebrow>Us today ❤️</Eyebrow>
-        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">{msgs.slice(1).map((m) => <li key={m}>{m}</li>)}</ul>
+      <section className="mt-6" aria-label="Quick meal logging">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-2xl font-normal">Meals you know by heart</h2>
+          <button type="button" onClick={()=>setQuickOpen(true)}
+            className="min-h-11 shrink-0 text-sm font-medium text-primary focus-visible:ring-2 focus-visible:ring-ring">
+            See all
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Log your own favourite portions again, without re-entering the numbers.
+        </p>
+        {quick.isFetching ? (
+          <p className="mt-4 text-sm text-muted-foreground" role="status">Checking your latest meals…</p>
+        ) : quick.isError ? (
+          <div className="mt-4 flex items-center justify-between gap-2 border-t border-border py-3">
+            <p className="text-sm text-muted-foreground">Couldn't refresh your meals.</p>
+            <Btn variant="outline" onClick={()=>void quick.refetch()}>Retry</Btn>
+          </div>
+        ) : quickPicks.latest || shownUsuals.length>0 ? (
+          <div className="mt-3 divide-y divide-border border-t border-border">
+            {quickPicks.latest&&(
+              <div className="flex items-center gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">Most recently logged · {quickPicks.latest.meal_date===today?"Today":quickPicks.latest.meal_date}</p>
+                  <p className="mt-0.5 truncate text-sm font-medium">{quickPicks.latest.food_name}</p>
+                  <p className="text-xs text-muted-foreground">{quickPicks.latest.serving_description?quickPicks.latest.serving_description+" · ":""}{fmt(quickPicks.latest.calories)} kcal</p>
+                </div>
+                <Btn variant="outline" disabled={Boolean(repeatId)} onClick={()=>void repeatMeal(quickPicks.latest!)}>
+                  {repeatId===quickPicks.latest.id?"Adding…":"Log again"}
+                </Btn>
+              </div>
+            )}
+            {shownUsuals.map(({meal,times})=>(
+              <div key={meal.id} className="flex items-center gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">{times} times with this portion</p>
+                  <p className="mt-0.5 truncate text-sm font-medium">{meal.food_name}</p>
+                  <p className="text-xs text-muted-foreground">{meal.serving_description?meal.serving_description+" · ":""}{fmt(meal.calories)} kcal</p>
+                </div>
+                <Btn variant="outline" disabled={Boolean(repeatId)} onClick={()=>void repeatMeal(meal)}>
+                  {repeatId===meal.id?"Adding…":"Log"}
+                </Btn>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <button type="button" onClick={()=>setQuickOpen(true)}
+            className="mt-3 min-h-11 w-full border-t border-border py-3 text-left text-sm text-primary">
+            Browse your recently eaten and saved foods
+          </button>
+        )}
       </section>
-
       <section className="mt-8">
         <h2 className="text-xl">Today's little food story</h2>
         {todays.length === 0 ? (
@@ -244,6 +303,9 @@ function Today() {
         )}
       </section>
 
+      <div className="mt-7"><WeightCard /></div>
+      <QuickMealsSheet open={quickOpen} onOpenChange={setQuickOpen} meals={quick.data??[]}
+        memberId={me.id} today={today} onCopy={repeatMeal} busyId={repeatId} />
       {lightbox && <Lightbox src={lightbox.src} caption={lightbox.caption} onClose={() => setLightbox(null)} />}
       <ScanSheet open={scan} onOpenChange={setScan} onManual={() => setSheet({ open: true, meal: null })} />
       <MealSheet open={sheet.open} meal={sheet.meal} onOpenChange={(o) => setSheet((s) => ({ ...s, open: o }))} />
