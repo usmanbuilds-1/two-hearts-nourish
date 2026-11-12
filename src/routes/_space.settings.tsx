@@ -6,6 +6,7 @@ import { useSpace } from "@/lib/space";
 import { clearSession, inviteUrl, readSession } from "@/lib/session";
 import { leaveRoom } from "@/lib/room.functions";
 import { RecoveryLinks } from "@/components/us/RecoveryLinks";
+import { DeviceCenter } from "@/components/us/DeviceCenter";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
@@ -36,6 +37,7 @@ function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [dark, setDark] = useState(true);
   const [showKey, setShowKey] = useState(false);
+  const [personalKey, setPersonalKey] = useState(() => readSession()?.key ?? "");
 
   // Health calculator
   const [showCalc, setShowCalc] = useState(false);
@@ -154,7 +156,7 @@ function SettingsPage() {
     await clearSession(); navigate({ to: "/" });
   }
 
-  const key = readSession()?.key ?? "";
+  const key = personalKey;
 
   return (
     <Screen>
@@ -286,6 +288,7 @@ function SettingsPage() {
         </Btn>}
 
         <RecoveryLinks partnerName={partner?.display_name ?? null} />
+        <DeviceCenter onKeyRotated={setPersonalKey} />
 
         <Btn variant="outline" className="w-full" onClick={toggleTheme}>Theme: {dark ? "Dark" : "Light"}</Btn>
         <div className="rounded-xl border border-border p-4 text-sm">
