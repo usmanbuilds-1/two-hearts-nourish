@@ -210,18 +210,21 @@ export type Database = {
           member_id: string
           token_hash: string
           created_at: string
+          device_id: string | null
         }
         Insert: {
           id?: string
           member_id: string
           token_hash: string
           created_at?: string
+          device_id?: string | null
         }
         Update: {
           id?: string
           member_id?: string
           token_hash?: string
           created_at?: string
+          device_id?: string | null
         }
         Relationships: [
           {
@@ -239,18 +242,24 @@ export type Database = {
           created_at: string
           id: string
           member_id: string
+          device_label: string | null
+          last_seen_at: string | null
         }
         Insert: {
           auth_user_id: string
           created_at?: string
           id?: string
           member_id: string
+          device_label?: string | null
+          last_seen_at?: string | null
         }
         Update: {
           auth_user_id?: string
           created_at?: string
           id?: string
           member_id?: string
+          device_label?: string | null
+          last_seen_at?: string | null
         }
         Relationships: [
           {
@@ -481,6 +490,10 @@ export type Database = {
     Functions: {
       my_member_id: { Args: never; Returns: string }
       my_room_id: { Args: never; Returns: string }
+      rotate_member_recovery: {
+        Args: { p_actor_auth_user_id: string; p_replacement_hash: string; p_revoke_device_id?: string | null };
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

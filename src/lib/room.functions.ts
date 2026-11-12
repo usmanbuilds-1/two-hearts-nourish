@@ -123,14 +123,6 @@ export const linkDevice = createServerFn({ method: "POST" })
     const current = await deviceMemberId(db, context.userId);
     if (current && current !== match) throw new Error("ALREADY_IN_SPACE");
 
-    // Allocate a unique durable recovery key for this newly linked device.
-    // This keeps the original member key and all other device keys valid.
-    const newKey = randomToken();
-    const tokenHash = await sha256(newKey);
-    const { error: keyError } = await db.from("member_recovery_keys")
-      .insert({ member_id: match, token_hash: tokenHash });
-    if (keyError) throw new Error("RECOVERY_STORAGE_UNAVAILABLE");
-
     // Conditional consume: concurrent attempts cannot both redeem a link.
     const claimHash = await sha256(`${match}:${data.linkCode}`);
     const { data: claimed, error: claimError } = await db.from("members")
@@ -140,16 +132,25 @@ export const linkDevice = createServerFn({ method: "POST" })
       .gt("link_code_expires_at", now)
       .select("id")
       .maybeSingle();
-    if (claimError || !claimed) {
-      await db.from("member_recovery_keys").delete().eq("token_hash", tokenHash);
-      throw new Error(claimError ? "SERVER_ERROR" : "INVALID_LINK");
+    if (claimError || !claimed) throw new Error(claimError ? "SERVER_ERROR" : "INVALID_LINK");
+    // Attach each newly generated recovery key to the exact phone mapping.
+    let deviceId: string;
+    if (current) {
+      const { data: device, error } = await db.from("member_devices")
+        .select("id").eq("auth_user_id", context.userId).single();
+      if (error || !device) throw new Error("SERVER_ERROR");
+      deviceId = device.id;
+    } else {
+      const { data: device, error } = await db.from("member_devices")
+        .insert({ member_id: match, auth_user_id: context.userId })
+        .select("id").single();
+      if (error || !device) throw new Error("SERVER_ERROR");
+      deviceId = device.id;
     }
-    try {
-      if (!current) await addDevice(db, match, context.userId);
-    } catch (error) {
-      await db.from("member_recovery_keys").delete().eq("token_hash", tokenHash);
-      throw error;
-    }
+    const newKey = randomToken();
+    const { error: keyError } = await db.from("member_recovery_keys")
+      .insert({ member_id: match, device_id: deviceId, token_hash: await sha256(newKey) });
+    if (keyError) throw new Error("RECOVERY_STORAGE_UNAVAILABLE");
     return { roomCode: code, memberId: match, key: newKey };
   });
 
