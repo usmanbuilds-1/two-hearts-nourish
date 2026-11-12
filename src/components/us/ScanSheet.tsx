@@ -12,6 +12,8 @@ type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
 
 const ERRORS: Record<string, string> = {
   AI_BUSY: "Lots of people are scanning right now. Give it a moment and try again.",
+  AI_LIMIT: "Daily AI scan allowance reached. You can still log meals manually.",
+  AI_QUOTA_UNAVAILABLE: "AI budget checks are unavailable. Please try again later.",
   AI_CREDITS: "Photo scanning is paused for now (AI usage limit reached). You can still add meals by hand.",
   NOT_MEMBER: "Your session expired. Please reopen your invite link.",
 };
@@ -113,7 +115,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "An estimate from your photo — adjust anything before saving." : "Your photo is saved so your partner can see your plate 👀"}
+            {stage === "confirm" ? "An estimate from your photo — adjust anything before saving." : "The photo is sent to Gemini for estimation. It is stored privately only when you save the meal."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (

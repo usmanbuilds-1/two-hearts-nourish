@@ -236,6 +236,12 @@ export type Database = {
           },
         ]
       }
+      ai_usage_daily: {
+        Row: { member_id: string; usage_date: string; scan_requests: number; text_requests: number }
+        Insert: { member_id: string; usage_date?: string; scan_requests?: number; text_requests?: number }
+        Update: { member_id?: string; usage_date?: string; scan_requests?: number; text_requests?: number }
+        Relationships: []
+      }
       member_devices: {
         Row: {
           auth_user_id: string
@@ -490,6 +496,7 @@ export type Database = {
     Functions: {
       my_member_id: { Args: never; Returns: string }
       my_room_id: { Args: never; Returns: string }
+      claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
       room_activity_rollup: { Args: { p_room_id: string; p_today: string }; Returns: Json }
       rotate_member_recovery: {
         Args: { p_actor_auth_user_id: string; p_replacement_hash: string; p_revoke_device_id?: string | null };
