@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Meal, MealType } from "@/lib/nutrition";
 import { addDays, adherencePct, adherenceLabel } from "@/lib/nutrition";
+import { mealCopyFields } from "@/lib/meal-copy";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -193,27 +194,7 @@ export const copyMealToDay = createServerFn({ method: "POST" })
     if (fetchError || !meal) throw new Error("MEAL_NOT_FOUND");
     const { data: newMeal, error: insertError } = await db
       .from("meals")
-      .insert({
-        room_id: meal.room_id,
-        member_id: meal.member_id,
-        food_name: meal.food_name,
-        serving_description: meal.serving_description,
-        calories: meal.calories,
-        protein: meal.protein,
-        carbs: meal.carbs,
-        fat: meal.fat,
-        meal_type: meal.meal_type,
-        meal_date: data.targetDate,
-        ai_confidence: meal.ai_confidence,
-        // Preserve exact serving proportions from the source snapshot.
-        portion_percentage: meal.portion_percentage ?? 100,
-        nominal_calories: meal.nominal_calories ?? null,
-        nominal_protein: meal.nominal_protein ?? null,
-        nominal_carbs: meal.nominal_carbs ?? null,
-        nominal_fat: meal.nominal_fat ?? null,
-        is_planned: meal.is_planned ?? false,
-        // A historical photo is not a photograph of the new serving.
-      })
+      .insert(mealCopyFields(meal as Meal, data.targetDate))
       .select()
       .single();
     if (insertError || !newMeal) throw new Error("COPY_FAILED");
@@ -236,19 +217,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
       .eq("member_id", memberId)
       .eq("meal_date", data.sourceDate);
     if (fetchError || !sourceMeals) throw new Error("SOURCE_NOT_FOUND");
-    const newMeals = sourceMeals.map((m) => ({
-      room_id: m.room_id,
-      member_id: m.member_id,
-      food_name: m.food_name,
-      serving_description: m.serving_description,
-      calories: m.calories,
-      protein: m.protein,
-      carbs: m.carbs,
-      fat: m.fat,
-      meal_type: m.meal_type as MealType,
-      meal_date: data.targetDate,
-      ai_confidence: m.ai_confidence,
-    }));
+    const newMeals = sourceMeals.map((m) => mealCopyFields(m as Meal,data.targetDate));
     const { data: inserted, error: insertError } = await db.from("meals").insert(newMeals).select();
     if (insertError || !inserted) throw new Error("COPY_FAILED");
     return { ok: true, count: inserted.length };
