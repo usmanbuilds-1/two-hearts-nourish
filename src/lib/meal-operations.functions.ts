@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import type { Meal, MealType } from "@/lib/nutrition";
 import { addDays, adherencePct, adherenceLabel } from "@/lib/nutrition";
+import { mealCopyFields } from "@/lib/meal-copy";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -140,6 +141,30 @@ export const removeFavoriteMeal = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** A bounded, fresh snapshot for quick-logging one member's recent and repeated foods.
+ *  Never read partner meals; this endpoint is entirely scoped to the authenticated device.
+ */
+export const getQuickMeals = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i:{clientDate:string})=>({
+    clientDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
+  }))
+  .handler(async ({data,context}):Promise<Meal[]>=>{
+    const db=await admin();
+    const memberId=await deviceMemberId(db,context.userId);
+    if(!memberId)throw new Error("NOT_MEMBER");
+    const {data:rows,error}=await db.from("meals")
+      .select("*")
+      .eq("member_id",memberId)
+      .eq("is_planned",false)
+      .gte("meal_date",addDays(data.clientDate,-120))
+      .lte("meal_date",data.clientDate)
+      .order("created_at",{ascending:false})
+      .limit(240);
+    if(error)throw new Error("QUICK_MEALS_UNAVAILABLE");
+    return (rows??[]) as Meal[];
+  });
+
 export const getRecentMeals = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Meal[]> => {
@@ -169,19 +194,7 @@ export const copyMealToDay = createServerFn({ method: "POST" })
     if (fetchError || !meal) throw new Error("MEAL_NOT_FOUND");
     const { data: newMeal, error: insertError } = await db
       .from("meals")
-      .insert({
-        room_id: meal.room_id,
-        member_id: meal.member_id,
-        food_name: meal.food_name,
-        serving_description: meal.serving_description,
-        calories: meal.calories,
-        protein: meal.protein,
-        carbs: meal.carbs,
-        fat: meal.fat,
-        meal_type: meal.meal_type,
-        meal_date: data.targetDate,
-        ai_confidence: meal.ai_confidence,
-      })
+      .insert(mealCopyFields(meal as Meal, data.targetDate))
       .select()
       .single();
     if (insertError || !newMeal) throw new Error("COPY_FAILED");
@@ -204,19 +217,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
       .eq("member_id", memberId)
       .eq("meal_date", data.sourceDate);
     if (fetchError || !sourceMeals) throw new Error("SOURCE_NOT_FOUND");
-    const newMeals = sourceMeals.map((m) => ({
-      room_id: m.room_id,
-      member_id: m.member_id,
-      food_name: m.food_name,
-      serving_description: m.serving_description,
-      calories: m.calories,
-      protein: m.protein,
-      carbs: m.carbs,
-      fat: m.fat,
-      meal_type: m.meal_type as MealType,
-      meal_date: data.targetDate,
-      ai_confidence: m.ai_confidence,
-    }));
+    const newMeals = sourceMeals.map((m) => mealCopyFields(m as Meal,data.targetDate));
     const { data: inserted, error: insertError } = await db.from("meals").insert(newMeals).select();
     if (insertError || !inserted) throw new Error("COPY_FAILED");
     return { ok: true, count: inserted.length };

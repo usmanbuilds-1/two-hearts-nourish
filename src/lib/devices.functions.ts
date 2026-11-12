@@ -31,12 +31,12 @@ export const listMyDevices = createServerFn({method:"POST"})
   .handler(async ({data,context}):Promise<KnownDevice[]>=>{
     const db=await admin();
     const {data:current,error:memberError}=await db.from("member_devices")
-      .select("id,member_id").eq("auth_user_id",context.userId).maybeSingle();
+      .select("id,member_id,device_label").eq("auth_user_id",context.userId).maybeSingle();
     if(memberError)throw new Error("SERVER_ERROR");
     if(!current)throw new Error("NOT_MEMBER");
     const now=new Date().toISOString();
     const {error:touchError}=await db.from("member_devices").update({
-      last_seen_at:now,...(data.currentLabel?{device_label:data.currentLabel}:{})
+      last_seen_at:now,...(!current.device_label && data.currentLabel?{device_label:data.currentLabel}:{})
     }).eq("id",current.id);
     if(touchError)throw new Error("SERVER_ERROR");
     const {data:devices,error}=await db.from("member_devices")
@@ -44,7 +44,7 @@ export const listMyDevices = createServerFn({method:"POST"})
       .order("created_at",{ascending:false});
     if(error)throw new Error("SERVER_ERROR");
     return (devices??[]).map(d=>({
-      id:d.id,label:d.device_label??"Unnamed device",current:d.id===current.id,
+      id:d.id,label:d.device_label??(d.id===current.id?"This browser":"Earlier sign-in"),current:d.id===current.id,
       createdAt:d.created_at,lastSeenAt:d.last_seen_at
     }));
   });
@@ -64,4 +64,23 @@ export const rotateMyRecoveryKeys = createServerFn({method:"POST"})
     });
     if(error||!ok)throw new Error("RECOVERY_ROTATION_FAILED");
     return {key};
+  });
+
+
+/** Rename only the caller's own device. This changes a display label, not an identity. */
+export const renameMyDevice = createServerFn({method:"POST"})
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i:{label:string})=>({
+    label:z.string().trim().min(2).max(40).parse(i.label)
+  }))
+  .handler(async ({data,context})=>{
+    const db=await admin();
+    const {data:row,error}=await db.from("member_devices")
+      .update({device_label:data.label})
+      .eq("auth_user_id",context.userId)
+      .select("id")
+      .maybeSingle();
+    if(error)throw new Error("SERVER_ERROR");
+    if(!row)throw new Error("NOT_MEMBER");
+    return {ok:true};
   });
