@@ -75,9 +75,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { name: "theme-color", content: "#FAF0E5" },
+      { name: "theme-color", content: "#121110" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { title: "Us — eat well together" },
       { name: "description", content: "A private space for two to track meals, macros and habits together." },
       { property: "og:title", content: "Us — eat well together" },
@@ -103,11 +103,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
-const themeScript = `try{var t=localStorage.getItem('us.theme');document.documentElement.classList.toggle('dark',t==='dark')}catch(e){}`;
+const themeScript = `try{var t=localStorage.getItem('us.theme');if(t==='light')document.documentElement.classList.remove('dark')}catch(e){}`;
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

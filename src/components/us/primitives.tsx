@@ -14,10 +14,10 @@ export const Btn = forwardRef<HTMLButtonElement, BtnProps>(function Btn(
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-[transform,opacity,background-color,border-color] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        size === "lg" ? "min-h-[52px] px-5 text-base" : "min-h-11 px-4 text-sm",
+        "inline-flex items-center justify-center gap-2 rounded-full font-medium transition-[transform,opacity,background-color] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        size === "lg" ? "h-13 px-6 text-base min-h-[52px]" : "h-11 px-5 text-sm",
         variant === "primary" && "bg-primary text-primary-foreground hover:opacity-90",
-        variant === "outline" && "border border-input bg-card/40 text-foreground hover:bg-secondary",
+        variant === "outline" && "border border-input bg-transparent text-foreground hover:bg-secondary",
         variant === "ghost" && "text-foreground hover:bg-secondary",
         variant === "danger" && "border border-destructive/40 text-destructive hover:bg-destructive/10",
         className,
@@ -54,7 +54,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 
 export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("text-xs font-semibold tracking-[0.04em] text-muted-foreground", className)}>
+    <div className={cn("text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground", className)}>
       {children}
     </div>
   );
@@ -62,7 +62,7 @@ export function Eyebrow({ children, className }: { children: ReactNode; classNam
 
 export function Screen({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("mx-auto w-full max-w-xl px-4 pb-32 pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6 md:pb-16 md:pt-10", className)}>
+    <div className={cn("mx-auto w-full max-w-xl px-5 pb-32 pt-[max(1.5rem,env(safe-area-inset-top))] md:pb-16 md:pt-10", className)}>
       {children}
     </div>
   );

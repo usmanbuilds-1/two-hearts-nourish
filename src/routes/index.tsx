@@ -125,7 +125,8 @@ function Onboarding() {
           </div>
         ):mode==="welcome"?(
           <div className="animate-arrive">
-            <h1 className="font-display text-4xl leading-tight">There's room for both of you.</h1>
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">A private space for two</p>
+            <h1 className="mt-3 font-display text-4xl leading-tight">There's room for both of you.</h1>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">
               Your meals, your familiar routines, and the little things you build together.
             </p>

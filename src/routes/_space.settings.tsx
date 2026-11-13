@@ -8,7 +8,7 @@ import { leaveRoom } from "@/lib/room.functions";
 import { RecoveryLinks } from "@/components/us/RecoveryLinks";
 import { DeviceCenter } from "@/components/us/DeviceCenter";
 import { exportMyMealsCsv } from "@/lib/export-meals.functions";
-import { Btn, Field, Screen, TextInput } from "@/components/us/primitives";
+import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
@@ -180,13 +180,12 @@ function SettingsPage() {
 
   return (
     <Screen>
-      <h1 className="font-display text-[2rem] font-normal">Settings</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Your preferences, your shared space, your access.</p>
+      <h1 className="text-3xl">Settings</h1>
       <div className="mt-6 space-y-4">
         <Field label="My name"><TextInput value={f.name} onChange={set("name")} maxLength={40} /></Field>
         <Field label="Partner name" hint="Your partner sets their own name."><TextInput value={partner?.display_name ?? "Not joined yet"} disabled /></Field>
 
-        <h2 className="border-t border-border pt-6 font-display text-xl">Daily targets</h2>
+        <Eyebrow className="pt-2">My daily targets</Eyebrow>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Calories"><TextInput inputMode="numeric" value={f.kcal} onChange={set("kcal")} placeholder="—" /></Field>
           <Field label="Protein (g)"><TextInput inputMode="decimal" value={f.p} onChange={set("p")} placeholder="—" /></Field>
@@ -196,7 +195,7 @@ function SettingsPage() {
 
         {/* Health calculator collapsible */}
         <Btn variant="outline" className="w-full" onClick={() => setShowCalc((v) => !v)}>
-          {showCalc ? "Hide calculator" : "Calculate my targets"}
+          {showCalc ? "Hide" : "Calculate my targets"} 🧮
         </Btn>
         {showCalc && (
           <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
@@ -216,7 +215,7 @@ function SettingsPage() {
               <div className="grid grid-cols-2 gap-2">
                 {(["male", "female"] as const).map((s) => (
                   <button key={s} type="button" onClick={() => setCalc({ ...calc, sex: s })}
-                    className={`min-h-11 rounded-xl border px-3 py-2 text-sm capitalize transition-colors ${calc.sex === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                    className={`rounded-xl border px-3 py-2 text-sm capitalize transition-colors ${calc.sex === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
                     {s}
                   </button>
                 ))}
@@ -227,7 +226,7 @@ function SettingsPage() {
               <div className="grid grid-cols-3 gap-2">
                 {(["lose", "maintain", "gain"] as const).map((g) => (
                   <button key={g} type="button" onClick={() => setCalc({ ...calc, goal: g })}
-                    className={`min-h-11 rounded-xl border px-2 py-2 text-sm capitalize transition-colors ${calc.goal === g ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                    className={`rounded-xl border px-2 py-2 text-sm capitalize transition-colors ${calc.goal === g ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
                     {g}
                   </button>
                 ))}
@@ -263,12 +262,11 @@ function SettingsPage() {
         )}
 
         {/* Weight log */}
-        <h2 className="border-t border-border pt-6 font-display text-xl">Weight log</h2>
+        <Eyebrow className="pt-2">Weight log</Eyebrow>
         <div className="flex gap-2">
           <TextInput
             inputMode="decimal"
             className="flex-1"
-            aria-label="Current weight in kilograms"
             placeholder={me.weight_kg ? String(me.weight_kg) : "kg"}
             value={weightInput}
             onChange={(e) => setWeightInput(e.target.value)}
@@ -296,15 +294,15 @@ function SettingsPage() {
           </p>
         )}
 
-        <h2 className="border-t border-border pt-6 font-display text-xl">Our space</h2>
+        <Eyebrow className="pt-2">Us</Eyebrow>
         <Field label="Shared goal"><TextInput value={f.goal} onChange={set("goal")} placeholder="Eat better together" maxLength={120} /></Field>
-        <Field label="Custom couple message"><TextInput value={f.msg} onChange={set("msg")} placeholder="A little care, every day." maxLength={160} /></Field>
+        <Field label="Custom couple message"><TextInput value={f.msg} onChange={set("msg")} placeholder="Getting healthier together, one meal at a time ❤️" maxLength={160} /></Field>
         <Field label="Together since (optional)"><TextInput type="date" value={f.since} onChange={set("since")} /></Field>
         <Btn size="lg" className="w-full" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Btn>
       </div>
 
       <div className="mt-10 space-y-3">
-        <h2 className="font-display text-xl">Privacy and access</h2>
+        <Eyebrow>Space</Eyebrow>
         {!partner && <Btn variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(inviteUrl(room.room_code)).then(() => toast.success("Invite link copied"), () => toast.error("Couldn't copy"))}>
           Invite your partner to join · {room.room_code}
         </Btn>}
