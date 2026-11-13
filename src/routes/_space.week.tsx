@@ -193,11 +193,11 @@ function WeekView() {
   return (
     <Screen>
       {/* Tab bar — 4 cols */}
-      <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary p-1 mb-5">
+      <div role="group" aria-label="Progress views" className="mb-6 grid grid-cols-4 gap-1 border-b border-border">
         {TABS.map(({ key, label }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={cn("rounded-lg py-2 text-[13px] font-medium transition-colors",
-              tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>
+          <button key={key} type="button" aria-pressed={tab===key} onClick={() => setTab(key)}
+            className={cn("min-h-11 border-b-2 border-transparent px-1 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              tab === key ? "border-primary text-primary" : "text-muted-foreground hover:text-foreground")}>
             {label}
           </button>
         ))}
@@ -207,9 +207,9 @@ function WeekView() {
       {tab === "week" && (
         <div className="space-y-5">
           <div>
-            <h1 className="text-3xl">Our Week ❤️</h1>
+            <h1 className="font-display text-[2rem] font-normal">Our week</h1>
             <p className="mt-1 text-muted-foreground">
-              {both} of 7 days you showed up for each other{both === 7 ? " — a perfect week 🌟" : " 💕"}
+              {both} of 7 days with meals logged by both of you.
             </p>
           </div>
 
@@ -339,11 +339,11 @@ function WeekView() {
 
           {/* ── Weekly Synergy Card ── */}
           <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            <Eyebrow>Weekly Synergy 💕</Eyebrow>
+            <h2 className="font-display text-xl">A little more context</h2>
             <div className="space-y-2.5 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Days logged together</span>
-                <span className="num font-semibold">{both} / 7{both >= 5 ? " 💕" : ""}</span>
+                <span className="num font-semibold">{both} / 7{both >= 5 ? "" : ""}</span>
               </div>
               {partner && a1.kcal > 0 && a2.kcal > 0 && (
                 <div className="flex items-center justify-between">
@@ -453,7 +453,7 @@ function WeekView() {
       {tab === "history" && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-2xl font-bold">Our Journey Together 💕</h2>
+            <h2 className="font-display text-[1.375rem] font-normal">Days we both logged</h2>
             <p className="mt-1 text-sm text-muted-foreground">Tap any day to revisit what you shared.</p>
           </div>
           <div className="grid grid-cols-6 gap-1.5">
@@ -470,7 +470,7 @@ function WeekView() {
             })}
           </div>
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" />Both on track 💕</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" />Both on track</span>
             <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-partner" />One of you</span>
             <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-border" />Rest day 🌙</span>
           </div>
