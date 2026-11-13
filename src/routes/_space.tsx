@@ -122,17 +122,17 @@ function InnerLayout() {
           <WifiOff className="size-3.5" /> Offline — saved changes require a connection. Reopen to refresh after reconnecting.
         </div>
       )}
-      <main className="flex-1 overflow-y-auto pb-24">
+      <main id="app-main" className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95"
+      <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <div className="mx-auto grid max-w-lg grid-cols-5">
           {NAV.map(({ to, label, icon: Icon }) => {
             const isActive = active === to || active.startsWith(to + "/");
             return (
-              <Link key={to} to={to}
-                className={`flex flex-col items-center gap-1 py-3 text-[11px] font-medium transition-colors ${
+              <Link key={to} to={to} aria-current={isActive?"page":undefined}
+                className={`flex min-h-16 flex-col items-center justify-center gap-1 px-1 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring ${
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}>
                 <Icon className="size-5" strokeWidth={isActive ? 2.5 : 1.8} />

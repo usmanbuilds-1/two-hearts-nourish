@@ -68,67 +68,67 @@
 
 :root {
   --radius: 0.75rem;
-  /* Linen / warm ink / muted rose / sage. All semantic tokens in OKLCH. */
-  --background: oklch(0.967 0.010 78);
-  --foreground: oklch(0.245 0.015 45);
-  --card: oklch(0.992 0.004 77);
-  --card-foreground: oklch(0.245 0.015 45);
-  --popover: oklch(0.992 0.004 77);
-  --popover-foreground: oklch(0.245 0.015 45);
-  --primary: oklch(0.515 0.070 24);
-  --primary-foreground: oklch(0.992 0.005 77);
-  --secondary: oklch(0.928 0.015 74);
+  /* Terracotta / linen / walnut / olive. All semantic tokens in OKLCH. */
+  --background: oklch(0.961 0.019 73);
+  --foreground: oklch(0.236 0.018 45);
+  --card: oklch(0.992 0.006 75);
+  --card-foreground: oklch(0.236 0.018 45);
+  --popover: oklch(0.992 0.006 75);
+  --popover-foreground: oklch(0.236 0.018 45);
+  --primary: oklch(0.488 0.097 36);
+  --primary-foreground: oklch(0.994 0.004 74);
+  --secondary: oklch(0.921 0.025 71);
   --secondary-foreground: oklch(0.30 0.020 45);
   --muted: oklch(0.938 0.011 70);
-  --muted-foreground: oklch(0.47 0.020 55);
-  --accent: oklch(0.925 0.025 32);
+  --muted-foreground: oklch(0.434 0.025 53);
+  --accent: oklch(0.905 0.036 50);
   --accent-foreground: oklch(0.34 0.045 25);
-  --partner: oklch(0.49 0.045 145);
+  --partner: oklch(0.452 0.055 131);
   --partner-foreground: oklch(0.99 0.004 77);
   --success: oklch(0.53 0.075 145);
   --destructive: oklch(0.55 0.17 27);
   --destructive-foreground: oklch(0.99 0.004 77);
-  --border: oklch(0.860 0.017 72);
-  --input: oklch(0.855 0.017 72);
-  --ring: oklch(0.515 0.070 24);
+  --border: oklch(0.853 0.025 70);
+  --input: oklch(0.853 0.025 70);
+  --ring: oklch(0.488 0.097 36);
   --chart-1: oklch(0.515 0.070 24);
   --chart-2: oklch(0.49 0.045 145);
   --chart-3: oklch(0.65 0.050 70);
   --chart-4: oklch(0.68 0.040 18);
   --chart-5: oklch(0.52 0.035 48);
   --sidebar: oklch(0.95 0.010 75);
-  --sidebar-foreground: oklch(0.245 0.015 45);
-  --sidebar-primary: oklch(0.515 0.070 24);
+  --sidebar-foreground: oklch(0.236 0.018 45);
+  --sidebar-primary: oklch(0.488 0.097 36);
   --sidebar-primary-foreground: oklch(0.99 0.005 77);
   --sidebar-accent: oklch(0.925 0.025 32);
   --sidebar-accent-foreground: oklch(0.34 0.045 25);
-  --sidebar-border: oklch(0.860 0.017 72);
-  --sidebar-ring: oklch(0.515 0.070 24);
+  --sidebar-border: oklch(0.853 0.025 70);
+  --sidebar-ring: oklch(0.488 0.097 36);
 }
 
 .dark {
-  --background: oklch(0.205 0.014 43);
+  --background: oklch(0.203 0.017 47);
   --foreground: oklch(0.947 0.010 74);
-  --card: oklch(0.243 0.014 43);
+  --card: oklch(0.247 0.015 48);
   --card-foreground: oklch(0.947 0.010 74);
   --popover: oklch(0.252 0.012 46);
   --popover-foreground: oklch(0.947 0.010 74);
-  --primary: oklch(0.760 0.074 26);
+  --primary: oklch(0.775 0.084 44);
   --primary-foreground: oklch(0.19 0.014 43);
-  --secondary: oklch(0.289 0.013 50);
+  --secondary: oklch(0.287 0.018 51);
   --secondary-foreground: oklch(0.930 0.010 72);
   --muted: oklch(0.287 0.010 49);
   --muted-foreground: oklch(0.755 0.015 70);
   --accent: oklch(0.335 0.030 30);
   --accent-foreground: oklch(0.947 0.010 74);
-  --partner: oklch(0.773 0.055 145);
+  --partner: oklch(0.765 0.055 133);
   --partner-foreground: oklch(0.20 0.013 43);
   --success: oklch(0.773 0.055 145);
   --destructive: oklch(0.685 0.140 25);
   --destructive-foreground: oklch(0.98 0.008 75);
   --border: oklch(0.94 0.010 70 / 14%);
   --input: oklch(0.94 0.010 70 / 20%);
-  --ring: oklch(0.760 0.074 26);
+  --ring: oklch(0.775 0.084 44);
   --chart-1: oklch(0.760 0.074 26);
   --chart-2: oklch(0.773 0.055 145);
   --chart-3: oklch(0.78 0.05 70);
@@ -177,4 +177,31 @@
 .today-ritual h1,
 .today-ritual h2 {
   text-wrap: balance;
+}
+
+
+/* Impeccable product polish: quieter surfaces, visible focus and native/browser details.
+ * All interactive controls still use standard button / input semantics. */
+@layer base {
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+  body { text-rendering: optimizeLegibility; }
+  ::selection { background: var(--accent); color: var(--accent-foreground); }
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+  }
+  :where(button, a) { touch-action: manipulation; }
+  :where(input, textarea) { caret-color: var(--primary); }
+}
+
+.today-ritual .ritual-section-title {
+  font-size: 1.375rem;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  font-weight: 450;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .today-ritual :is(button,a) { transition-duration: 0ms; }
 }
