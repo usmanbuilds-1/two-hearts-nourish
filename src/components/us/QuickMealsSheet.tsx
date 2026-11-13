@@ -14,17 +14,17 @@ import { cn } from "@/lib/utils";
 type Tab = "saved" | "recent";
 
 export function QuickMealsSheet({
-  open,onOpenChange,meals,memberId,today,onCopy,busyId,historyPending,historyError,onRetryHistory
+  open,onOpenChange,meals,memberId,today,onCopy,busyId,initialTab,historyPending,historyError,onRetryHistory
 }:{
   open:boolean;onOpenChange:(open:boolean)=>void;meals:Meal[];memberId:string;today:string;
   onCopy:(meal:Meal)=>Promise<void>;busyId:string|null;
-  historyPending:boolean;historyError:boolean;onRetryHistory:()=>void;
+  initialTab:Tab;historyPending:boolean;historyError:boolean;onRetryHistory:()=>void;
 }) {
   const [tab,setTab]=useState<Tab>("saved");
   const [busy,setBusy]=useState<string|null>(null);
   const save=useSaveMeal();
   const qc=useQueryClient();
-  useEffect(()=>{if(open)setTab("saved");},[open]);
+  useEffect(()=>{if(open)setTab(initialTab);},[open,initialTab]);
   const {data:favorites=[],isPending,isError,refetch}=useQuery<MealFavorite[]>({
     queryKey:["meal-favorites",memberId],
     queryFn:()=>getFavoriteMeals(),

@@ -58,6 +58,7 @@ function Today() {
   const [favoriteLogId, setFavoriteLogId] = useState<string | null>(null);
   const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [quickInitialTab,setQuickInitialTab]=useState<"saved"|"recent">("saved");
   const [sheet, setSheet] = useState<{ open: boolean; meal: Meal | null }>({ open: false, meal: null });
   const [budget, setBudget] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
@@ -194,7 +195,10 @@ function Today() {
         loading={favoritesPending}
         error={favoritesError}
         onRetry={()=>void refetchFavorites()}
-        onViewAll={()=>setQuickOpen(true)}
+        onViewAll={()=>{
+          setQuickInitialTab(favsData.length?"saved":"recent");
+          setQuickOpen(true);
+        }}
         onLog={logFavorite}
         busyId={favoriteLogId}
       />
@@ -279,7 +283,7 @@ function Today() {
       <div className="mt-7"><WeightCard /></div>
       <QuickMealsSheet open={quickOpen} onOpenChange={setQuickOpen} meals={quick.data??[]}
         memberId={me.id} today={today} onCopy={repeatMeal} busyId={repeatId}
-        historyPending={quick.isPending} historyError={quick.isError}
+        initialTab={quickInitialTab} historyPending={quick.isPending} historyError={quick.isError}
         onRetryHistory={()=>void quick.refetch()} />
       {lightbox && <Lightbox src={lightbox.src} caption={lightbox.caption} onClose={() => setLightbox(null)} />}
       <ScanSheet open={scan} onOpenChange={setScan} onManual={() => setSheet({ open: true, meal: null })} />
