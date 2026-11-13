@@ -16,6 +16,7 @@ import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
 import { FoodSearchSheet } from "./FoodSearchSheet";
 import type { PackagedFood } from "@/lib/off-food";
 import { cn } from "@/lib/utils";
+import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
 
 export type MealDraft = {
   food_name: string;
@@ -355,28 +356,44 @@ export function useSaveMeal() {
   };
 }
 
-function FavStarBtn({ meal }: { meal: Meal | null }) {
-  const qc = useQueryClient();
-  if (!meal) return null;
+function FavStarBtn({ meal,memberId }: { meal: Meal;memberId:string }) {
+  const qc=useQueryClient();
+  const [busy,setBusy]=useState(false);
+  const {data:favorites=[],isPending,isError}=useQuery<MealFavorite[]>({
+    queryKey:["meal-favorites",memberId],
+    queryFn:()=>getFavoriteMeals(),
+  });
+  const existing=findSavedFood(favorites,meal);
+  const marked=isSavedPortion(existing,meal);
+  async function toggle() {
+    if(busy||isPending||isError)return;
+    setBusy(true);
+    try{
+      if(marked&&existing) {
+        await removeFavoriteMeal({data:{foodName:existing.food_name}});
+        toast("Removed from favourites");
+      }else{
+        await saveFavoriteMeal({data:{
+          foodName:existing?.food_name??meal.food_name,
+          servingDescription:meal.serving_description??"",
+          calories:meal.calories,
+          protein:Number(meal.protein),
+          carbs:Number(meal.carbs),
+          fat:Number(meal.fat),
+        }});
+        toast.success(existing?"Saved portion updated":"Added to favourites");
+      }
+      await qc.invalidateQueries({queryKey:["meal-favorites",memberId]});
+    }catch{toast.error("Couldn't update favourites. Try again.");}
+    finally{setBusy(false);}
+  }
   return (
-    <Btn
-      size="lg"
-      variant="outline"
-      aria-label="Save to favourites"
-      onClick={async () => {
-        await saveFavoriteMeal({ data: {
-          foodName:           meal.food_name,
-          servingDescription: meal.serving_description ?? "",
-          calories:           meal.calories,
-          protein:            Number(meal.protein),
-          carbs:              Number(meal.carbs),
-          fat:                Number(meal.fat),
-        }}).catch(() => {});
-        qc.invalidateQueries({ queryKey: ["meal-favorites"] });
-        toast.success("Saved to favourites ⭐");
-      }}
-    >
-      <Star className="size-4" />
+    <Btn size="lg" variant="outline" disabled={busy||isPending||isError}
+      aria-pressed={marked}
+      aria-label={marked?"Remove from favourites":existing?"Save this portion as favourite":"Add to favourites"}
+      onClick={()=>void toggle()}>
+      <Star className={cn("size-4",marked&&"fill-primary text-primary")} aria-hidden="true"/>
+      <span className="sr-only">{marked?"Saved":"Favourite"}</span>
     </Btn>
   );
 }
@@ -395,6 +412,8 @@ export function MealSheet({
   const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [saveAsFavourite,setSaveAsFavourite]=useState(false);
+  const qc=useQueryClient();
   const mine = !meal || meal.member_id === me.id;
   const owner = meal ? members.find((m) => m.id === meal.member_id) : me;
 
@@ -402,6 +421,7 @@ export function MealSheet({
     if (open) {
       setDraft(meal ? draftFromMeal(meal) : emptyDraft());
       setEditing(!meal);
+      setSaveAsFavourite(false);
     }
   }, [open, meal]);
 
@@ -409,8 +429,25 @@ export function MealSheet({
     if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
     setBusy(true);
     try {
-      await save(draft, meal ?? undefined);
-      toast.success(meal ? "Meal updated" : "Added ❤️");
+      const saved=await save(draft,meal??undefined);
+      if(!meal&&saveAsFavourite) {
+        try{
+          await saveFavoriteMeal({data:{
+            foodName:saved.food_name,
+            servingDescription:saved.serving_description??"",
+            calories:saved.calories,
+            protein:Number(saved.protein),
+            carbs:Number(saved.carbs),
+            fat:Number(saved.fat),
+          }});
+          await qc.invalidateQueries({queryKey:["meal-favorites",me.id]});
+          toast.success("Meal logged and saved to favourites");
+        }catch{
+          toast.error("Meal logged, but the favourite wasn't saved. You can star it in Today's meals.");
+        }
+      }else{
+        toast.success(meal?"Meal updated":"Meal logged");
+      }
       onOpenChange(false);
     } catch (e) {
       const detail = (e as Error)?.message ?? "";
@@ -445,7 +482,19 @@ export function MealSheet({
 
           <div className="mt-5">
             {editing ? (
-              <MealFields draft={draft} onChange={setDraft} meId={me.id} isNew={!meal} />
+              <div>
+                <MealFields draft={draft} onChange={setDraft} meId={me.id} isNew={!meal} />
+                {!meal&&(
+                  <label className="mt-5 flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-border bg-card px-3 py-3">
+                    <input type="checkbox" className="size-5 accent-primary"
+                      checked={saveAsFavourite} onChange={e=>setSaveAsFavourite(e.target.checked)}/>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">Save as favourite</span>
+                      <span className="block text-xs text-muted-foreground">Log this same portion in one tap next time</span>
+                    </span>
+                  </label>
+                )}
+              </div>
             ) : meal ? (
               <div className="space-y-4">
                 {meal.photo_url && (
@@ -480,7 +529,7 @@ export function MealSheet({
             ) : mine ? (
               <>
                 <Btn size="lg" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>
-                <FavStarBtn meal={meal} />
+                <FavStarBtn meal={meal!} memberId={me.id} />
                 <Btn size="lg" variant="danger" onClick={remove} disabled={busy} aria-label="Delete meal">
                   <Trash2 className="size-4" />
                 </Btn>
