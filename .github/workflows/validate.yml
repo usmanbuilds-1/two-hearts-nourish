@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           psql -h localhost -U postgres -d app_test -v ON_ERROR_STOP=1 -f src/test/sql-migration-fixture.sql
-          for migration in 0014_private_meal_photos 0015_device_security 0016_lifetime_couple_stats 0017_ai_quotas; do
+          for migration in 0014_private_meal_photos 0015_device_security 0016_lifetime_couple_stats 0017_ai_quotas 0018_bulk_device_cleanup; do
             psql -h localhost -U postgres -d app_test -v ON_ERROR_STOP=1 -f "drizzle/migrations/${migration}.sql"
           done
           psql -h localhost -U postgres -d app_test -v ON_ERROR_STOP=1 -f src/test/sql-migration-verify.sql

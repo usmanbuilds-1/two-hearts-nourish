@@ -23,6 +23,7 @@ CREATE TABLE public.rooms (
 CREATE TABLE public.members (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  room_id uuid NOT NULL REFERENCES public.rooms(id),
+ auth_user_id uuid UNIQUE,
  participant_token_hash text NOT NULL,
  daily_protein_target numeric
 );

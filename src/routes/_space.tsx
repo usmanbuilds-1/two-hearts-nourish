@@ -1,5 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { markMyDeviceActive } from "@/lib/devices.functions";
+import { friendlyDeviceLabel } from "@/lib/device-label";
 import { BookOpen, CalendarDays, Heart, Settings, Sun, WifiOff } from "lucide-react";
 import { SpaceProvider, useSpace } from "@/lib/space";
 import { loadSpaceEntry } from "@/lib/space-entry";
@@ -86,7 +88,30 @@ function SpaceLayout() {
 }
 
 function InnerLayout() {
-  const { online } = useSpace();
+  const { online, me } = useSpace();
+
+  // One lightweight authenticated heartbeat at entry and after a day away.
+  // This makes device history reflect real app access, not just Settings visits.
+  useEffect(()=>{
+    let lastSent=0;
+    const ping=()=>{
+      if(Date.now()-lastSent<20*60_000)return;
+      const key="us.device.last-active."+me.id;
+      try{
+        const previous=Number(localStorage.getItem(key)??0);
+        if(Date.now()-previous<20*60_000)return;
+      }catch{ /* Private browsing can disable localStorage. */ }
+      lastSent=Date.now();
+      void markMyDeviceActive({data:{deviceLabel:friendlyDeviceLabel(navigator.userAgent)}})
+        .then(result=>{
+          if(result.ok)try{localStorage.setItem(key,String(Date.now()));}catch{ /* optional */ }
+        }).catch(()=>{});
+    };
+    ping();
+    const onVisible=()=>{if(document.visibilityState==="visible")ping();};
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>document.removeEventListener("visibilitychange",onVisible);
+  },[me.id]);
   const state = useRouterState();
   const active = state.location.pathname;
 

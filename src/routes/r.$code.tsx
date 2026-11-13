@@ -5,6 +5,7 @@ import { Btn, Field, TextInput } from "@/components/us/primitives";
 import { getRoomPreview, joinRoom, linkDevice, rejoinRoom } from "@/lib/room.functions";
 import { ensureIdentity, friendlyError, writeSession } from "@/lib/session";
 import { readRejoinToken } from "@/lib/rejoin-links";
+import { friendlyDeviceLabel } from "@/lib/device-label";
 
 export const Route = createFileRoute("/r/$code")({
   ssr: false,
@@ -55,7 +56,7 @@ function Join() {
     setBusy(true);
     try {
       await ensureIdentity();
-      const r = await joinRoom({ data: { code, name: name.trim() } });
+      const r = await joinRoom({ data: { code, name: name.trim(), deviceLabel: friendlyDeviceLabel(navigator.userAgent) } });
       writeSession(r);
       void navigate({ to: "/today", replace: true });
     } catch (err) {
@@ -72,7 +73,7 @@ function Join() {
     try {
       await ensureIdentity();
       const v = key.trim();
-      const r = await rejoinRoom({ data: { code, key: v } });
+      const r = await rejoinRoom({ data: { code, key: v, deviceLabel: friendlyDeviceLabel(navigator.userAgent) } });
       writeSession(r);
       toast.success("Welcome back ❤️");
       void navigate({ to: "/today", replace: true });
@@ -89,7 +90,7 @@ function Join() {
       setBusy(true);
       try {
         await ensureIdentity();
-        const r = await linkDevice({ data: { code, linkCode: lc! } });
+        const r = await linkDevice({ data: { code, linkCode: lc!, deviceLabel: friendlyDeviceLabel(navigator.userAgent) } });
         writeSession(r);
         toast.success("Welcome back ❤️");
         void navigate({ to: "/today", replace: true });
@@ -160,7 +161,7 @@ function Join() {
       <Field label="Your private recovery key" hint="A 64-character key stored privately on your device. If you lost it, ask your partner for a new recovery link from Settings.">
         <TextInput value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="64-character recovery key" className="font-mono text-sm" autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="off" />
       </Field>
-      <Btn size="lg" className="w-full" disabled={!key.trim() || busy}>
+      <Btn size="lg" className="w-full" disabled={!/^[a-f0-9]{64}$/i.test(key.trim()) || busy}>
         {busy ? "Checking…" : "Add this device ❤️"}
       </Btn>
 
@@ -170,11 +171,22 @@ function Join() {
   if (preview.status === "full")
     return shell(
       <>
-        <h1 className="text-3xl leading-tight text-foreground">Welcome back to your space</h1>
+        <h1 className="font-display text-3xl leading-tight">Welcome back.</h1>
         <p className="mt-3 text-muted-foreground">
-          If you lost access, ask your partner to send a secure link from Settings → Come back to us. You can also use your saved personal key.
+          This space already has two people. To return to your existing meals, ask your partner for a private reconnect link from Settings → Come back to us. Open that link on this phone to sign in.
         </p>
-        {rejoinForm}
+        {!rejoin ? (
+          <Btn variant="outline" className="mt-7 w-full" onClick={() => setRejoin(true)}>
+            Use my saved recovery key instead
+          </Btn>
+        ) : (
+          <>
+            <p className="mt-5 text-xs text-muted-foreground">
+              A device-specific key may transfer that saved sign-in to this browser. To add another independent device, use a new private reconnect link.
+            </p>
+            {rejoinForm}
+          </>
+        )}
       </>,
     );
 

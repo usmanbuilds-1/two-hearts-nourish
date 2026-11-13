@@ -519,6 +519,14 @@ export type Database = {
       my_room_id: { Args: never; Returns: string }
       claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
       room_activity_rollup: { Args: { p_room_id: string; p_today: string }; Returns: Json }
+      rebind_member_device: {
+        Args: { p_member_id:string; p_device_id:string; p_new_auth_user_id:string; p_update_primary?:boolean };
+        Returns: boolean
+      }
+      rotate_member_recovery_many: {
+        Args: { p_actor_auth_user_id: string; p_replacement_hash: string; p_revoke_device_ids: string[] };
+        Returns: number
+      }
       rotate_member_recovery: {
         Args: { p_actor_auth_user_id: string; p_replacement_hash: string; p_revoke_device_id?: string | null };
         Returns: boolean

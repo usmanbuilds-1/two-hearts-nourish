@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { shouldUpgradeDeviceLabel } from "./device-label";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -36,7 +37,7 @@ export const listMyDevices = createServerFn({method:"POST"})
     if(!current)throw new Error("NOT_MEMBER");
     const now=new Date().toISOString();
     const {error:touchError}=await db.from("member_devices").update({
-      last_seen_at:now,...(!current.device_label && data.currentLabel?{device_label:data.currentLabel}:{})
+      last_seen_at:now,...(shouldUpgradeDeviceLabel(current.device_label,data.currentLabel)&&data.currentLabel?{device_label:data.currentLabel}:{})
     }).eq("id",current.id);
     if(touchError)throw new Error("SERVER_ERROR");
     const {data:devices,error}=await db.from("member_devices")
@@ -44,26 +45,57 @@ export const listMyDevices = createServerFn({method:"POST"})
       .order("created_at",{ascending:false});
     if(error)throw new Error("SERVER_ERROR");
     return (devices??[]).map(d=>({
-      id:d.id,label:d.device_label??(d.id===current.id?"This browser":"Earlier sign-in"),current:d.id===current.id,
+      id:d.id,label:d.device_label??(d.id===current.id?"This browser":"Unidentified browser"),current:d.id===current.id,
       createdAt:d.created_at,lastSeenAt:d.last_seen_at
     }));
   });
 
+/** Mark actual app activity for a mapped device, not merely Settings visits. */
+export const markMyDeviceActive = createServerFn({method:"POST"})
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i:{deviceLabel?:string})=>({
+    deviceLabel:z.string().trim().max(40).optional().parse(i?.deviceLabel)
+  }))
+  .handler(async ({data,context})=>{
+    const db=await admin();
+    const {data:device,error}=await db.from("member_devices")
+      .select("id,device_label").eq("auth_user_id",context.userId).maybeSingle();
+    if(error||!device)return {ok:false};
+    const {error:updateError}=await db.from("member_devices").update({
+      last_seen_at:new Date().toISOString(),
+      ...(shouldUpgradeDeviceLabel(device.device_label,data.deviceLabel)&&data.deviceLabel?{device_label:data.deviceLabel}:{})
+    }).eq("id",device.id);
+    return {ok:!updateError};
+  });
+
 export const rotateMyRecoveryKeys = createServerFn({method:"POST"})
   .middleware([requireSupabaseAuth])
-  .inputValidator((i:{revokeDeviceId?:string})=>({
-    revokeDeviceId:z.string().uuid().optional().parse(i?.revokeDeviceId)
+  .inputValidator((i:{revokeDeviceId?:string;revokeDeviceIds?:string[]})=>({
+    revokeDeviceId:z.string().uuid().optional().parse(i?.revokeDeviceId),
+    revokeDeviceIds:z.array(z.string().uuid()).min(1).max(50).optional().parse(i?.revokeDeviceIds)
   }))
   .handler(async ({data,context})=>{
     const db=await admin();
     const key=newKey();
+    if(data.revokeDeviceIds&&data.revokeDeviceId)throw new Error("INVALID_DEVICE_SELECTION");
+    const hash=await sha256(key);
+    if(data.revokeDeviceIds){
+      const {data:count,error}=await db.rpc("rotate_member_recovery_many",{
+        p_actor_auth_user_id:context.userId,
+        p_replacement_hash:hash,
+        p_revoke_device_ids:data.revokeDeviceIds
+      });
+      if(error||typeof count!=="number"||count!==data.revokeDeviceIds.length)
+        throw new Error("RECOVERY_ROTATION_FAILED");
+      return {key,revokedCount:count};
+    }
     const {data:ok,error}=await db.rpc("rotate_member_recovery",{
       p_actor_auth_user_id:context.userId,
-      p_replacement_hash:await sha256(key),
+      p_replacement_hash:hash,
       p_revoke_device_id:data.revokeDeviceId??null
     });
     if(error||!ok)throw new Error("RECOVERY_ROTATION_FAILED");
-    return {key};
+    return {key,revokedCount:data.revokeDeviceId?1:0};
   });
 
 

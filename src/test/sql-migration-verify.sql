@@ -20,6 +20,10 @@ BEGIN
     THEN RAISE EXCEPTION 'AI usage exposed'; END IF;
   IF has_function_privilege('authenticated','public.rotate_member_recovery(uuid,text,uuid)','EXECUTE')
     THEN RAISE EXCEPTION 'Device rotation exposed'; END IF;
+  IF has_function_privilege('authenticated','public.rotate_member_recovery_many(uuid,text,uuid[])','EXECUTE')
+    THEN RAISE EXCEPTION 'Bulk revocation exposed'; END IF;
+  IF has_function_privilege('authenticated','public.rebind_member_device(uuid,uuid,uuid,boolean)','EXECUTE')
+    THEN RAISE EXCEPTION 'Device rebinding exposed'; END IF;
   IF has_function_privilege('authenticated','public.room_activity_rollup(uuid,date)','EXECUTE')
     THEN RAISE EXCEPTION 'Room stats exposed'; END IF;
   IF has_function_privilege('authenticated','public.claim_ai_request(uuid,text,integer)','EXECUTE')
@@ -53,6 +57,18 @@ BEGIN
   SELECT public.claim_ai_request(member_a,'scan',2) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'Quota exceeded'; END IF;
 
+  -- Device-specific login recovery must move an existing slot, not insert a row.
+  UPDATE public.members SET auth_user_id=actor WHERE id=member_a;
+  SELECT public.rebind_member_device(
+    member_a,device_a,'44444444-4444-4444-8444-444444444444',true
+  ) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Rebind failed'; END IF;
+  IF (SELECT auth_user_id FROM public.members WHERE id=member_a)
+     <> '44444444-4444-4444-8444-444444444444'::uuid
+    THEN RAISE EXCEPTION 'Original auth pointer not rebound'; END IF;
+  IF (SELECT count(*) FROM public.member_devices WHERE member_id=member_a)<>2
+    THEN RAISE EXCEPTION 'Rebind created a duplicate device'; END IF;
+  SELECT public.rebind_member_device(member_a,device_a,actor,true) INTO succeeded;
   SELECT public.rotate_member_recovery(actor,repeat('d',64),device_b) INTO succeeded;
   IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Rotation failed'; END IF;
   IF EXISTS(SELECT 1 FROM public.member_devices WHERE id=device_b)
@@ -64,6 +80,30 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM public.member_recovery_keys WHERE member_id=member_a
       AND device_id=device_a AND token_hash=repeat('d',64))
     THEN RAISE EXCEPTION 'Active device key missing'; END IF;
+  -- Bulk cleanup must leave the actor mapped and invalidate every previous key.
+  INSERT INTO public.member_devices(member_id,auth_user_id)
+    VALUES(member_a,'22222222-2222-4222-8222-222222222222'),
+          (member_a,'33333333-3333-4333-8333-333333333333');
+  DECLARE
+    extra_ids uuid[];
+    removed_count integer;
+  BEGIN
+    SELECT array_agg(id) INTO extra_ids FROM public.member_devices
+      WHERE member_id=member_a AND auth_user_id<>actor;
+    SELECT public.rotate_member_recovery_many(actor,repeat('e',64),extra_ids) INTO removed_count;
+    IF removed_count<>2 THEN RAISE EXCEPTION 'Bulk revocation count wrong'; END IF;
+    IF (SELECT count(*) FROM public.member_devices WHERE member_id=member_a)<>1
+      THEN RAISE EXCEPTION 'Historical sign-ins remain'; END IF;
+    IF (SELECT count(*) FROM public.member_recovery_keys WHERE member_id=member_a
+      AND token_hash=repeat('e',64))<>1
+      THEN RAISE EXCEPTION 'Bulk replacement key missing'; END IF;
+    BEGIN
+      PERFORM public.rotate_member_recovery_many(actor,repeat('f',64),ARRAY[device_a]);
+      RAISE EXCEPTION 'Self revocation unexpectedly worked';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM='Self revocation unexpectedly worked' THEN RAISE; END IF;
+    END;
+  END;
 END $$;
 
 SELECT 'Migration SQL and behavior verified' AS result;
