@@ -14,10 +14,11 @@ import { cn } from "@/lib/utils";
 type Tab = "saved" | "recent";
 
 export function QuickMealsSheet({
-  open,onOpenChange,meals,memberId,today,onCopy,busyId
+  open,onOpenChange,meals,memberId,today,onCopy,busyId,historyPending,historyError,onRetryHistory
 }:{
   open:boolean;onOpenChange:(open:boolean)=>void;meals:Meal[];memberId:string;today:string;
   onCopy:(meal:Meal)=>Promise<void>;busyId:string|null;
+  historyPending:boolean;historyError:boolean;onRetryHistory:()=>void;
 }) {
   const [tab,setTab]=useState<Tab>("saved");
   const [busy,setBusy]=useState<string|null>(null);
@@ -127,7 +128,12 @@ export function QuickMealsSheet({
                 </Btn>
               </div>
             ))
-          ):recent.length===0 ? <p className="py-8 text-sm text-muted-foreground">
+          ):historyPending ? <p className="py-8 text-sm text-muted-foreground" role="status">Loading your recent meals…</p>
+          :historyError ? <div className="py-6 text-sm">
+              <p>Couldn't load recent meals.</p>
+              <Btn className="mt-2" variant="outline" onClick={onRetryHistory}>Retry</Btn>
+            </div>
+          :recent.length===0 ? <p className="py-8 text-sm text-muted-foreground">
             No recent meals yet. Once you've logged a meal, you can save it here.
           </p>:recent.map(m=>{
             const existing=findSavedFood(favorites,m);
