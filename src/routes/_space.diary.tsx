@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Copy, MoreHorizontal, MoveRight, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, MoreHorizontal, MoveRight, Plus, Trash2, Pencil } from "lucide-react";
 import { useSpace } from "@/lib/space";
-import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
+import { Btn, Screen } from "@/components/us/primitives";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { MealSheet } from "@/components/us/MealSheet";
 import { DiarySheet } from "@/components/us/DiarySheet";
@@ -120,18 +120,19 @@ function DiaryView() {
 
   return (
     <Screen>
-      <div className="space-y-4">
+      <div className="space-y-5">
+        <h1 className="font-display text-[2rem] leading-tight">Diary</h1>
         {/* Date navigation */}
         <div className="flex items-center justify-between">
-          <Btn size="md" variant="ghost" onClick={prevDay}><ChevronLeft className="size-4" /></Btn>
+          <Btn size="md" variant="ghost" onClick={prevDay} aria-label="Previous day"><ChevronLeft className="size-4" /></Btn>
           <span className="font-medium">
             {displayDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
           </span>
-          <Btn size="md" variant="ghost" onClick={nextDay}><ChevronRight className="size-4" /></Btn>
+          <Btn size="md" variant="ghost" onClick={nextDay} aria-label="Next day"><ChevronRight className="size-4" /></Btn>
         </div>
 
         {/* Macro summary ring */}
-        <div className="grid grid-cols-4 gap-2 rounded-2xl border border-border bg-card p-3">
+        <section aria-label="Daily nutrition summary" className="grid grid-cols-4 gap-2 border-y border-border py-4">
           {[
             ["Kcal", dayTotals.calories, target || null],
             ["P", dayTotals.protein, Number(me.daily_protein_target) || null],
@@ -139,17 +140,17 @@ function DiaryView() {
             ["F", dayTotals.fat,     Number(me.daily_fat_target)    || null],
           ].map(([label, val, tgt]) => (
             <div key={label as string} className="text-center">
-              <div className="text-[10px] text-muted-foreground">{label as string}</div>
-              <div className="num font-bold text-sm">{fmt(val as number)}{label !== "Kcal" ? "g" : ""}</div>
-              {tgt ? <div className="text-[10px] text-muted-foreground">/ {fmt(tgt as number)}</div> : null}
+              <div className="text-xs text-muted-foreground">{label as string}</div>
+              <div className="num text-base font-semibold">{fmt(val as number)}{label !== "Kcal" ? "g" : ""}</div>
+              {tgt ? <div className="text-xs text-muted-foreground">/ {fmt(tgt as number)}</div> : null}
             </div>
           ))}
-        </div>
+        </section>
 
         {/* Remaining / over */}
         {remaining !== null && (
           <p className={cn("text-center text-sm font-medium", remaining >= 0 ? "text-primary" : "text-destructive")}>
-            {remaining >= 0 ? `${fmt(remaining)} kcal remaining` : `${fmt(Math.abs(remaining))} kcal over target`}
+            {remaining >= 0 ? `${fmt(remaining)} kcal remaining` : `${fmt(Math.abs(remaining))} kcal above target`}
           </p>
         )}
 
@@ -158,15 +159,15 @@ function DiaryView() {
           const list = mine.filter((m) => m.meal_type === t.key);
           return (
             <div key={t.key}>
-              <Eyebrow className="mb-2">{t.label} {t.icon}</Eyebrow>
+              <h2 className="mb-2 text-sm font-semibold text-foreground">{t.label}</h2>
               {list.length === 0 ? (
-                <p className="text-xs text-muted-foreground/60 pl-1">Not logged yet</p>
+                <p className="text-sm text-muted-foreground">Nothing logged</p>
               ) : (
-                <div className="space-y-2">
+                <div className="divide-y divide-border border-y border-border">
                   {list.map((m) => (
-                    <div key={m.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+                    <div key={m.id} className="flex items-center gap-3 py-2.5">
                       {/* tap food name to edit */}
-                      <button className="min-w-0 flex-1 text-left" onClick={() => setEditMeal(m)}>
+                      <button className="min-h-11 min-w-0 flex-1 text-left" onClick={() => setEditMeal(m)}>
                         <div className="truncate text-sm font-medium">{m.food_name}</div>
                         {m.serving_description && <div className="text-xs text-muted-foreground">{m.serving_description}</div>}
                       </button>
@@ -178,7 +179,7 @@ function DiaryView() {
                       {/* ⋯ action menu */}
                       <button
                         onClick={() => openAction(m, "options")}
-                        className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                        className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring"
                         aria-label="Meal options"
                       >
                         <MoreHorizontal className="size-4" />
@@ -214,7 +215,7 @@ function DiaryView() {
           </DrawerHeader>
           <div className="p-4 space-y-2 pb-8">
             <Btn variant="outline" className="w-full justify-start gap-3" onClick={() => { closeAction(); setEditMeal(actionMeal); }}>
-              <span className="size-8 rounded-full bg-secondary flex items-center justify-center shrink-0">✏️</span>
+              <span className="size-8 rounded-full bg-secondary flex items-center justify-center shrink-0"><Pencil className="size-4" aria-hidden="true" /></span>
               Edit meal
             </Btn>
             <Btn variant="outline" className="w-full justify-start gap-3" onClick={() => setAction("copy")}>
@@ -248,6 +249,7 @@ function DiaryView() {
           </DrawerHeader>
           <div className="p-4 space-y-4 pb-8">
             <input
+              aria-label="Choose destination date"
               type="date"
               value={pickedDate}
               onChange={(e) => setPickedDate(e.target.value)}
