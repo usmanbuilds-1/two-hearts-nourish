@@ -2,7 +2,7 @@ import { createFileRoute, Link, Outlet, useRouter, useRouterState } from "@tanst
 import { useEffect } from "react";
 import { markMyDeviceActive } from "@/lib/devices.functions";
 import { friendlyDeviceLabel } from "@/lib/device-label";
-import { BookOpen, CalendarDays, Heart, Settings, Sun, WifiOff } from "lucide-react";
+import { BookOpen, CalendarDays, Heart, Settings, House, WifiOff } from "lucide-react";
 import { SpaceProvider, useSpace } from "@/lib/space";
 import { loadSpaceEntry } from "@/lib/space-entry";
 
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_space")({
 });
 
 const NAV = [
-  { to: "/today",    label: "Today",    icon: Sun },
+  { to: "/today",    label: "Today",    icon: House },
   { to: "/together", label: "Together", icon: Heart },
   { to: "/diary",    label: "Diary",    icon: BookOpen },
   { to: "/week",     label: "Week",     icon: CalendarDays },
