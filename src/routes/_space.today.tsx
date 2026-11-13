@@ -9,7 +9,7 @@ import { Camera, Plus, Star, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
-import { MEAL_TYPES, coupleStats, defaultMealType, fmt, totals, type Meal, type Member } from "@/lib/nutrition";
+import { MEAL_TYPES, coupleStats, defaultMealType, fmt, parseLocalDate, totals, type Meal, type Member } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet, emptyDraft, useSaveMeal } from "@/components/us/MealSheet";
 import {
@@ -144,7 +144,7 @@ function Today() {
   return (
     <Screen>
       <header className="border-b border-border pb-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Two hearts, one table</p>
+        <p className="text-xs font-medium text-muted-foreground">{parseLocalDate(today).toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"})}</p>
         <h1 className="mt-2 font-display text-4xl font-normal leading-tight tracking-tight">Today, together.</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{me.display_name}</span>
@@ -155,7 +155,7 @@ function Today() {
           <p className="mt-3 font-display text-base italic text-foreground/80">“{room.couple_message}”</p>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            {bothLoggedToday?"You've both added to today's little food story.":"Your everyday meals, remembered for you."}
+            {bothLoggedToday?"You both logged meals today.":"Your daily meals, in one place."}
           </p>
         )}
         {sharedStreak >= 2 && (
@@ -163,9 +163,9 @@ function Today() {
         )}
       </header>
 
-      <div className="mt-6 grid grid-cols-2 gap-3">
+      <div className={cn("mt-6 grid gap-3",partner?"grid-cols-1 min-[350px]:grid-cols-2":"grid-cols-1")}>
         <PersonCard label="You" member={me} meals={mine} />
-        <PersonCard label={partner?.display_name ?? "Partner"} member={partner} meals={theirs} partner />
+        {partner&&<PersonCard label={partner.display_name} member={partner} meals={theirs} partner />}
       </div>
 
       {!partner&&(
@@ -199,11 +199,11 @@ function Today() {
         busyId={favoriteLogId}
       />
       <section className="mt-8">
-        <h2 className="text-xl">Today's little food story</h2>
+        <h2 className="font-display text-2xl font-normal">Today's meals</h2>
         {todays.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-dashed border-border p-6 text-center">
-            <div className="font-display text-lg">Your food story starts here ❤️</div>
-            <div className="mt-1 text-sm text-muted-foreground">Take a photo of your first meal together.</div>
+            <div className="font-display text-lg">No meals logged today</div>
+            <div className="mt-1 text-sm text-muted-foreground">Tap Scan or Add to log your first meal.</div>
           </div>
         ) : (
           MEAL_TYPES.map((t) => {

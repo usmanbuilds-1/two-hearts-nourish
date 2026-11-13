@@ -116,7 +116,20 @@ export function QuickMealsSheet({
               </div>
             : favorites.map(f=>(
               <div key={f.id} className="flex items-center gap-3 border-b border-border/70 py-3">
-                <Star className="size-4 shrink-0 fill-primary text-primary" aria-hidden="true"/>
+                <button type="button" disabled={Boolean(busy)||Boolean(busyId)} aria-label={`Remove ${f.food_name} from favourites`}
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={async()=>{
+                    if(busy||busyId)return;
+                    setBusy(f.id);
+                    try{
+                      await removeFavoriteMeal({data:{foodName:f.food_name}});
+                      await qc.invalidateQueries({queryKey:["meal-favorites",memberId]});
+                      toast("Removed from favourites");
+                    }catch{toast.error("Couldn't remove that favourite.");}
+                    finally{setBusy(null);}
+                  }}>
+                  <Star className="size-[18px] fill-primary" aria-hidden="true"/>
+                </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{f.food_name}</p>
                   <p className="mt-1 truncate text-xs text-muted-foreground">

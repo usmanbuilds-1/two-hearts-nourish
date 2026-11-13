@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Star } from "lucide-react";
 import { toast } from "sonner";
 import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
 import { useSpace } from "@/lib/space";
@@ -119,9 +118,10 @@ function Together(){
                 );
               })}
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-hidden="true">
-              <span><span className="mr-1 inline-block size-2 rounded-full bg-primary"/>Both logged</span>
-              <span><span className="mr-1 inline-block size-2 rounded-full bg-partner"/>One logged</span>
+            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" aria-hidden="true">
+              <span><span className="mr-1 inline-block size-2 rounded-full bg-primary"/>Both</span>
+              <span><span className="mr-1 inline-block size-2 rounded-full bg-primary/60"/>You</span>
+              <span><span className="mr-1 inline-block size-2 rounded-full bg-partner"/>Partner</span>
               <span><span className="mr-1 inline-block size-2 rounded-full bg-muted-foreground/25"/>Neither</span>
             </div>
           </section>
@@ -156,8 +156,7 @@ function Together(){
               <div className="mt-2 divide-y divide-border border-t border-border">
                 {sharedFoods.map(food=>(
                   <div key={food.name} className="flex min-h-14 items-center justify-between gap-3 py-3">
-                    <div className="flex min-w-0 items-center gap-2"><Star className="size-4 shrink-0 text-primary" aria-hidden="true"/>
-                      <span className="truncate text-sm font-medium">{food.name}</span></div>
+                    <span className="min-w-0 truncate text-sm font-medium">{food.name}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">{food.times} logs</span>
                   </div>
                 ))}
