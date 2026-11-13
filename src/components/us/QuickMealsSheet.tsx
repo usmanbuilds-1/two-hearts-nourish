@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Star } from "lucide-react";
 import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Btn } from "./primitives";
@@ -7,37 +8,45 @@ import { emptyDraft, useSaveMeal } from "./MealSheet";
 import { getFavoriteMeals, removeFavoriteMeal, saveFavoriteMeal, type MealFavorite } from "@/lib/meal-operations.functions";
 import { fmt, defaultMealType, type Meal } from "@/lib/nutrition";
 import { mealSignature, quickMealSuggestions } from "@/lib/quick-meals";
+import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
 import { cn } from "@/lib/utils";
 
-type Tab = "mine" | "recent" | "saved";
+type Tab = "saved" | "recent";
+
 export function QuickMealsSheet({
-  open,onOpenChange,meals,memberId,today,onCopy,busyId
+  open,onOpenChange,meals,memberId,today,onCopy,busyId,initialTab,historyPending,historyError,onRetryHistory
 }:{
-  open:boolean;
-  onOpenChange:(open:boolean)=>void;
-  meals:Meal[];
-  memberId:string;
-  today:string;
-  onCopy:(meal:Meal)=>Promise<void>;
-  busyId:string|null;
+  open:boolean;onOpenChange:(open:boolean)=>void;meals:Meal[];memberId:string;today:string;
+  onCopy:(meal:Meal)=>Promise<void>;busyId:string|null;
+  initialTab:Tab;historyPending:boolean;historyError:boolean;onRetryHistory:()=>void;
 }) {
-  const [tab,setTab]=useState<Tab>("mine");
-  const [favoriteBusy,setFavoriteBusy]=useState<string|null>(null);
+  const [tab,setTab]=useState<Tab>("saved");
+  const [busy,setBusy]=useState<string|null>(null);
   const save=useSaveMeal();
   const qc=useQueryClient();
-  const picks=useMemo(()=>quickMealSuggestions(meals,memberId,today),[meals,memberId,today]);
-  const {data:favorites=[],isPending:favoritesPending,isError:favoritesError,refetch}=useQuery<MealFavorite[]>({
+  useEffect(()=>{if(open)setTab(initialTab);},[open,initialTab]);
+  const {data:favorites=[],isPending,isError,refetch}=useQuery<MealFavorite[]>({
     queryKey:["meal-favorites",memberId],
     queryFn:()=>getFavoriteMeals(),
     enabled:open,
     refetchOnMount:"always",
   });
-  const savedNames=useMemo(()=>new Set(favorites.map(m=>m.food_name.trim().toLocaleLowerCase())),[favorites]);
+
+  const picks=useMemo(()=>quickMealSuggestions(meals,memberId,today),[meals,memberId,today]);
+  const recent=useMemo(()=>{
+    const seen=new Set<string>();
+    return picks.recents.filter(m=>{
+      const signature=mealSignature(m);
+      if(seen.has(signature))return false;
+      seen.add(signature);
+      return true;
+    });
+  },[picks]);
 
   async function logSaved(m:MealFavorite) {
-    if(favoriteBusy)return;
-    setFavoriteBusy(m.id);
-    try {
+    if(busy||busyId)return;
+    setBusy(m.id);
+    try{
       await save({
         ...emptyDraft(),
         food_name:m.food_name,
@@ -48,94 +57,117 @@ export function QuickMealsSheet({
         fat:String(m.fat),
         meal_type:defaultMealType(),
       });
+      toast.success(`${m.food_name} logged with your saved portion`);
       onOpenChange(false);
-      toast.success(`${m.food_name} added with your saved portion`);
-    }catch{toast.error("Couldn't log this meal.");}
-    finally{setFavoriteBusy(null);}
+    }catch{toast.error("Couldn't log that meal. Try again.");}
+    finally{setBusy(null);}
   }
 
   async function toggleSaved(meal:Meal) {
-    const name=meal.food_name.trim();
-    setFavoriteBusy(meal.id);
+    if(busy||busyId||isPending||isError)return;
+    const old=findSavedFood(favorites,meal);
+    const same=isSavedPortion(old,meal);
+    setBusy(meal.id);
     try {
-      if(savedNames.has(name.toLocaleLowerCase())) {
-        await removeFavoriteMeal({data:{foodName:name}});
+      if(same&&old) {
+        await removeFavoriteMeal({data:{foodName:old.food_name}});
+        toast("Removed from favourites");
       }else{
         await saveFavoriteMeal({data:{
-          foodName:name,servingDescription:meal.serving_description??"",
-          calories:meal.calories,protein:Number(meal.protein),carbs:Number(meal.carbs),fat:Number(meal.fat),
+          foodName:old?.food_name??meal.food_name,
+          servingDescription:meal.serving_description??"",
+          calories:meal.calories,
+          protein:Number(meal.protein),carbs:Number(meal.carbs),fat:Number(meal.fat),
         }});
+        toast.success(old?"Saved portion updated":"Added to favourites");
       }
-      await qc.invalidateQueries({queryKey:["meal-favorites"]});
-    }catch{toast.error("Couldn't update saved meals.");}
-    finally{setFavoriteBusy(null);}
+      await qc.invalidateQueries({queryKey:["meal-favorites",memberId]});
+    }catch{toast.error("Couldn't update favourites.");}
+    finally{setBusy(null);}
   }
 
-  const source:Meal[]=tab==="mine"?picks.suggested:picks.recents;
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="mx-auto max-h-[88dvh] max-w-xl border-border bg-background">
         <DrawerHeader className="text-left">
-          <DrawerTitle className="font-display text-2xl font-normal">Meals you know by heart</DrawerTitle>
-          <DrawerDescription>One tap adds a portion you have eaten before. Your partner has their own list.</DrawerDescription>
+          <DrawerTitle className="font-display text-2xl font-normal">Quick log</DrawerTitle>
+          <DrawerDescription>Log a saved portion or save something from your recent meals. Only your meals appear here.</DrawerDescription>
         </DrawerHeader>
-        <div className="flex gap-5 border-b border-border px-5" role="tablist" aria-label="Quick meal categories">
-          {(["mine","recent","saved"] as const).map(key=>(
-            <button key={key} type="button" role="tab" aria-selected={tab===key}
+        <div className="flex border-b border-border px-5" role="group" aria-label="Quick meal categories">
+          {(["saved","recent"] as const).map(key=>(
+            <button key={key} type="button" aria-pressed={tab===key}
               onClick={()=>setTab(key)}
-              className={cn("min-h-11 border-b-2 text-sm font-medium capitalize",
-                tab===key?"border-primary text-foreground":"border-transparent text-muted-foreground")}>
-              {key==="mine"?"My meals":key==="recent"?"History":"Saved"}
+              className={cn("min-h-11 border-b-2 px-4 text-sm font-medium transition-colors",
+                tab===key?"border-primary text-foreground":"border-transparent text-muted-foreground hover:text-foreground")}>
+              {key==="saved"?`Favourites${favorites.length?` (${favorites.length})`:""}`:"Recent"}
             </button>
           ))}
         </div>
         <div className="min-h-40 space-y-0 overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           {tab==="saved" ? (
-            favoritesPending ? <p className="py-7 text-sm text-muted-foreground">Loading saved meals…</p>
-            : favoritesError ? <div className="py-6 text-sm">
-                <p>Saved meals aren't available right now.</p>
+            isPending ? <p className="py-7 text-sm text-muted-foreground" role="status">Loading favourites…</p>
+            : isError ? <div className="py-6 text-sm">
+                <p>Couldn't load your favourites.</p>
                 <Btn variant="outline" onClick={()=>void refetch()} className="mt-2">Retry</Btn>
               </div>
-            : favorites.length===0 ? <p className="py-8 text-sm text-muted-foreground">
-                Nothing saved yet. Open Recently eaten and save a meal you have often.
-              </p>
+            : favorites.length===0 ? <div className="py-8">
+                <p className="text-sm text-muted-foreground">No favourites saved yet. Star a meal in your diary or choose one from your recent meals.</p>
+                <Btn variant="outline" className="mt-4" onClick={()=>setTab("recent")}>Browse recent meals</Btn>
+              </div>
             : favorites.map(f=>(
               <div key={f.id} className="flex items-center gap-3 border-b border-border/70 py-3">
+                <button type="button" disabled={Boolean(busy)||Boolean(busyId)} aria-label={`Remove ${f.food_name} from favourites`}
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={async()=>{
+                    if(busy||busyId)return;
+                    setBusy(f.id);
+                    try{
+                      await removeFavoriteMeal({data:{foodName:f.food_name}});
+                      await qc.invalidateQueries({queryKey:["meal-favorites",memberId]});
+                      toast("Removed from favourites");
+                    }catch{toast.error("Couldn't remove that favourite.");}
+                    finally{setBusy(null);}
+                  }}>
+                  <Star className="size-[18px] fill-primary" aria-hidden="true"/>
+                </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{f.food_name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
                     {f.serving_description?f.serving_description+" · ":""}{fmt(f.calories)} kcal · {fmt(f.protein)}g protein
                   </p>
                 </div>
-                <Btn variant="outline" disabled={Boolean(favoriteBusy)||Boolean(busyId)} onClick={()=>void logSaved(f)}>
-                  {favoriteBusy===f.id?"Adding…":"Log"}
+                <Btn variant="outline" disabled={Boolean(busy)||Boolean(busyId)} onClick={()=>void logSaved(f)}>
+                  {busy===f.id?"Adding…":"Log"}
                 </Btn>
               </div>
             ))
-          ):source.length===0 ? <p className="py-8 text-sm text-muted-foreground">
-            {tab==="mine"?"Log a meal once and it will be ready here next time.":"No meals found in recent history."}
-          </p>:source.map(m=>{
-            const regular=picks.usuals.find(u=>mealSignature(u.meal)===mealSignature(m));
-            const marked=savedNames.has(m.food_name.trim().toLocaleLowerCase());
+          ):historyPending ? <p className="py-8 text-sm text-muted-foreground" role="status">Loading your recent meals…</p>
+          :historyError ? <div className="py-6 text-sm">
+              <p>Couldn't load recent meals.</p>
+              <Btn className="mt-2" variant="outline" onClick={onRetryHistory}>Retry</Btn>
+            </div>
+          :recent.length===0 ? <p className="py-8 text-sm text-muted-foreground">
+            No recent meals yet. Once you've logged a meal, you can save it here.
+          </p>:recent.map(m=>{
+            const existing=findSavedFood(favorites,m);
+            const marked=isSavedPortion(existing,m);
             return (
               <div key={m.id} className="flex items-center gap-2 border-b border-border/70 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{m.food_name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
                     {m.serving_description?m.serving_description+" · ":""}{fmt(m.calories)} kcal · {fmt(Number(m.protein))}g protein
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {regular?`Logged ${regular.times} times · `:""}Last eaten {m.meal_date===today?"today":m.meal_date}
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Eaten {m.meal_date===today?"today":m.meal_date}</p>
                 </div>
-                <button type="button" disabled={Boolean(favoriteBusy)||Boolean(busyId)}
-                  aria-label={marked?`Remove ${m.food_name} from saved meals`:`Save ${m.food_name} for easy logging`}
-                  className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                <button type="button" disabled={Boolean(busy)||Boolean(busyId)||isPending||isError}
+                  aria-label={marked?`Remove ${m.food_name} from favourites`:existing?`Save this portion of ${m.food_name}`:`Save ${m.food_name} as a favourite`}
+                  aria-pressed={marked}
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   onClick={()=>void toggleSaved(m)}>
-                  <span aria-hidden="true">{marked?"♥":"♡"}</span>
+                  <Star className={cn("size-[18px]",marked&&"fill-primary")} aria-hidden="true"/>
                 </button>
-                <Btn variant="outline" disabled={Boolean(busyId)||Boolean(favoriteBusy)}
-                  onClick={()=>void onCopy(m)}>
+                <Btn variant="outline" disabled={Boolean(busy)||Boolean(busyId)} onClick={()=>void onCopy(m)}>
                   {busyId===m.id?"Adding…":"Log"}
                 </Btn>
               </div>

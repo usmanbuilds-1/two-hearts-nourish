@@ -97,7 +97,8 @@ export const getFavoriteMeals = createServerFn({ method: "GET" })
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) return [];
-    const { data } = await db.from("meal_favorites").select("*").eq("member_id", memberId).order("created_at", { ascending: false });
+    const { data,error } = await db.from("meal_favorites").select("*").eq("member_id", memberId).order("created_at", { ascending: false });
+    if(error) throw new Error("FAVOURITES_UNAVAILABLE");
     return (data ?? []) as MealFavorite[];
   });
 
@@ -137,7 +138,8 @@ export const removeFavoriteMeal = createServerFn({ method: "POST" })
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
-    await db.from("meal_favorites").delete().eq("member_id", memberId).eq("food_name", data.foodName);
+    const {error}=await db.from("meal_favorites").delete().eq("member_id", memberId).eq("food_name", data.foodName);
+    if(error)throw new Error("REMOVE_FAVOURITE_FAILED");
     return { ok: true };
   });
 

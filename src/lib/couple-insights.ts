@@ -39,3 +39,33 @@ export function recentCoupleWeek(meals:Meal[],meId:string,partnerId:string,today
     sharedDinnerDays:[...dinners.values()].filter(set=>set.has(meId)&&set.has(partnerId)).length,
   };
 }
+
+
+export type CoupleDay = {
+  date:string;
+  mine:Meal[];
+  theirs:Meal[];
+  status:"both"|"you"|"partner"|"neither";
+};
+
+/** Last seven calendar days, keeping each partner's entries separate. */
+export function coupleWeekDays(meals:Meal[],meId:string,partnerId:string|null,today:string):CoupleDay[] {
+  const start=addDays(today,-6);
+  const days=new Map<string,{mine:Meal[];theirs:Meal[]}>();
+  for(const m of meals) {
+    if(m.is_planned||m.meal_date<start||m.meal_date>today)continue;
+    if(m.member_id!==meId&&m.member_id!==partnerId)continue;
+    const record=days.get(m.meal_date)??{mine:[],theirs:[]};
+    if(m.member_id===meId)record.mine.push(m);
+    else if(partnerId&&m.member_id===partnerId)record.theirs.push(m);
+    days.set(m.meal_date,record);
+  }
+  return Array.from({length:7},(_,i)=>{
+    const date=addDays(start,i);
+    const values=days.get(date)??{mine:[],theirs:[]};
+    const mine=[...values.mine].sort((a,b)=>b.created_at.localeCompare(a.created_at));
+    const theirs=[...values.theirs].sort((a,b)=>b.created_at.localeCompare(a.created_at));
+    const status=mine.length&&theirs.length?"both":mine.length?"you":theirs.length?"partner":"neither";
+    return {date,mine,theirs,status};
+  });
+}
