@@ -51,7 +51,7 @@ function NutritionPerson({ name, member, meals, isPartner }: {
           <>
             <p className="mt-1.5 text-[11px] text-muted-foreground">of {fmt(kcalTarget)} daily</p>
             <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-secondary" role="progressbar"
-              aria-label={name+" calorie progress"} aria-valuenow={Math.round(total.calories)} aria-valuemin={0}
+              aria-label={name+" calorie progress"} aria-valuenow={Math.min(kcalTarget,Math.round(total.calories))} aria-valuemin={0}
               aria-valuemax={kcalTarget}>
               <div className={cn("h-full rounded-full",isPartner?"bg-partner":"bg-primary")}
                 style={{width:progress(total.calories,kcalTarget)+"%"}}/>
@@ -68,7 +68,7 @@ function NutritionPerson({ name, member, meals, isPartner }: {
           <>
             <p className="mt-0.5 text-[11px] text-muted-foreground">of {fmt(proteinTarget)}g daily</p>
             <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-secondary" role="progressbar"
-              aria-label={name+" protein progress"} aria-valuenow={Math.round(total.protein)}
+              aria-label={name+" protein progress"} aria-valuenow={Math.min(proteinTarget,Math.round(total.protein))}
               aria-valuemin={0} aria-valuemax={proteinTarget}>
               <div className={cn("h-full rounded-full",isPartner?"bg-partner":"bg-primary")}
                 style={{width:progress(total.protein,proteinTarget)+"%"}}/>
