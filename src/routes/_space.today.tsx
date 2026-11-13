@@ -40,16 +40,16 @@ function NutritionPerson({ name, member, meals, isPartner }: {
     <div className="min-w-0 py-4">
       <div className="flex min-w-0 items-center gap-2">
         <span className={cn("size-1.5 shrink-0 rounded-full",isPartner?"bg-partner":"bg-primary")} aria-hidden="true" />
-        <p className="truncate text-[13px] font-semibold text-foreground">{name}</p>
+        <p className="truncate text-sm font-semibold text-foreground">{name}</p>
       </div>
       <div className="mt-3">
         <div className="flex flex-wrap items-baseline gap-x-1">
-          <span className="num text-[clamp(1.5rem,6vw,2.1rem)] font-medium leading-none tracking-tight">{fmt(total.calories)}</span>
-          <span className="text-[11px] text-muted-foreground">kcal</span>
+          <span className="num text-[1.45rem] sm:text-[1.85rem] font-medium leading-none tracking-tight">{fmt(total.calories)}</span>
+          <span className="text-xs text-muted-foreground">kcal</span>
         </div>
         {kcalTarget>0 ? (
           <>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">of {fmt(kcalTarget)} daily</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">of {fmt(kcalTarget)} daily</p>
             <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-secondary" role="progressbar"
               aria-label={name+" calorie progress"} aria-valuenow={Math.min(kcalTarget,Math.round(total.calories))} aria-valuemin={0}
               aria-valuemax={kcalTarget}>
@@ -57,7 +57,7 @@ function NutritionPerson({ name, member, meals, isPartner }: {
                 style={{width:progress(total.calories,kcalTarget)+"%"}}/>
             </div>
           </>
-        ):<p className="mt-1.5 text-[11px] text-muted-foreground">No calorie target set</p>}
+        ):<p className="mt-1.5 text-xs text-muted-foreground">No calorie target set</p>}
       </div>
       <div className="mt-4 border-t border-border/70 pt-3">
         <div className="flex flex-wrap items-baseline gap-x-1">
@@ -66,7 +66,7 @@ function NutritionPerson({ name, member, meals, isPartner }: {
         </div>
         {proteinTarget>0 ? (
           <>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">of {fmt(proteinTarget)}g daily</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">of {fmt(proteinTarget)}g daily</p>
             <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-secondary" role="progressbar"
               aria-label={name+" protein progress"} aria-valuenow={Math.min(proteinTarget,Math.round(total.protein))}
               aria-valuemin={0} aria-valuemax={proteinTarget}>
@@ -74,7 +74,7 @@ function NutritionPerson({ name, member, meals, isPartner }: {
                 style={{width:progress(total.protein,proteinTarget)+"%"}}/>
             </div>
           </>
-        ):<p className="mt-0.5 text-[11px] text-muted-foreground">No protein target set</p>}
+        ):<p className="mt-0.5 text-xs text-muted-foreground">No protein target set</p>}
       </div>
     </div>
   );
@@ -173,18 +173,18 @@ function Today() {
           <p className="text-xs font-semibold lowercase tracking-[-0.04em] text-primary">us.</p>
           <time dateTime={today} className="text-xs font-medium text-muted-foreground">{dateText}</time>
         </div>
-        <p className="mt-7 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Our everyday ritual</p>
-        <h1 className="mt-2 font-display text-[clamp(2.15rem,9vw,3.15rem)] font-normal leading-[1.05] tracking-tight">
+        <h1 className="mt-6 font-display text-[2.15rem] font-normal leading-[1.09] tracking-tight sm:text-[2.65rem]">
           Today, together.
         </h1>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">{me.display_name}</span>
-          <span className="mx-2 text-primary" aria-hidden="true">·</span>
-          <span className="font-medium text-foreground">{partner?.display_name??"Your person"}</span>
-          <span className="mx-2 text-border" aria-hidden="true">/</span>
-          {room.couple_message ? <span className="italic">{room.couple_message}</span>
-            : partner ? bothToday ? "Another day you both showed up." : "A little care, every day."
-              : "A place to look after yourselves."}
+        <p className="mt-2 text-sm leading-relaxed text-foreground/90">
+          <span className="font-medium">{me.display_name}</span>
+          {partner ? <><span className="mx-2 text-primary" aria-hidden="true">&amp;</span>
+            <span className="font-medium">{partner.display_name}</span></> : null}
+        </p>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          {room.couple_message ? room.couple_message
+            : partner ? bothToday ? "Another day of taking care of yourselves." : "A little care, every day."
+              : "Your daily meals, remembered."}
         </p>
         {partner&&sharedStreak>=2&&(
           <p className="mt-2 text-xs text-primary">{sharedStreak} days logging side by side</p>
@@ -193,14 +193,16 @@ function Today() {
 
       <section className="border-y border-border" aria-label="Your shared nutrition today">
         <div className="flex items-baseline justify-between gap-3 pt-4">
-          <h2 className="font-display text-xl">The two of you</h2>
-          <span className="text-[11px] text-muted-foreground">Today's intake</span>
+          <h2 className="font-display text-xl">{partner?"At our table":"Your nutrition"}</h2>
+          <span className="text-xs text-muted-foreground">Today's intake</span>
         </div>
-        <div className="grid grid-cols-2 gap-x-6">
+        <div className={cn("grid gap-x-4",partner?"grid-cols-1 min-[350px]:grid-cols-2":"grid-cols-1")}>
           <NutritionPerson name="You" member={me} meals={mine}/>
-          <div className="relative pl-5 before:absolute before:inset-y-4 before:left-0 before:w-px before:bg-border">
-            <NutritionPerson name={partner?.display_name??"Your person"} member={partner} meals={theirs} isPartner/>
-          </div>
+          {partner&&(
+            <div className="relative border-t border-border min-[350px]:border-t-0 min-[350px]:pl-4 min-[350px]:before:absolute min-[350px]:before:inset-y-4 min-[350px]:before:left-0 min-[350px]:before:w-px min-[350px]:before:bg-border">
+              <NutritionPerson name={partner.display_name} member={partner} meals={theirs} isPartner/>
+            </div>
+          )}
         </div>
         {!partner&&(
           <div className="mb-4 border-t border-border/70 pt-3">
@@ -225,7 +227,7 @@ function Today() {
       <button type="button" onClick={()=>{
         if(!me.daily_calorie_target){toast("Set a calorie target in Settings to use planning.");return;}
         setBudget(true);
-      }} className="mt-2 flex min-h-10 items-center gap-2 text-xs font-medium text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
+      }} className="mt-2 flex min-h-11 items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
         <Wallet className="size-3.5" aria-hidden="true"/> Plan a meal
         <ArrowRight className="size-3.5" aria-hidden="true"/>
       </button>
@@ -233,11 +235,10 @@ function Today() {
       <section className="mt-7" aria-label="Repeat your meals">
         <div className="flex items-baseline justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Made familiar</p>
-            <h2 className="mt-1 font-display text-[1.55rem] leading-tight">Meals you know by heart</h2>
+            <h2 className="ritual-section-title font-display">Meals you know by heart</h2>
           </div>
           <button type="button" onClick={()=>setQuickOpen(true)}
-            className="min-h-11 shrink-0 text-sm font-medium text-primary focus-visible:ring-2 focus-visible:ring-ring">See all</button>
+            className="min-h-11 shrink-0 text-sm font-semibold text-primary focus-visible:ring-2 focus-visible:ring-ring">See all</button>
         </div>
         {quick.isPending || (quick.isFetching&&!quick.data) ? (
           <p className="mt-3 text-sm text-muted-foreground" role="status">Finding your meals…</p>
@@ -251,7 +252,7 @@ function Today() {
             {quickOptions.map((meal,index)=>(
               <div key={meal.id} className="flex min-h-[76px] items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
-                  {index===0&&<p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  {index===0&&<p className="text-xs font-medium text-primary">
                     {suggestions.latest?.id===meal.id?"Recently eaten":"Your familiar portion"}
                   </p>}
                   <p className="mt-0.5 truncate text-sm font-semibold text-foreground">{meal.food_name}</p>
@@ -277,8 +278,7 @@ function Today() {
       <section className="mt-8" aria-label="Today's meal diary">
         <div className="flex items-baseline justify-between gap-3 border-b border-border pb-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Today's diary</p>
-            <h2 className="mt-1 font-display text-[1.55rem] leading-tight">The little food story</h2>
+            <h2 className="ritual-section-title font-display">Today's meals</h2>
           </div>
           <span className="text-xs text-muted-foreground">{eaten.length} {eaten.length===1?"entry":"entries"}</span>
         </div>
@@ -289,13 +289,13 @@ function Today() {
             <button type="button" className="mt-3 min-h-11 text-sm font-semibold text-primary"
               onClick={()=>setSheet({open:true,meal:null})}>Add your first meal</button>
           </div>
-        ):MEAL_TYPES.map(type=>{
+        ):MEAL_TYPES.filter(type=>todays.some(m=>m.meal_type===type.key)).map(type=>{
           const items=todays.filter(m=>m.meal_type===type.key);
           return (
             <div key={type.key} className="border-b border-border/75 py-3">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">{type.label}</h3>
-                {items.length===0&&<span className="text-[11px] text-muted-foreground/75">Nothing logged</span>}
+                <h3 className="text-sm font-medium text-muted-foreground">{type.label}</h3>
+                {items.length===0&&<span className="text-xs text-muted-foreground">Nothing logged</span>}
               </div>
               {items.length>0&&(
                 <div className="mt-1 divide-y divide-border/65">
@@ -309,7 +309,7 @@ function Today() {
                             onClick={()=>void signedMealPhotoUrl(m.photo_url!,room.id).then(url=>{
                               if(url)setLightbox({src:url,caption:m.food_name+" · "+fmt(m.calories)+" kcal"});
                               else toast.error("This photo is unavailable.");
-                            })} aria-label={"View photo for "+m.food_name}>
+                            }).catch(()=>toast.error("Couldn't open this private photo."))} aria-label={"View photo for "+m.food_name}>
                             <PrivateMealPhoto stored={m.photo_url} roomId={room.id} className="size-11 object-cover"/>
                           </button>
                         ):<span className={cn("size-1.5 shrink-0 rounded-full",isMe?"bg-primary":"bg-partner")} aria-hidden="true"/>}
@@ -323,7 +323,7 @@ function Today() {
                               {m.serving_description?" · "+m.serving_description:""}
                             </span>
                           </span>
-                          <span className="num shrink-0 text-sm text-foreground">{fmt(m.calories)} <span className="text-[11px] text-muted-foreground">kcal</span></span>
+                          <span className="num shrink-0 text-sm font-medium text-foreground">{fmt(m.calories)} <span className="text-xs text-muted-foreground">kcal</span></span>
                         </button>
                         {isMe&&(
                           <button type="button" onClick={()=>void toggleFavourite(m)}
