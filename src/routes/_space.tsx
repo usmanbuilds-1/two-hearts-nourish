@@ -125,7 +125,7 @@ function InnerLayout() {
       <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/80 backdrop-blur-md"
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <div className="mx-auto grid max-w-lg grid-cols-5">
           {NAV.map(({ to, label, icon: Icon }) => {
