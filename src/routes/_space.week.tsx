@@ -193,9 +193,9 @@ function WeekView() {
   return (
     <Screen>
       {/* Tab bar — 4 cols */}
-      <div role="tablist" aria-label="Progress views" className="mb-6 grid grid-cols-4 gap-1 border-b border-border">
+      <div role="group" aria-label="Progress views" className="mb-6 grid grid-cols-4 gap-1 border-b border-border">
         {TABS.map(({ key, label }) => (
-          <button key={key} role="tab" aria-selected={tab===key} onClick={() => setTab(key)}
+          <button key={key} type="button" aria-pressed={tab===key} onClick={() => setTab(key)}
             className={cn("min-h-11 border-b-2 border-transparent px-1 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",
               tab === key ? "border-primary text-primary" : "text-muted-foreground hover:text-foreground")}>
             {label}
