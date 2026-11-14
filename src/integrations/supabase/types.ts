@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      couple_milestones: {
+        Row: {
+          id: string
+          room_id: string
+          created_by_member_id: string
+          title: string
+          milestone_date: string
+          note: string | null
+          repeats_annually: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          created_by_member_id: string
+          title: string
+          milestone_date: string
+          note?: string | null
+          repeats_annually?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          created_by_member_id?: string
+          title?: string
+          milestone_date?: string
+          note?: string | null
+          repeats_annually?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "couple_milestones_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "couple_milestones_created_by_member_id_fkey"
+            columns: ["created_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meal_favorites: {
         Row: {
           calories: number

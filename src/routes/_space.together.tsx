@@ -8,6 +8,8 @@ import { coupleStats, fmt, milestones, parseLocalDate, totals, type Meal } from 
 import { Btn, Screen } from "@/components/us/primitives";
 import { coupleWeekDays, recentCoupleWeek, sharedRegularMeals } from "@/lib/couple-insights";
 import { cn } from "@/lib/utils";
+import { OurMilestones } from "@/components/us/OurMilestones";
+import { quoteForDay } from "@/lib/quotes";
 
 export const Route = createFileRoute("/_space/together")({
   head:()=>({meta:[
@@ -73,7 +75,19 @@ function Together(){
             <span className="font-medium text-foreground">{partner.display_name}</span></>:" · Your shared space"}
         </p>
         {room.shared_goal&&<p className="mt-4 font-display text-lg italic leading-relaxed">“{room.shared_goal}”</p>}
+        <blockquote className="mt-5 border-l-2 border-primary/35 pl-4">
+          <p className="font-display text-lg italic leading-relaxed text-foreground/90">“{quoteForDay(today)}”</p>
+          <footer className="mt-2 text-xs text-muted-foreground">A little note for the two of you today</footer>
+        </blockquote>
       </header>
+
+      <OurMilestones
+        roomId={room.id}
+        meId={me.id}
+        today={today}
+        togetherSince={room.together_since}
+        memberNames={{[me.id]:me.display_name,...(partner?{[partner.id]:partner.display_name}:{})}}
+      />
 
       {!partner?(
         <section className="mt-7">
@@ -169,16 +183,27 @@ function Together(){
             <p className="mt-2 text-xs text-muted-foreground">These food names appear in both diaries; each person keeps their own portion and nutrition.</p>
           </section>
 
-          {achieved.length>0&&(
-            <details className="mt-8 border-t border-border pt-4">
-              <summary className="cursor-pointer py-2 text-sm font-medium text-primary focus-visible:ring-2 focus-visible:ring-ring">
-                View {achieved.length} {achieved.length===1?"milestone":"milestones"} you've reached
-              </summary>
-              <ul className="mt-2 divide-y divide-border">
-                {achieved.map(m=><li className="py-3 text-sm" key={m.title}>{m.title}</li>)}
-              </ul>
-            </details>
-          )}
+          <section className="mt-8">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-display text-xl font-normal">Milestones together</h2>
+              <span className="text-xs text-muted-foreground">{achieved.length} reached</span>
+            </div>
+            <div className="mt-3 divide-y divide-border border-y border-border">
+              {milestones(stats).map(m=>(
+                <div key={m.title} className="flex min-h-14 items-center justify-between gap-4 py-3">
+                  <span className={m.achieved?"text-sm font-medium text-foreground":"text-sm text-muted-foreground"}>
+                    {m.title}
+                  </span>
+                  <span className={m.achieved?"text-xs font-semibold text-primary":"text-xs text-muted-foreground"}>
+                    {m.achieved?"Reached":"Still ahead"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              These are calculated only from activity you both actually logged in this app.
+            </p>
+          </section>
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
             Keep going at your own pace. <Link className="font-medium text-primary underline-offset-2 hover:underline" to="/today">Log your next meal</Link>

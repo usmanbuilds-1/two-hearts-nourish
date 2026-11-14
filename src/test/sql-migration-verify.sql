@@ -16,6 +16,14 @@ BEGIN
     THEN RAISE EXCEPTION 'Recovery RLS missing'; END IF;
   IF has_table_privilege('authenticated','public.member_recovery_keys','SELECT')
     THEN RAISE EXCEPTION 'Recovery keys exposed'; END IF;
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.couple_milestones'::regclass)
+    THEN RAISE EXCEPTION 'Milestones RLS missing'; END IF;
+  IF has_table_privilege('authenticated','public.couple_milestones','SELECT')
+    THEN RAISE EXCEPTION 'Milestones readable directly by browsers'; END IF;
+  IF has_table_privilege('authenticated','public.couple_milestones','INSERT')
+    THEN RAISE EXCEPTION 'Milestones writable directly by browsers'; END IF;
+  IF NOT has_table_privilege('service_role','public.couple_milestones','SELECT')
+    THEN RAISE EXCEPTION 'Server cannot read milestones'; END IF;
   IF has_table_privilege('authenticated','public.ai_usage_daily','SELECT')
     THEN RAISE EXCEPTION 'AI usage exposed'; END IF;
   IF has_function_privilege('authenticated','public.rotate_member_recovery(uuid,text,uuid)','EXECUTE')
@@ -49,6 +57,14 @@ BEGIN
     OR (counter->>'sharedDinners')::int <> 1
     OR (counter->>'streak')::int <> 1
     THEN RAISE EXCEPTION 'Incorrect rollup: %', counter; END IF;
+
+  -- Milestones are stored per room, with authorship and anniversary metadata.
+  INSERT INTO public.couple_milestones(room_id,created_by_member_id,title,
+    milestone_date,note,repeats_annually)
+  VALUES(room,member_a,'First date','2025-11-01','A day to remember',true);
+  IF (SELECT count(*) FROM public.couple_milestones WHERE room_id=room
+    AND created_by_member_id=member_a AND repeats_annually=true)<>1
+    THEN RAISE EXCEPTION 'Shared milestones not persisted'; END IF;
 
   SELECT public.claim_ai_request(member_a,'scan',2) INTO succeeded;
   IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Quota first request'; END IF;
