@@ -24,6 +24,7 @@ import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
 import { signedMealPhotoUrl } from "@/lib/private-photo";
 import { cn } from "@/lib/utils";
 import { copyMealToDay } from "@/lib/meal-operations.functions";
+import { quoteForDay } from "@/lib/quotes";
 
 export const Route = createFileRoute("/_space/today")({
   head: () => ({ meta: [{ title: "Today — Us" }, { name: "description", content: "Your shared day of meals." }, { property: "og:title", content: "Today — Us" }, { property: "og:description", content: "Your shared day of meals." }] }),
@@ -163,6 +164,11 @@ function Today() {
           <p className="mt-2 text-xs text-primary">{sharedStreak} days of logging together</p>
         )}
       </header>
+
+      <blockquote className="mt-4 rounded-2xl border border-border bg-card px-4 py-4">
+        <Eyebrow className="text-primary">A little note for us today</Eyebrow>
+        <p className="mt-2 font-display text-lg italic leading-relaxed text-foreground/90">“{quoteForDay(today)}”</p>
+      </blockquote>
 
       <div className={cn("mt-6 grid gap-3",partner?"grid-cols-1 min-[350px]:grid-cols-2":"grid-cols-1")}>
         <PersonCard label="You" member={me} meals={mine} />
