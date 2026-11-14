@@ -40,7 +40,7 @@ export type FoodEstimate = {
   carbs:    number;
   fat:      number;
   confidence: "low" | "medium" | "high";
-  packaged_food: DetectedPackage | null;
+  packaged_food?: DetectedPackage | null;
 };
 
 // ── Helpers (unchanged) ───────────────────────────────────────────────────
