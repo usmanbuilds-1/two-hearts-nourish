@@ -43,7 +43,9 @@ function normalizedTokens(value: string): string {
 }
 
 export function packageSearchQuery(value: DetectedPackage): string {
-  return [value.brand.trim(), value.product.trim()].filter(Boolean).join(" ").slice(0, 80);
+  // Broader search tolerates regional spelling differences such as flavor/flavour.
+  const product = value.product.trim().replace(/\bflavo(?:u)?r\b/gi, " ").replace(/\s+/g, " ").trim();
+  return [value.brand.trim(), product].filter(Boolean).join(" ").slice(0, 80);
 }
 
 /** No silent substitution of a different flavour, brand, or packet size. */
