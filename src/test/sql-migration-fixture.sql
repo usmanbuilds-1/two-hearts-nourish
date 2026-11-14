@@ -53,8 +53,8 @@ CREATE TABLE public.meals (
  protein numeric NOT NULL DEFAULT 0
 );
 CREATE OR REPLACE FUNCTION public.touch_updated_at() RETURNS trigger
-LANGUAGE plpgsql SET search_path = public AS $
-BEGIN NEW.updated_at = now(); RETURN NEW; END $;
+LANGUAGE plpgsql SET search_path = public AS $fixture_touch$
+BEGIN NEW.updated_at = now(); RETURN NEW; END $fixture_touch$;
 
 CREATE OR REPLACE FUNCTION public.my_room_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
