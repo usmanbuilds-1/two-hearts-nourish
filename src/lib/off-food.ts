@@ -2,6 +2,7 @@ export type PackagedFood = {
   code: string;
   name: string;
   brand: string;
+  packageQuantity?: string;
   calories: number;
   protein: number;
   carbs: number;
@@ -35,6 +36,7 @@ export function normalizeOffProduct(value: unknown): PackagedFood | null {
   const brand = typeof p["brands"] === "string" ? p["brands"].trim().slice(0,80) : "";
   return {
     code,name:name.slice(0,120),brand,
+    packageQuantity: typeof p["quantity"] === "string" ? p["quantity"].trim().slice(0,40) : "",
     calories:Math.round(energy),
     protein:Math.round(protein*10)/10,
     carbs:Math.round(carbs*10)/10,
