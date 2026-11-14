@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Camera, ImageIcon } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
@@ -11,6 +12,7 @@ import { searchPackagedFoods } from "@/lib/food-catalog.functions";
 import type { PackagedFood } from "@/lib/off-food";
 import { detectedTotalGrams, packageSearchQuery, scalePackagedLabel, strictPackageMatch, type DetectedPackage } from "@/lib/packaged-scan";
 import { FoodSearchSheet } from "./FoodSearchSheet";
+import { saveFavoriteMeal } from "@/lib/meal-operations.functions";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
 
@@ -41,8 +43,10 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
   const [labelAdjusted, setLabelAdjusted] = useState(false);
   const [amountGrams, setAmountGrams] = useState("");
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
+  const [rememberPortion, setRememberPortion] = useState(false);
   const save = useSaveMeal();
-  const { room } = useSpace();
+  const { room, me } = useSpace();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!open) {
@@ -56,6 +60,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
       setLabelSource(null);
       setAmountGrams("");
       setFoodSearchOpen(false);
+      setRememberPortion(false);
       setEditing(false);
     }
   }, [open]);
@@ -64,14 +69,16 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    requestRef.current += 1;
+    const id = ++requestRef.current;
     editedRef.current = false;
     setCandidates([]);
     setLabelSource(null);
     setDetectedPackage(null);
     setCheckingLabel(false);
     try {
-      setImage(await compressImage(file));
+      const compressed = await compressImage(file);
+      if (id !== requestRef.current) return;
+      setImage(compressed);
       setStage("preview");
     } catch {
       toast.error("Couldn't read that photo. Try another one?");
@@ -166,6 +173,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
   async function confirm() {
     if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
     setBusy(true);
+    editedRef.current = true;
     try {
       // Upload the photo first (non-blocking — meal still saves if upload fails)
       let photoUrl: string | null = null;
@@ -173,6 +181,21 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
         photoUrl = await uploadMealPhoto(room.id, image);
       }
       await save({ ...draft, photo_url: photoUrl });
+      if (rememberPortion && me) {
+        try {
+          await saveFavoriteMeal({ data: {
+            foodName: draft.food_name.trim(),
+            servingDescription: draft.serving_description,
+            calories: Number(draft.calories || 0),
+            protein: Number(draft.protein || 0),
+            carbs: Number(draft.carbs || 0),
+            fat: Number(draft.fat || 0),
+          } });
+          await queryClient.invalidateQueries({ queryKey: ["meal-favorites", me.id] });
+        } catch {
+          toast.error("Meal added, but saving its favourite failed. You can still star it in Today.");
+        }
+      }
       toast.success("Added ❤️");
       onOpenChange(false);
     } catch {
@@ -323,6 +346,11 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
                   <div className="mt-4 text-xs text-muted-foreground">Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></div>
                 </div>
               )}
+              <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-foreground">
+                <input type="checkbox" checked={rememberPortion} onChange={event => setRememberPortion(event.target.checked)}
+                  className="size-4 accent-primary" />
+                Save this portion to my favourites for next time
+              </label>
               <div className="mt-5 flex flex-col gap-2">
                 <Btn size="lg" onClick={confirm} disabled={busy}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
                 <div className="flex gap-2">
