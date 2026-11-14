@@ -38,7 +38,7 @@ describe("one-call packaged-food reconciliation", () => {
     expect(strictPackageMatch(recognized, [{ ...chicken, packageQuantity: "70g" }])).toBeNull();
   });
   it("only sends a short recognized product name to the food database", () => {
-    expect(packageSearchQuery(recognized)).toBe("Knorr Chicken Flavor Noodles");
+    expect(packageSearchQuery(recognized)).toBe("Knorr Chicken Noodles");
     expect(packageSearchQuery({ ...recognized, product: "X".repeat(200) }).length).toBeLessThanOrEqual(80);
   });
 });
