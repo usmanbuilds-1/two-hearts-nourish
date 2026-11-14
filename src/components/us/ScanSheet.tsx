@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Camera, ImageIcon } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
-import { Btn } from "./primitives";
+import { Btn, TextInput } from "./primitives";
 import { MealFields, emptyDraft, useSaveMeal, validDraft, type MealDraft } from "./MealSheet";
 import { useSpace } from "@/lib/space";
 import { compressImage, uploadMealPhoto } from "@/lib/image";
 import { analyzeFood } from "@/lib/scan.functions";
+import { searchPackagedFoods } from "@/lib/food-catalog.functions";
+import type { PackagedFood } from "@/lib/off-food";
+import { detectedTotalGrams, packageSearchQuery, scalePackagedLabel, strictPackageMatch, type DetectedPackage } from "@/lib/packaged-scan";
+import { FoodSearchSheet } from "./FoodSearchSheet";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
 
@@ -21,20 +25,37 @@ const ERRORS: Record<string, string> = {
 export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onOpenChange: (o: boolean) => void; onManual: () => void }) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
+  // Prevent a late AI/database response from rewriting a newer photo or manual edit.
+  const requestRef = useRef(0);
+  const editedRef = useRef(false);
   const [stage, setStage] = useState<Stage>("pick");
   const [image, setImage] = useState<string | null>(null);
   const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [editing, setEditing] = useState(false);
   const [errMsg, setErrMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [detectedPackage, setDetectedPackage] = useState<DetectedPackage | null>(null);
+  const [candidates, setCandidates] = useState<PackagedFood[]>([]);
+  const [checkingLabel, setCheckingLabel] = useState(false);
+  const [labelSource, setLabelSource] = useState<PackagedFood | null>(null);
+  const [labelAdjusted, setLabelAdjusted] = useState(false);
+  const [amountGrams, setAmountGrams] = useState("");
+  const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const save = useSaveMeal();
   const { room } = useSpace();
 
   useEffect(() => {
     if (!open) {
       // Photos are held only in memory and discarded when the sheet closes.
+      requestRef.current += 1;
       setStage("pick");
       setImage(null);
+      setDetectedPackage(null);
+      setCandidates([]);
+      setCheckingLabel(false);
+      setLabelSource(null);
+      setAmountGrams("");
+      setFoodSearchOpen(false);
       setEditing(false);
     }
   }, [open]);
@@ -43,6 +64,12 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    requestRef.current += 1;
+    editedRef.current = false;
+    setCandidates([]);
+    setLabelSource(null);
+    setDetectedPackage(null);
+    setCheckingLabel(false);
     try {
       setImage(await compressImage(file));
       setStage("preview");
@@ -51,30 +78,86 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
     }
   }
 
+  function applyLabel(food: PackagedFood, grams: number) {
+    try {
+      const nutrition = scalePackagedLabel(food, grams);
+      editedRef.current = true;
+      setAmountGrams(String(grams));
+      setLabelSource(food);
+      setLabelAdjusted(false);
+      setDraft(previous => ({
+        ...previous,
+        food_name: [food.brand, food.name].filter(Boolean).join(" ").slice(0, 200),
+        serving_description: String(grams) + " g/ml · Open Food Facts (check packet label)",
+        calories: String(nutrition.calories),
+        protein: String(nutrition.protein),
+        carbs: String(nutrition.carbs),
+        fat: String(nutrition.fat),
+        ai_confidence: null,
+        nominal_calories: undefined,
+        nominal_protein: undefined,
+        nominal_carbs: undefined,
+        nominal_fat: undefined,
+        portion_percentage: 100,
+      }));
+    } catch {
+      toast.error("Enter an amount greater than 0 and no more than 2000 g.");
+    }
+  }
+
   async function analyze() {
     if (!image) return;
+    const id = ++requestRef.current;
+    editedRef.current = false;
     setStage("analyzing");
+    setLabelSource(null);
+    setLabelAdjusted(false);
+    setCandidates([]);
+    setDetectedPackage(null);
+    setCheckingLabel(false);
     try {
+      // One normal Gemini photo request. Product search below uses NO Gemini tokens.
       const r = await analyzeFood({ data: { image } });
+      if (requestRef.current !== id) return;
       if (!r.ok) {
         setErrMsg(ERRORS[r.error] ?? "Couldn't figure that one out. Try another photo?");
         setStage("error");
         return;
       }
-      const e = r.estimate;
+      const estimate = r.estimate;
       setDraft({
         ...emptyDraft(),
-        food_name: e.food_name,
-        serving_description: e.serving_description,
-        calories: String(e.calories),
-        protein: String(e.protein),
-        carbs: String(e.carbs),
-        fat: String(e.fat),
-        ai_confidence: e.confidence,
+        food_name: estimate.food_name,
+        serving_description: estimate.serving_description,
+        calories: String(estimate.calories),
+        protein: String(estimate.protein),
+        carbs: String(estimate.carbs),
+        fat: String(estimate.fat),
+        ai_confidence: estimate.confidence,
       });
       setEditing(false);
       setStage("confirm");
+      const detected = estimate.packaged_food;
+      setDetectedPackage(detected);
+      const grams = detectedTotalGrams(detected);
+      setAmountGrams(grams === null ? "" : String(grams));
+      if (!detected?.brand || !detected.product) return;
+
+      setCheckingLabel(true);
+      try {
+        const result = await searchPackagedFoods({ data: { query: packageSearchQuery(detected) } });
+        if (requestRef.current !== id) return;
+        if (!result.ok) return; // AI estimate remains available; never invent a match.
+        setCandidates(result.foods.slice(0, 5));
+        const exact = strictPackageMatch(detected, result.foods);
+        if (exact && grams !== null && !editedRef.current) applyLabel(exact, grams);
+      } catch {
+        // Open Food Facts is optional. The user can edit the AI estimate or find a label manually.
+      } finally {
+        if (requestRef.current === id) setCheckingLabel(false);
+      }
     } catch {
+      if (requestRef.current !== id) return;
       setErrMsg(navigator.onLine ? "Couldn't figure that one out. Try another photo?" : "You're offline. We'll reconnect when you're back.");
       setStage("error");
     }
@@ -100,6 +183,12 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
   }
 
   const retake = () => {
+    requestRef.current += 1;
+    editedRef.current = false;
+    setCandidates([]);
+    setDetectedPackage(null);
+    setLabelSource(null);
+    setAmountGrams("");
     setImage(null);
     setStage("pick");
     cameraRef.current?.click();
@@ -115,7 +204,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "An estimate from your photo — adjust anything before saving." : "The photo is sent to Gemini for estimation. It is stored privately only when you save the meal."}
+            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "The photo is sent to Gemini for estimation. It is stored privately only when you save the meal."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
@@ -154,8 +243,71 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
 
           {stage === "confirm" && (
             <div className="mt-5">
+              {detectedPackage && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Packaging spotted: {detectedPackage.brand} {detectedPackage.product}
+                  {detectedTotalGrams(detectedPackage) !== null
+                    ? " · " + String(detectedPackage.pack_count) + " × " + String(detectedPackage.grams_per_pack) + " g (confirm on pack)"
+                    : " · serving size not readable"}
+                </p>
+              )}
+              {checkingLabel && <p className="mb-3 text-sm text-muted-foreground">Checking the food database for a matching label…</p>}
+              {labelSource && (
+                <div className="mb-3 space-y-2 border-b border-border pb-3">
+                  <p className="text-sm font-medium">Open Food Facts community label: {labelSource.name}</p>
+                  <p className="text-xs text-muted-foreground">These numbers come from a matching database entry, not Gemini. Compare the brand, flavour and nutrition label on your packet. Community data may be wrong.</p>
+                  <label className="block text-sm">
+                    Amount eaten (g/ml)
+                    <TextInput type="number" inputMode="decimal" min={1} max={2000}
+                      value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
+                      className="mt-1" />
+                  </label>
+                  <Btn variant="outline" disabled={!Number.isFinite(Number(amountGrams)) || Number(amountGrams) <= 0 || Number(amountGrams) > 2000}
+                    onClick={() => applyLabel(labelSource, Number(amountGrams))}>
+                    Recalculate from label
+                  </Btn>
+                  {labelAdjusted && <p className="text-xs text-muted-foreground">Numbers were adjusted after applying the label.</p>}
+                </div>
+              )}
+              {!labelSource && candidates.length > 0 && !editing && (
+                <div className="mb-4 space-y-2">
+                  <p className="text-sm font-medium">Possible packaged foods</p>
+                  <p className="text-xs text-muted-foreground">Not automatically verified. Choose only if the exact product and variant match your packet.</p>
+                  <label className="block text-sm">
+                    Total amount eaten (g/ml)
+                    <TextInput type="number" inputMode="decimal" min={1} max={2000}
+                      value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
+                      className="mt-1" placeholder="Enter packet weight × count" />
+                  </label>
+                  {candidates.map(food => (
+                    <button key={food.code} type="button"
+                      disabled={!Number.isFinite(Number(amountGrams)) || Number(amountGrams) <= 0 || Number(amountGrams) > 2000}
+                      onClick={() => applyLabel(food, Number(amountGrams))}
+                      className="w-full rounded-xl border border-border p-3 text-left text-sm disabled:opacity-40">
+                      <span className="block font-medium">{food.brand} {food.name}{food.packageQuantity ? " · " + food.packageQuantity : ""}</span>
+                      <span className="block text-xs text-muted-foreground">Per 100 g/ml: {food.calories} kcal · P {food.protein} · C {food.carbs} · F {food.fat}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!labelSource && !checkingLabel && (
+                <p className="mb-3 text-xs text-muted-foreground">
+                  AI estimate only. For packaged food, check its nutrition label before saving.
+                </p>
+              )}
+              {!editing && <Btn variant="outline" className="mb-4 w-full" onClick={() => setFoodSearchOpen(true)}>
+                {labelSource ? "Use a different package label" : "Find label by name or barcode"}
+              </Btn>}
+              <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyLabel} />
               {editing ? (
-                <MealFields draft={draft} onChange={setDraft} />
+                <MealFields draft={draft} onChange={next => {
+                    editedRef.current = true;
+                    if (labelSource && (
+                      next.calories !== draft.calories || next.protein !== draft.protein ||
+                      next.carbs !== draft.carbs || next.fat !== draft.fat
+                    )) setLabelAdjusted(true);
+                    setDraft(next);
+                  }} />
               ) : (
                 <div className="rounded-2xl border border-border bg-card p-4">
                   <div className="font-display text-xl">{draft.food_name}</div>
