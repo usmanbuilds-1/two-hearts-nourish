@@ -44,7 +44,7 @@ async function offFetch(path:string):Promise<unknown> {
 async function getFoods(cacheKey:string,memberId:string,kind:"search"|"barcode",path:string):Promise<Result> {
   const now=Date.now();
   const hit=cache.get(cacheKey);
-  if(hit && now-hit.at<10*60_000) return {ok:true,foods:hit.foods};
+  if(hit && now-hit.at<60*60_000) return {ok:true,foods:hit.foods};
   if(!quota(memberId,kind))return {ok:false,error:"RATE_LIMIT"};
   try {
     const raw=await offFetch(path) as {product?:unknown;products?:unknown[]};
