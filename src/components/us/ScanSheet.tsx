@@ -137,7 +137,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
       });
       setEditing(false);
       setStage("confirm");
-      const detected = estimate.packaged_food;
+      const detected = estimate.packaged_food ?? null;
       setDetectedPackage(detected);
       const grams = detectedTotalGrams(detected);
       setAmountGrams(grams === null ? "" : String(grams));
