@@ -4,7 +4,7 @@ import { z } from "zod";
 import { normalizeOffProduct, type PackagedFood } from "./off-food";
 
 const API = "https://world.openfoodfacts.org";
-const fields = "code,product_name,brands,nutriments,serving_size";
+const fields = "code,product_name,brands,nutriments,serving_size,quantity";
 type Result = { ok:true; foods:PackagedFood[] } | { ok:false; error:"NOT_FOUND"|"UPSTREAM_UNAVAILABLE"|"RATE_LIMIT"|"NOT_MEMBER" };
 const cache = new Map<string,{at:number;foods:PackagedFood[]}>();
 const requests = new Map<string,{reset:number;count:number}>();
