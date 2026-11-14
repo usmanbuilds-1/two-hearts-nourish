@@ -152,6 +152,13 @@ export function OurMilestones({
           )}
           <div className="mt-5">
             <h3 className="text-sm font-semibold">Our story</h3>
+            {togetherSince&&validMilestoneDate(togetherSince)&&togetherSince<=today&&(
+              <div className="mt-3 border-t border-border py-4">
+                <p className="text-xs text-muted-foreground">{formatDate(togetherSince)}</p>
+                <p className="mt-1 text-base font-semibold">Together since</p>
+                <p className="mt-1 text-xs text-muted-foreground">This date can be changed in Settings.</p>
+              </div>
+            )}
             {sorted.length===0?(
               <p className="mt-2 text-sm text-muted-foreground">
                 No dates saved yet. You could start with when you first met, a first date or a moment you'll always remember.
