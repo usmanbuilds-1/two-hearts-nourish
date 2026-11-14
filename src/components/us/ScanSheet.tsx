@@ -227,7 +227,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "The photo is sent to Gemini for estimation. It is stored privately only when you save the meal."}
+            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini. On its free tier, Google may use submitted content to improve its services. This app stores a copy only when you save."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
@@ -343,7 +343,7 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 text-xs text-muted-foreground">Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></div>
+                   <div className="mt-4 text-xs text-muted-foreground">{labelSource ? "Source: Open Food Facts community label (check packet)" : <>AI estimate · Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></>}</div>
                 </div>
               )}
               <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-foreground">
@@ -355,8 +355,8 @@ export function ScanSheet({ open, onOpenChange, onManual }: { open: boolean; onO
                 <Btn size="lg" onClick={confirm} disabled={busy}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
                 <div className="flex gap-2">
                   {!editing && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
-                  <Btn variant="outline" className="flex-1" onClick={retake}>Retake photo</Btn>
-                  <Btn variant="ghost" onClick={() => onOpenChange(false)}>Discard</Btn>
+                  <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy}>Retake photo</Btn>
+                  <Btn variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Discard</Btn>
                 </div>
               </div>
             </div>
