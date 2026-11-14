@@ -8,6 +8,7 @@ import { coupleStats, fmt, milestones, parseLocalDate, totals, type Meal } from 
 import { Btn, Screen } from "@/components/us/primitives";
 import { coupleWeekDays, recentCoupleWeek, sharedRegularMeals } from "@/lib/couple-insights";
 import { cn } from "@/lib/utils";
+import { OurMilestones } from "@/components/us/OurMilestones";
 
 export const Route = createFileRoute("/_space/together")({
   head:()=>({meta:[
@@ -74,6 +75,14 @@ function Together(){
         </p>
         {room.shared_goal&&<p className="mt-4 font-display text-lg italic leading-relaxed">“{room.shared_goal}”</p>}
       </header>
+
+      <OurMilestones
+        roomId={room.id}
+        meId={me.id}
+        today={today}
+        togetherSince={room.together_since}
+        memberNames={{[me.id]:me.display_name,...(partner?{[partner.id]:partner.display_name}:{})}}
+      />
 
       {!partner?(
         <section className="mt-7">

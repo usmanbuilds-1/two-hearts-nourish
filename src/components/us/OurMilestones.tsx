@@ -1,4 +1,4 @@
-import {useMemo,useState} from "react";
+import {useMemo,useState,type FormEvent} from "react";
 import {useQuery,useQueryClient} from "@tanstack/react-query";
 import {Plus} from "lucide-react";
 import {toast} from "sonner";
@@ -46,7 +46,7 @@ export function OurMilestones({
     setOpen(true);
   }
 
-  async function submit(e:React.FormEvent){
+  async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();
     if(busy)return;
     const title=draft.title.trim();
@@ -115,10 +115,10 @@ export function OurMilestones({
             Celebrate this date every year
           </label>
           <div className="flex gap-2">
-            <Btn size="lg" className="flex-1" disabled={busy} submit>
+            <Btn type="submit" size="lg" className="flex-1" disabled={busy}>
               {busy?"Saving…":editingId?"Save changes":"Save milestone"}
             </Btn>
-            <Btn size="lg" variant="outline" disabled={busy} onClick={()=>setOpen(false)}>Cancel</Btn>
+            <Btn type="button" size="lg" variant="outline" disabled={busy} onClick={()=>setOpen(false)}>Cancel</Btn>
           </div>
         </form>
       )}
