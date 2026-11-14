@@ -114,7 +114,7 @@ export const REDDIT_INSPIRED_QUOTES: readonly string[] = [
   "Take care of yourself too; the person who loves you wants you well.",
 ];
 
-const QUOTES: readonly string[] = [...ORIGINAL_QUOTES, ...REDDIT_INSPIRED_QUOTES];
+export const ALL_QUOTES: readonly string[] = [...ORIGINAL_QUOTES, ...REDDIT_INSPIRED_QUOTES];
 
 function hashDay(day:string):number {
   let hash=2166136261;
@@ -127,8 +127,8 @@ function hashDay(day:string):number {
 
 /** Stable for a supplied local YYYY-MM-DD, avoiding UTC midnight changes. */
 export function quoteForDay(day:string): string {
-  const idx=hashDay(day)%QUOTES.length;
-  return QUOTES[idx] ?? QUOTES[0] ?? "";
+  const idx=hashDay(day)%ALL_QUOTES.length;
+  return ALL_QUOTES[idx] ?? ALL_QUOTES[0] ?? "";
 }
 
 /** Legacy fallback for call sites without a local date. */
