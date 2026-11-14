@@ -3,20 +3,22 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { isPlausibleNutrition } from "./ai-estimate";
 import { claimAiQuota } from "./ai-quota.server";
+import type { DetectedPackage } from "./packaged-scan";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
 const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 
 // ── System prompt ─────────────────────────────────────────────────────────
-const SYSTEM = `You are a careful nutrition estimator looking at a single food photo.
-1. Identify the visible food items. 2. Estimate portion sizes. 3. Consider the cooking method (fried, grilled, oil, ghee, sauces). 4. Consider visible ingredients.
-5-8. Estimate total calories, protein, carbohydrates and fat for everything visible combined.
-Photos cannot give exact measurements: these are estimates. Avoid false precision — round calories to the nearest 10 and macros to whole grams.
-Give a confidence of "low", "medium" or "high" based on how clearly portions and ingredients can be seen.
-If several foods are visible, give one combined meal estimate with a short combined name (e.g. "Chicken biryani + raita").
-If there is no food in the photo, return food_name "" and all numbers 0 with confidence "low".
-Respond with ONLY a JSON object, no markdown, exactly:
-{"food_name": string, "serving_description": string, "calories": number, "protein": number, "carbs": number, "fat": number, "confidence": "low"|"medium"|"high"}`;
+const SYSTEM = `You are a cautious food-photo analyst. Make ONE analysis of the supplied image.
+Identify visible food and estimate total calories/protein/carbs/fat, accounting for cooking oil and portions; estimates are uncertain.
+Round estimated calories to nearest 10 and macros to whole grams. Never claim these are verified nutrition facts.
+For clearly visible single packaged foods, also extract the brand, product/variant, number of packs and printed GRAMS PER PACK.
+Only populate package fields from legible packaging; do not infer a 61 g packet or barcode based on familiarity with a brand.
+Set unknown fields to null, and set packaged_food to null for mixed/homemade/unrecognizable food.
+If several foods are visible, return combined estimated macros and packaged_food null.
+If there is no food, return food_name empty with zero numbers and low confidence.
+Return one JSON object with exactly these fields:
+{"food_name":string,"serving_description":string,"calories":number,"protein":number,"carbs":number,"fat":number,"confidence":"low"|"medium"|"high","packaged_food":null|{"brand":string,"product":string,"pack_count":number|null,"grams_per_pack":number|null}}`;
 
 // ── Zod schema + public type ──────────────────────────────────────────────
 const resultSchema = z.object({
@@ -27,6 +29,7 @@ const resultSchema = z.object({
   carbs:     z.coerce.number(),
   fat:       z.coerce.number(),
   confidence: z.string().optional().default("low"),
+  packaged_food: z.unknown().optional(),
 });
 
 export type FoodEstimate = {
@@ -37,6 +40,7 @@ export type FoodEstimate = {
   carbs:    number;
   fat:      number;
   confidence: "low" | "medium" | "high";
+  packaged_food?: DetectedPackage | null;
 };
 
 // ── Helpers (unchanged) ───────────────────────────────────────────────────
@@ -58,6 +62,13 @@ function clamp(n: number, max: number) {
   return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), 0), max) : 0;
 }
 
+const packagedSchema = z.object({
+  brand: z.string().trim().min(1).max(100),
+  product: z.string().trim().min(1).max(140),
+  pack_count: z.number().int().min(1).max(20).nullable(),
+  grams_per_pack: z.number().positive().max(2000).nullable(),
+});
+
 function parseEstimate(text: string): FoodEstimate | null {
   const match = text.replace(/```(json)?/gi, "").match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -71,6 +82,9 @@ function parseEstimate(text: string): FoodEstimate | null {
   const name = r.food_name.trim().slice(0, 120);
   if (!name) return null;
   const conf = r.confidence.toLowerCase();
+  // Malformed optional package metadata must not discard a valid ordinary food estimate.
+  const packageResult = packagedSchema.safeParse(r.packaged_food);
+  const packageInfo: DetectedPackage | null = packageResult.success ? packageResult.data : null;
   const estimate = {
     food_name:           name,
     serving_description: r.serving_description.trim().slice(0, 160),
@@ -79,6 +93,7 @@ function parseEstimate(text: string): FoodEstimate | null {
     carbs:    clamp(r.carbs,   1_000),
     fat:      clamp(r.fat,     1_000),
     confidence: (conf === "high" || conf === "medium" ? conf : "low") as "high"|"medium"|"low",
+    packaged_food: packageInfo,
   };
   return isPlausibleNutrition(estimate) ? estimate : null;
 }
@@ -89,6 +104,12 @@ type GeminiInlinePart = { inline_data: { mime_type: string; data: string } };
 type GeminiRequestPart = GeminiTextPart | GeminiInlinePart;
 
 type GeminiResponse = {
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
+    totalTokenCount?: number;
+  };
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> };
     finishReason?: string;
@@ -122,6 +143,14 @@ async function callGeminiDirect(
     }
     if (res.ok) {
       const data = (await res.json()) as GeminiResponse;
+      // Aggregate usage only: never log image bytes, prompt text or the meal name.
+      const usage = data.usageMetadata;
+      if (usage) console.info("food_scan_token_usage", {
+        model, input: usage.promptTokenCount ?? 0,
+        output: usage.candidatesTokenCount ?? 0,
+        thinking: usage.thoughtsTokenCount ?? 0,
+        total: usage.totalTokenCount ?? 0,
+      });
       return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     }
     lastError = Object.assign(new Error(`Gemini API HTTP ${res.status}`), { status: res.status });
