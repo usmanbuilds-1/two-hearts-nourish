@@ -181,9 +181,9 @@ export type Milestone = { icon: string; title: string; achieved: boolean };
 
 export function milestones(s: CoupleStats): Milestone[] {
   return [
-    { icon: "❤️", title: "First meal together", achieved: s.daysBoth >= 1 },
-    { icon: "🔥", title: "7 days logging together", achieved: s.streak >= 7 || s.daysBoth >= 7 },
-    { icon: "💪", title: "Both hit protein goals", achieved: s.daysBothProtein >= 1 },
+    { icon: "❤️", title: "First day both logged meals", achieved: s.daysBoth >= 1 },
+    { icon: "🔥", title: "7 days with logs from both of you", achieved: s.streak >= 7 || s.daysBoth >= 7 },
+    { icon: "💪", title: "Both reached protein goals on the same date", achieved: s.daysBothProtein >= 1 },
     { icon: "🍽️", title: "50 meals logged", achieved: s.totalMeals >= 50 },
     { icon: "🌱", title: "30 days taking care of yourselves", achieved: s.daysActive >= 30 },
   ];

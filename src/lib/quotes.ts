@@ -55,7 +55,24 @@ const QUOTES: string[] = [
   "It's not about being the best. It's about being better than yesterday.",
 ];
 
-export function dailyQuote(): string {
-  const idx = Math.floor(Date.now() / 86_400_000) % QUOTES.length;
+function hashDay(day:string):number {
+  let hash=2166136261;
+  for(const ch of day){
+    hash^=ch.charCodeAt(0);
+    hash=Math.imul(hash,16777619);
+  }
+  return hash>>>0;
+}
+
+/** Stable for a supplied local YYYY-MM-DD, avoiding UTC midnight changes. */
+export function quoteForDay(day:string): string {
+  const idx=hashDay(day)%QUOTES.length;
   return QUOTES[idx] ?? QUOTES[0] ?? "";
+}
+
+/** Legacy fallback for call sites without a local date. */
+export function dailyQuote(): string {
+  const d=new Date();
+  const local=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+  return quoteForDay(local);
 }
