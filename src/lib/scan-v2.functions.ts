@@ -90,6 +90,7 @@ export type ScannerV2Estimate = {
   components: ScannerV2Component[];
   questions: string[];
   escalated: boolean;
+  cache_hit?: boolean;
   packaged_food?: DetectedPackage | null;
 };
 
@@ -131,6 +132,49 @@ Return JSON only:
    "packaged_food":null|{"brand":"string","product":"string","pack_count":number|null,"grams_per_pack":number|null}
  }]
 }`;
+
+function hammingHex(a: string, b: string): number {
+  if (a.length !== 16 || b.length !== 16) return 999;
+  let distance = 0;
+  for (let i = 0; i < 16; i++) {
+    let value = parseInt(a[i]!, 16) ^ parseInt(b[i]!, 16);
+    while (value) { distance += value & 1; value >>= 1; }
+  }
+  return distance;
+}
+
+function cachedEstimate(value: unknown): Omit<ScannerV2Estimate, "scan_id"> | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (!Array.isArray(raw.components) || typeof raw.food_name !== "string") return null;
+  const components: ScannerV2Component[] = [];
+  for (const candidate of raw.components.slice(0, 20)) {
+    if (!candidate || typeof candidate !== "object") return null;
+    const item = candidate as Record<string, unknown>;
+    const source = item.source_name;
+    if (!["USDA","Open Food Facts","nutrition-label","model-fallback","user-context","manual"].includes(String(source))) return null;
+    const numbers = ["calories","protein","carbs","fat","confidence"];
+    if (numbers.some((key) => typeof item[key] !== "number" || !Number.isFinite(item[key] as number))) return null;
+    components.push(item as unknown as ScannerV2Component);
+  }
+  const confidence = raw.confidence;
+  if (confidence !== "low" && confidence !== "medium" && confidence !== "high") return null;
+  return {
+    food_name: String(raw.food_name).slice(0, 200),
+    serving_description: typeof raw.serving_description === "string" ? raw.serving_description.slice(0, 300) : "",
+    calories: Number(raw.calories ?? 0),
+    protein: Number(raw.protein ?? 0),
+    carbs: Number(raw.carbs ?? 0),
+    fat: Number(raw.fat ?? 0),
+    confidence,
+    confidence_score: Number(raw.confidence_score ?? 0.5),
+    components,
+    questions: Array.isArray(raw.questions) ? raw.questions.filter((q): q is string => typeof q === "string").slice(0, 2) : [],
+    escalated: Boolean(raw.escalated),
+    cache_hit: true,
+    packaged_food: null,
+  };
+}
 
 function enabled() {
   return process.env["SCANNER_V2_ENABLED"] === "true";
@@ -397,10 +441,12 @@ async function admin() {
 
 export const analyzeFoodV2 = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { image: string; secondImage?: string; context?: string }) => ({
+  .inputValidator((input: { image: string; secondImage?: string; context?: string; imageFingerprint?: string; contextFingerprint?: string }) => ({
     image: z.string().max(3_100_000).parse(input?.image),
     secondImage: z.string().max(3_100_000).optional().parse(input?.secondImage),
     context: z.string().trim().max(300).optional().default("").parse(input?.context ?? ""),
+    imageFingerprint: z.string().regex(/^[a-f0-9]{16}$/).optional().parse(input?.imageFingerprint),
+    contextFingerprint: z.union([z.literal(""), z.string().regex(/^[a-f0-9]{64}$/)]).optional().default("").parse(input?.contextFingerprint ?? ""),
   }))
   .handler(async ({ data, context }): Promise<ScanResult> => {
     if (!enabled()) return { ok: false, error: "V2_DISABLED" };
@@ -417,6 +463,48 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
     }
     if (!memberId) return { ok: false, error: "NOT_MEMBER" };
 
+    const db = await admin();
+
+    // Cache lookup happens before any AI quota is consumed.
+    if (data.imageFingerprint) {
+      const { data: cacheRows } = await db.from("member_scan_cache")
+        .select("image_fingerprint,final_estimate")
+        .eq("member_id", memberId)
+        .eq("context_fingerprint", data.contextFingerprint)
+        .eq("scanner_version", SCANNER_VERSION)
+        .gt("expires_at", new Date().toISOString())
+        .order("updated_at", { ascending: false })
+        .limit(30);
+      const hit = (cacheRows ?? [])
+        .map((row) => ({ row, distance: hammingHex(data.imageFingerprint!, row.image_fingerprint) }))
+        .filter((entry) => entry.distance <= 4)
+        .sort((a, b) => a.distance - b.distance)[0];
+      const cached = hit ? cachedEstimate(hit.row.final_estimate) : null;
+      if (cached) {
+        const { data: cacheEvent, error: cacheEventError } = await db.from("scan_events").insert({
+          member_id: memberId, scanner_version: SCANNER_VERSION, prompt_version: PROMPT_VERSION,
+          model: "cache", route: "cache", status: "succeeded", cache_hit: true,
+          image_fingerprint: data.imageFingerprint, context_fingerprint: data.contextFingerprint,
+          grounding_sources: [...new Set(cached.components.map((item) => item.source_name))],
+          confidence: cached.confidence_score,
+        }).select("id").single();
+        if (cacheEventError || !cacheEvent) return { ok: false, error: "V2_STORAGE_UNAVAILABLE" };
+        const { data: stored, error: itemError } = await db.from("scan_items").insert(
+          cached.components.map((item, index) => ({
+            scan_id: cacheEvent.id, member_id: memberId, item_index: index, label: item.label,
+            grams_estimate: item.grams_estimate, grams_min: item.grams_min, grams_max: item.grams_max,
+            calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat,
+            confidence: item.confidence, hidden_fat_risk: item.hidden_fat_risk,
+            source_name: item.source_name, source_ref: item.source_ref,
+          })),
+        ).select("id,item_index");
+        if (itemError) return { ok: false, error: "V2_STORAGE_UNAVAILABLE" };
+        const ids = new Map((stored ?? []).map((row) => [row.item_index,row.id]));
+        cached.components.forEach((item,index) => { item.id = ids.get(index); });
+        return { ok: true, estimate: { ...cached, scan_id: cacheEvent.id } };
+      }
+    }
+
     try {
       if (!(await claimAiQuota(memberId, "scan"))) return { ok: false, error: "AI_LIMIT" };
     } catch {
@@ -426,7 +514,6 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
     const apiKey = process.env["GEMINI_API_KEY"];
     if (!apiKey) return { ok: false, error: "AI_UNAVAILABLE" };
 
-    const db = await admin();
     const { data: event, error: eventError } = await db.from("scan_events").insert({
       member_id: memberId,
       scanner_version: SCANNER_VERSION,
@@ -434,6 +521,8 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
       model: CHEAP_MODEL,
       route: "vision",
       status: "started",
+      image_fingerprint: data.imageFingerprint ?? null,
+      context_fingerprint: data.contextFingerprint,
     }).select("id").single();
     if (eventError || !event) {
       // Do not spend provider tokens if telemetry/cost accounting cannot be recorded.
@@ -570,6 +659,7 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
           components,
           questions,
           escalated,
+          cache_hit: false,
           packaged_food: primaryPackage,
         },
       };
