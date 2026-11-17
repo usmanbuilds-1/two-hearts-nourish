@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { claimAiQuota } from "./ai-quota.server";
 import {
   addedFatNutrition,
@@ -427,7 +429,7 @@ function confidenceLabel(score: number): "low" | "medium" | "high" {
   return score >= 0.78 ? "high" : score >= 0.55 ? "medium" : "low";
 }
 
-async function memberIdFor(context: { userId: string; supabase: any }): Promise<string | null> {
+async function memberIdFor(context: { userId: string; supabase: SupabaseClient<Database> }): Promise<string | null> {
   const { data, error } = await context.supabase
     .from("member_devices").select("member_id").eq("auth_user_id", context.userId).maybeSingle();
   if (error) throw new Error("SERVER_ERROR");
