@@ -1,9 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Btn, Field, TextInput } from "@/components/us/primitives";
 import { getRoomPreview, joinRoom, linkDevice, rejoinRoom } from "@/lib/room.functions";
-import { ensureIdentity, friendlyError, writeSession } from "@/lib/session";
+import { ensureIdentity, friendlyError, readSession, sessionCanRecoverRoom, writeSession } from "@/lib/session";
 import { readInviteToken, readRejoinToken } from "@/lib/rejoin-links";
 import { friendlyDeviceLabel } from "@/lib/device-label";
 
@@ -34,6 +34,8 @@ function Join() {
   const [rejoin, setRejoin] = useState(false);
   const [key, setKey] = useState("");
   const [ignoreMagicLink, setIgnoreMagicLink] = useState(false);
+  const [autoRecovering, setAutoRecovering] = useState(false);
+  const autoRecoveryAttempted = useRef(false);
 
   // Only long random one-use links from the URL fragment are valid.
   const lc = typeof window !== "undefined"
@@ -42,20 +44,58 @@ function Join() {
   const inviteToken = typeof window !== "undefined" ? readInviteToken(window.location.hash) : null;
 
   useEffect(() => {
-    // A stale local marker must not trap recovery in a /today redirect loop.
     let mounted = true;
     setPreview(null);
     setLoadError(false);
-    ensureIdentity()
-      .then(() => getRoomPreview({ data: {
-        code,
-        ...(inviteToken ? { inviteToken } : {}),
-        ...(lc ? { rejoinToken: lc } : {}),
-      } }))
-      .then((result) => { if (mounted) setPreview(result); })
-      .catch(() => { if (mounted) setLoadError(true); });
+
+    const openRoom = async () => {
+      try {
+        await ensureIdentity();
+
+        // Returning users should never be asked to paste a recovery key that
+        // is already stored on this same browser for this exact room.
+        const saved = readSession();
+        if (
+          !inviteToken &&
+          !lc &&
+          !autoRecoveryAttempted.current &&
+          sessionCanRecoverRoom(saved, code)
+        ) {
+          autoRecoveryAttempted.current = true;
+          setAutoRecovering(true);
+          try {
+            const restored = await rejoinRoom({
+              data: {
+                code,
+                key: saved.key,
+                deviceLabel: friendlyDeviceLabel(navigator.userAgent),
+              },
+            });
+            if (!mounted) return;
+            writeSession(restored);
+            void navigate({ to: "/today", replace: true });
+            return;
+          } catch {
+            // The saved key may have been rotated/revoked. Fall through to the
+            // normal private-room preview without deleting local recovery data.
+            if (mounted) setAutoRecovering(false);
+          }
+        }
+
+        const result = await getRoomPreview({ data: {
+          code,
+          ...(inviteToken ? { inviteToken } : {}),
+          ...(lc ? { rejoinToken: lc } : {}),
+        } });
+        if (mounted) setPreview(result);
+      } catch {
+        if (mounted) setLoadError(true);
+      }
+    };
+
+    void openRoom();
     return () => { mounted = false; };
-  }, [code, inviteToken, lc]);
+  }, [code, inviteToken, lc, navigate]);
 
   async function join(e: React.FormEvent) {
     e.preventDefault();
@@ -154,7 +194,11 @@ function Join() {
         <Btn className="mt-6" onClick={() => location.reload()}>Try again</Btn>
       </>,
     );
-  if (!preview) return shell(<div className="text-muted-foreground">Opening your invite…</div>);
+  if (!preview) return shell(
+    <div className="text-muted-foreground">
+      {autoRecovering ? "Opening your space…" : "Opening your invite…"}
+    </div>,
+  );
   if (preview.status === "rate_limited")
     return shell(
       <>
