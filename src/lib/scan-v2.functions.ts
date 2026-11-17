@@ -7,6 +7,7 @@ import { claimAiQuota } from "./ai-quota.server";
 import {
   addedFatNutrition,
   contextualQuestions,
+  conservativeHiddenFatRisk,
   evidenceConfidence,
   normalizeFoodAlias,
   foodFingerprint,
@@ -44,6 +45,7 @@ const componentSchema = z.object({
   recognition_confidence: z.number().finite().min(0).max(1),
   portion_confidence: z.number().finite().min(0).max(1),
   hidden_fat_risk: z.enum(["low", "medium", "high"]),
+  occlusion_risk: z.enum(["low", "medium", "high"]).optional().default("low"),
   cooking_method: z.string().trim().max(120).nullable().optional(),
   scale_evidence: z.string().trim().max(160).nullable().optional(),
   ambiguous_identity: z.boolean().optional().default(false),
@@ -72,6 +74,8 @@ export type ScannerV2Component = {
   fat: number;
   confidence: number;
   hidden_fat_risk: HiddenFatRisk;
+  occlusion_risk?: HiddenFatRisk;
+  scale_evidence?: string | null;
   source_name: "USDA" | "Open Food Facts" | "nutrition-label" | "model-fallback" | "user-context" | "manual";
   source_ref: string | null;
   packaged_food?: DetectedPackage | null;
@@ -110,6 +114,7 @@ For each visible component:
 - estimate grams AND a plausible lower/upper gram range;
 - note cooking method if visually supported;
 - flag hidden-fat uncertainty for oil/ghee/butter/gravy/dressing/frying;
+- flag occlusion risk when food is covered, stacked, cropped, or hidden by a container;
 - report recognition and portion confidence from 0 to 1;
 - provide a rough fallback nutrition estimate ONLY so the app has a last-resort value when no database match exists;
 - for one clearly visible packaged product, extract brand/product/pack count/grams per pack only when legible. Never infer package size from brand familiarity.
@@ -127,6 +132,7 @@ Return JSON only:
    "recognition_confidence":number,
    "portion_confidence":number,
    "hidden_fat_risk":"low|medium|high",
+   "occlusion_risk":"low|medium|high",
    "cooking_method":"string|null",
    "scale_evidence":"string|null",
    "ambiguous_identity":boolean,
@@ -355,14 +361,25 @@ async function groundOutput(output: VisionOutput): Promise<ScannerV2Component[]>
     const grams = component.grams_estimate;
     const grounded = match && grams != null && grams > 0 ? scaleUsda(match, grams) : null;
     const nutrition = grounded ?? component.fallback_nutrition;
+    const hiddenFatRisk = conservativeHiddenFatRisk(component.hidden_fat_risk, normalized);
+    const recognition = component.occlusion_risk === "high"
+      ? component.recognition_confidence * 0.82
+      : component.occlusion_risk === "medium"
+        ? component.recognition_confidence * 0.92
+        : component.recognition_confidence;
+    const portion = component.occlusion_risk === "high"
+      ? component.portion_confidence * 0.78
+      : component.occlusion_risk === "medium"
+        ? component.portion_confidence * 0.9
+        : component.portion_confidence;
     const confidence = evidenceConfidence({
-      recognition: component.recognition_confidence,
-      portion: component.portion_confidence,
+      recognition,
+      portion,
       databaseScore: match?.score ?? null,
       gramsEstimate: component.grams_estimate,
       gramsMin: component.grams_min,
       gramsMax: component.grams_max,
-      hiddenFatRisk: component.hidden_fat_risk,
+      hiddenFatRisk,
       imageQuality: output.image_quality,
       componentCount: output.components.length,
     });
@@ -377,7 +394,9 @@ async function groundOutput(output: VisionOutput): Promise<ScannerV2Component[]>
       carbs: nutrition.carbs,
       fat: nutrition.fat,
       confidence,
-      hidden_fat_risk: component.hidden_fat_risk,
+      hidden_fat_risk: hiddenFatRisk,
+      occlusion_risk: component.occlusion_risk,
+      scale_evidence: component.scale_evidence ?? null,
       source_name: grounded ? "USDA" as const : component.cooking_method === "user supplied" ? "user-context" as const : "model-fallback" as const,
       source_ref: match ? `fdc:${match.fdcId}` : null,
       packaged_food: component.packaged_food ?? null,
@@ -497,6 +516,8 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
             grams_estimate: item.grams_estimate, grams_min: item.grams_min, grams_max: item.grams_max,
             calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat,
             confidence: item.confidence, hidden_fat_risk: item.hidden_fat_risk,
+            occlusion_risk: item.occlusion_risk ?? null,
+            scale_evidence: item.scale_evidence ?? null,
             source_name: item["source_name"], source_ref: item.source_ref,
           })),
         ).select("id,item_index");
@@ -613,6 +634,7 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
       const { error: updateError } = await db.from("scan_events").update({
         model: calls.map((call) => call.model).join("+"),
         status: "succeeded",
+        image_quality: parsed.image_quality,
         input_tokens: usage.input,
         output_tokens: usage.output,
         thinking_tokens: usage.thinking,
@@ -640,6 +662,8 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
         fat: item.fat,
         confidence: item.confidence,
         hidden_fat_risk: item.hidden_fat_risk,
+        occlusion_risk: item.occlusion_risk ?? null,
+        scale_evidence: item.scale_evidence ?? null,
         source_name: item["source_name"],
         source_ref: item.source_ref,
       }));
