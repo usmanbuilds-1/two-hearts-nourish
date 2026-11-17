@@ -53,20 +53,30 @@ export function parseDeterministicContext(raw: string): DeterministicContext {
   const out: DeterministicContext = {};
 
   const pack = lower.match(/\b(\d{1,2})\s*(?:x|packets?|packs?)\b/);
-  if (pack) out.packCount = finitePositive(Number(pack[1]), 20);
+  if (pack?.[1]) {
+    const value = finitePositive(Number(pack[1]), 20);
+    if (value !== undefined) out.packCount = value;
+  }
 
   const gramsEach = lower.match(/\b(\d{1,4}(?:\.\d+)?)\s*g(?:rams?)?\s*(?:each|per\s*(?:packet|pack))\b/);
-  if (gramsEach) out.gramsPerPack = finitePositive(Number(gramsEach[1]), 2000);
+  if (gramsEach?.[1]) {
+    const value = finitePositive(Number(gramsEach[1]), 2000);
+    if (value !== undefined) out.gramsPerPack = value;
+  }
 
   const explicitTotal = lower.match(/\b(?:total|about|around|approx(?:imately)?|roughly)?\s*(\d{1,4}(?:\.\d+)?)\s*g(?:rams?)?\b/);
-  if (explicitTotal && !gramsEach) out.totalGrams = finitePositive(Number(explicitTotal[1]), 10000);
+  if (explicitTotal?.[1] && !gramsEach) {
+    const value = finitePositive(Number(explicitTotal[1]), 10000);
+    if (value !== undefined) out.totalGrams = value;
+  }
 
   if (out.packCount && out.gramsPerPack) {
-    out.totalGrams = finitePositive(out.packCount * out.gramsPerPack, 10000);
+    const value = finitePositive(out.packCount * out.gramsPerPack, 10000);
+    if (value !== undefined) out.totalGrams = value;
   }
 
   const fat = lower.match(/\b(\d+(?:\.\d+)?)\s*(tbsp|tablespoons?|tsp|teaspoons?)\s*(?:of\s*)?(oil|ghee|butter)\b/);
-  if (fat) {
+  if (fat?.[1] && fat[2] && fat[3]) {
     const amount = Number(fat[1]);
     const unit = fat[2].startsWith("t") && !fat[2].startsWith("tb") ? "tsp" : "tbsp";
     const kind = fat[3] as "oil" | "ghee" | "butter";
