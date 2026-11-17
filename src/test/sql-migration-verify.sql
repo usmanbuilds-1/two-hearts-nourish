@@ -128,6 +128,45 @@ BEGIN
   SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'Security budget exceeded'; END IF;
 
+  -- A reconnect capability issued for one member cannot be consumed as the other member.
+  UPDATE public.members SET
+    link_code_hash = repeat('d',64),
+    link_code_expires_at = now() + interval '10 minutes'
+  WHERE id = member_a;
+  BEGIN
+    PERFORM public.consume_rejoin_link(
+      member_b,
+      repeat('d',64),
+      '22222222-2222-4222-8222-222222222222',
+      'Unknown browser',
+      repeat('e',64)
+    );
+    RAISE EXCEPTION 'Cross-member reconnect unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Cross-member reconnect unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%INVALID_LINK%' THEN RAISE; END IF;
+  END;
+
+  -- A wrong partner-invite secret cannot claim a room, even when its room code is known.
+  UPDATE public.rooms SET
+    invite_token_hash = repeat('f',64),
+    invite_expires_at = now() + interval '10 minutes'
+  WHERE id = room;
+  BEGIN
+    PERFORM public.join_room_with_invite(
+      'TEST-ROOM',
+      '33333333-3333-4333-8333-333333333333',
+      'Unknown person',
+      'Unknown browser',
+      repeat('1',64),
+      repeat('0',64)
+    );
+    RAISE EXCEPTION 'Invalid partner invite unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Invalid partner invite unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%INVALID_INVITE%' THEN RAISE; END IF;
+  END;
+
   INSERT INTO public.scan_events(id,member_id,scanner_version,prompt_version,model,route,status)
     VALUES(scan_a,member_a,'test','test','test-model','vision','succeeded');
   IF (SELECT count(*) FROM public.scan_events WHERE member_id=member_a) <> 1
