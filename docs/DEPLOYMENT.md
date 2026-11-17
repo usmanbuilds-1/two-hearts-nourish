@@ -1,6 +1,6 @@
 # Production deployment and rollback
 
-This release is intentionally additive. Scanner V1 stays available while Scanner V2 is validated.
+Scanner V2 is now the production default. Scanner V1 remains available as an emergency rollback path.
 
 ## 1. Preflight
 
@@ -8,9 +8,8 @@ Before applying migrations:
 
 - Confirm the current production database backup/recovery policy.
 - Confirm `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, and (recommended) `USDA_FDC_API_KEY` exist only in the server secret store.
-- Keep both scanner flags OFF:
-  - `SCANNER_V2_ENABLED=false`
-  - `VITE_SCANNER_V2_ENABLED=false`
+- Scanner V2 is enabled by default.
+- Set either scanner flag to `false` only if an emergency rollback is required.
 - Confirm the current app still passes its normal meal/invite/recovery smoke tests.
 - Confirm the `meal-photos` bucket can be made private without depending on public CDN URLs.
 
@@ -49,9 +48,9 @@ Verify in production:
 - Private meal images render through signed URLs.
 - Deleting a meal with a photo queues/removes its Storage object.
 
-## 4. Deploy application code with V2 OFF
+## 4. Deploy application code
 
-Deploy the code while both V2 flags remain false.
+Deploy the code with the default V2 behavior unless you are intentionally performing an emergency rollback.
 
 Smoke-test:
 
@@ -68,22 +67,18 @@ Smoke-test:
 
 This proves the additive migrations did not require V2 to function.
 
-## 5. Enable V2 in two steps
+## 5. Scanner V2 runtime behavior
 
-First enable the server gate:
+V2 is enabled when the flags are absent or set to `true`.
+
+Emergency rollback:
 
 ```text
-SCANNER_V2_ENABLED=true
+SCANNER_V2_ENABLED=false
 VITE_SCANNER_V2_ENABLED=false
 ```
 
-The UI should still use V1.
-
-Then enable the client gate for the intended rollout:
-
-```text
-VITE_SCANNER_V2_ENABLED=true
-```
+Remove those overrides, or set them back to `true`, to restore V2.
 
 Test at minimum:
 
