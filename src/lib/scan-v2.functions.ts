@@ -69,7 +69,7 @@ export type ScannerV2Component = {
   fat: number;
   confidence: number;
   hidden_fat_risk: HiddenFatRisk;
-  source_name: "USDA" | "model-fallback" | "user-context";
+  source_name: "USDA" | "Open Food Facts" | "model-fallback" | "user-context" | "manual";
   source_ref: string | null;
   packaged_food?: DetectedPackage | null;
 };
