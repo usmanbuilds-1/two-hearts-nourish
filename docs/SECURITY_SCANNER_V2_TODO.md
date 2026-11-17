@@ -37,7 +37,7 @@ Latest verified repository checkpoint:
 - [x] Add repository secret-safety guard tests.
 - [x] Stop tracking runtime `.env`; add `.env.example`.
 - [x] Add CI on direct pushes to main as well as PRs/feature branches.
-- [ ] Add dependency/security audit step where supported.
+- [x] Add dependency/security audit step where supported.
 - [x] Add security response headers / CSP compatible with TanStack Start.
 - [x] Replace unsafe inline theme script with CSP-safe external/module path or nonce-compatible approach.
 - [!] Enable GitHub secret scanning/push protection/branch protection in repository settings if account permissions allow.
@@ -51,7 +51,7 @@ Latest verified repository checkpoint:
 - [x] Ensure invitation capability expires/revokes after successful partner join.
 - [x] Make rejoin/link-device flow transactional where practical.
 - [x] Make create/join device + recovery setup transactional where practical.
-- [ ] Prevent cross-room/cross-member recovery in negative SQL tests.
+- [x] Prevent cross-room/cross-member recovery in negative SQL tests.
 - [x] Preserve one-use 256-bit recovery-link behavior and device revocation.
 - [x] Ensure personal scanner memory is member-scoped, never room-scoped.
 
@@ -89,7 +89,7 @@ Latest verified repository checkpoint:
 - [x] Reject malformed/unbounded AI output server-side.
 - [x] Validate decoded image bytes/MIME, not only data-URL text.
 - [x] Cap image dimensions/bytes and request duration.
-- [ ] Add image-quality/occlusion/scale-evidence fields.
+- [x] Add image-quality/occlusion/scale-evidence fields.
 - [x] Add deterministic evidence-based confidence scoring.
 - [x] Do not trust model self-confidence as final confidence.
 
@@ -104,7 +104,7 @@ Latest verified repository checkpoint:
 - [x] Add cache for safe database lookups.
 - [x] Respect upstream rate limits and timeouts.
 - [x] Add South Asian alias normalization (dal/daal, roti/chapati, dahi/yogurt, etc.).
-- [ ] Seed a South Asian food-graph v1 with preparation/portion/hidden-fat metadata.
+- [x] Seed a South Asian food-graph v1 with preparation/portion/hidden-fat metadata.
 
 ## H. Context fusion
 - [x] Add free-text context input on scan review.
@@ -178,7 +178,7 @@ Latest verified repository checkpoint:
 - [x] Track correction rate and average correction magnitude.
 - [x] Track scan→review→save conversion, clarification rate and escalation rate.
 - [x] Track cost/successful scan and p50/p95 latency.
-- [ ] Add regression command so future prompt/model changes can be compared to baseline.
+- [x] Add regression command so future prompt/model changes can be compared to baseline.
 - [!] Grow private benchmark toward 300–500+ measured meals.
 - [!] Publish benchmark only after methodology and results are defensible.
 
