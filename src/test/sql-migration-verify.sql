@@ -81,19 +81,23 @@ BEGIN
     OR has_table_privilege('authenticated','public.meal_components','SELECT')
     THEN RAISE EXCEPTION 'Private scanner learning tables exposed'; END IF;
 
-  INSERT INTO public.rooms(id) VALUES(room);
-  INSERT INTO public.members(id,room_id,participant_token_hash,daily_protein_target)
-    VALUES(member_a,room,repeat('a',64),10),(member_b,room,repeat('b',64),10);
+  INSERT INTO public.rooms(id,room_code) VALUES(room,'TEST-ROOM');
+  INSERT INTO public.members(
+    id,room_id,seat,display_name,participant_token_hash,daily_protein_target
+  ) VALUES
+    (member_a,room,1,'Member A',repeat('a',64),10),
+    (member_b,room,2,'Member B',repeat('b',64),10);
   INSERT INTO public.member_devices(id,member_id,auth_user_id)
     VALUES (device_a,member_a,actor),(device_b,member_a,'11111111-1111-4111-8111-111111111111');
   INSERT INTO public.member_recovery_keys(member_id,device_id,token_hash)
     VALUES(member_a,device_b,repeat('c',64));
 
-  INSERT INTO public.meals(room_id,member_id,meal_date,meal_type,protein,is_planned)
-    VALUES
-      (room,member_a,'2026-11-13','dinner',20,false),
-      (room,member_b,'2026-11-13','dinner',15,false),
-      (room,member_a,'2026-11-13','lunch',500,true);
+  INSERT INTO public.meals(
+    room_id,member_id,food_name,calories,protein,carbs,fat,meal_date,meal_type,is_planned
+  ) VALUES
+      (room,member_a,'Dinner A',500,20,50,20,'2026-11-13','dinner',false),
+      (room,member_b,'Dinner B',450,15,45,18,'2026-11-13','dinner',false),
+      (room,member_a,'Planned lunch',800,500,40,20,'2026-11-13','lunch',true);
   SELECT public.room_activity_rollup(room,'2026-11-13') INTO counter;
   IF (counter->>'totalMeals')::int <> 2
     OR (counter->>'daysBoth')::int <> 1
