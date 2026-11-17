@@ -563,7 +563,7 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
 
               {estimate.questions.length > 0 && (
                 <div className="rounded-2xl border border-border p-4">
-                  <p className="text-sm font-medium">A little context could improve this</p>
+                  <p className="text-sm font-medium">Help us narrow this down</p>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                     {estimate.questions.map((question) => <li key={question}>{question}</li>)}
                   </ul>
@@ -571,10 +571,10 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
               )}
 
               <div>
-                <Field label="Add context" hint='Examples: "2 packets, 61g each", "actually beef", "2 tbsp ghee". Deterministic details are recalculated without another AI call.'>
+                <Field label="Add context" hint='Add what the photo cannot show, such as "2 packets, 61g each", "actually beef", or "2 tbsp ghee". Exact details are recalculated without another AI call when possible.'>
                   <TextInput value={contextText} maxLength={300}
                     onChange={(event) => setContextText(event.target.value)}
-                    placeholder="Anything the photo cannot tell us?" />
+                    placeholder="Add weight, identity, oil/ghee, or package details" />
                 </Field>
                 <Btn variant="outline" className="mt-2 w-full" disabled={!contextText.trim() || applyingContext}
                   onClick={() => void applyContext()}>
