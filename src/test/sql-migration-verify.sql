@@ -133,6 +133,34 @@ BEGIN
   IF (SELECT count(*) FROM public.scan_events WHERE member_id=member_a) <> 1
     THEN RAISE EXCEPTION 'Scanner telemetry insert failed'; END IF;
 
+  -- A member may never attach another member's scan to their own meal.
+  BEGIN
+    PERFORM public.save_scanned_meal_v2(
+      member_b, room, '2026-11-14', 'dinner', 'Cross-member attempt', '', 100, 10, 10, 2,
+      'low', NULL,
+      '[{"label":"test","calories":100,"protein":10,"carbs":10,"fat":2}]'::jsonb,
+      scan_a
+    );
+    RAISE EXCEPTION 'Cross-member scan ownership unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Cross-member scan ownership unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%SCAN_NOT_OWNED%' THEN RAISE; END IF;
+  END;
+
+  -- Room/member mismatches are rejected below the UI/RLS layer.
+  BEGIN
+    PERFORM public.save_scanned_meal_v2(
+      member_a, gen_random_uuid(), '2026-11-14', 'dinner', 'Wrong room attempt', '', 100, 10, 10, 2,
+      'low', NULL,
+      '[{"label":"test","calories":100,"protein":10,"carbs":10,"fat":2}]'::jsonb,
+      scan_a
+    );
+    RAISE EXCEPTION 'Member-room mismatch unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Member-room mismatch unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%MEMBER_ROOM_MISMATCH%' THEN RAISE; END IF;
+  END;
+
   SELECT public.save_scanned_meal_v2(
     member_a, room, '2026-11-14', 'dinner', 'Test biryani', '350 g', 620, 28, 70, 24,
     'medium', room::text || '/test-photo.jpg',
