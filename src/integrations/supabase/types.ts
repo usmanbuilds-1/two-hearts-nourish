@@ -595,6 +595,10 @@ export type Database = {
         Returns:string
       }
       room_activity_rollup: { Args: { p_room_id: string; p_today: string }; Returns: Json }
+      record_member_food_prior: {
+        Args: { p_member_id:string; p_fingerprint:string; p_canonical_label:string; p_typical_grams:number; p_calories_per_100g:number; p_protein_per_100g:number; p_carbs_per_100g:number; p_fat_per_100g:number; p_structured_context:Json };
+        Returns:boolean
+      }
       rebind_member_device: {
         Args: { p_member_id:string; p_device_id:string; p_new_auth_user_id:string; p_update_primary?:boolean };
         Returns: boolean
