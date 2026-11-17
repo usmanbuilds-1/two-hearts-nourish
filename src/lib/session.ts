@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { mergeLinkedSession } from "@/lib/space-entry-policy";
+import { buildInviteUrl } from "@/lib/rejoin-links";
 
 const KEY = "us.session.v1";
 
@@ -39,8 +40,8 @@ export async function ensureIdentity() {
   return anon.user.id;
 }
 
-export function inviteUrl(code: string) {
-  return `${window.location.origin}/r/${code}`;
+export function inviteUrl(code: string, inviteToken: string) {
+  return buildInviteUrl(window.location.origin, code, inviteToken);
 }
 
 const MESSAGES: Record<string, string> = {
