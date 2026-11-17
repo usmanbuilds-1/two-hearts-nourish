@@ -270,9 +270,9 @@ export type Database = {
         Relationships: []
       }
       scan_events: {
-        Row: { id:string; member_id:string; meal_id:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens:number; output_tokens:number; thinking_tokens:number; total_tokens:number; latency_ms:number|null; estimated_cost_microusd:number; cache_hit:boolean; escalated:boolean; escalation_reason:string|null; grounding_sources:Json; confidence:number|null; created_at:string }
-        Insert: { id?:string; member_id:string; meal_id?:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
-        Update: { id?:string; member_id?:string; meal_id?:string|null; scanner_version?:string; prompt_version?:string; model?:string; route?:string; status?:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
+        Row: { id:string; member_id:string; meal_id:string|null; image_fingerprint:string|null; context_fingerprint:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens:number; output_tokens:number; thinking_tokens:number; total_tokens:number; latency_ms:number|null; estimated_cost_microusd:number; cache_hit:boolean; escalated:boolean; escalation_reason:string|null; grounding_sources:Json; confidence:number|null; created_at:string }
+        Insert: { id?:string; member_id:string; meal_id?:string|null; image_fingerprint?:string|null; context_fingerprint?:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
+        Update: { id?:string; member_id?:string; meal_id?:string|null; image_fingerprint?:string|null; context_fingerprint?:string|null; scanner_version?:string; prompt_version?:string; model?:string; route?:string; status?:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
         Relationships: []
       }
       scan_items: {
@@ -285,6 +285,12 @@ export type Database = {
         Row: { id:string; scan_id:string; scan_item_id:string|null; member_id:string; correction_type:string; original:Json; corrected:Json; structured_context:Json; created_at:string }
         Insert: { id?:string; scan_id:string; scan_item_id?:string|null; member_id:string; correction_type:string; original:Json; corrected:Json; structured_context?:Json; created_at?:string }
         Update: { id?:string; scan_id?:string; scan_item_id?:string|null; member_id?:string; correction_type?:string; original?:Json; corrected?:Json; structured_context?:Json; created_at?:string }
+        Relationships: []
+      }
+      member_scan_cache: {
+        Row: { member_id:string; image_fingerprint:string; context_fingerprint:string; scanner_version:string; final_estimate:Json; expires_at:string; updated_at:string; created_at:string }
+        Insert: { member_id:string; image_fingerprint:string; context_fingerprint?:string; scanner_version:string; final_estimate:Json; expires_at:string; updated_at?:string; created_at?:string }
+        Update: { member_id?:string; image_fingerprint?:string; context_fingerprint?:string; scanner_version?:string; final_estimate?:Json; expires_at?:string; updated_at?:string; created_at?:string }
         Relationships: []
       }
       member_food_priors: {
