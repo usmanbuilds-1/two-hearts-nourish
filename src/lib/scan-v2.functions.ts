@@ -200,7 +200,7 @@ function estimatedMicrousd(call: GeminiCall): number {
 async function callGemini(
   apiKey: string,
   model: string,
-  image: { mime: string; base64: string },
+  images: Array<{ mime: string; base64: string }>,
   extraInstruction?: string,
 ): Promise<GeminiCall> {
   const started = Date.now();
@@ -216,7 +216,7 @@ async function callGemini(
           role: "user",
           parts: [
             ...(extraInstruction ? [{ text: extraInstruction }] : []),
-            { inline_data: { mime_type: image.mime, data: image.base64 } },
+            ...images.map((image) => ({ inline_data: { mime_type: image.mime, data: image.base64 } })),
           ],
         }],
         generationConfig: {
@@ -366,14 +366,17 @@ async function admin() {
 
 export const analyzeFoodV2 = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { image: string; context?: string }) => ({
+  .inputValidator((input: { image: string; secondImage?: string; context?: string }) => ({
     image: z.string().max(3_100_000).parse(input?.image),
+    secondImage: z.string().max(3_100_000).optional().parse(input?.secondImage),
     context: z.string().trim().max(300).optional().default("").parse(input?.context ?? ""),
   }))
   .handler(async ({ data, context }): Promise<ScanResult> => {
     if (!enabled()) return { ok: false, error: "V2_DISABLED" };
     const image = parseImage(data.image);
-    if (!image) return { ok: false, error: "INVALID_IMAGE" };
+    const secondImage = data.secondImage ? parseImage(data.secondImage) : null;
+    if (!image || (data.secondImage && !secondImage)) return { ok: false, error: "INVALID_IMAGE" };
+    const images = secondImage ? [image, secondImage] : [image];
 
     let memberId: string | null;
     try {
@@ -423,7 +426,7 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
         ? `Additional user context (treat as a claim, not as proof of invisible details): ${data.context}`
         : undefined;
 
-      cheapCall = await callGemini(apiKey, CHEAP_MODEL, image, instruction);
+      cheapCall = await callGemini(apiKey, CHEAP_MODEL, images, instruction);
       parsed = safeJson(cheapCall.text);
       if (!parsed) throw new Error("AI_MALFORMED");
       parsed = applyDeterministicContext(parsed, data.context);
@@ -446,7 +449,7 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
             strongCall = await callGemini(
               apiKey,
               STRONG_MODEL,
-              image,
+              images,
               `A cheaper first pass was uncertain. Re-analyze independently and be conservative. Escalation reason: ${escalationReason}.`,
             );
             const stronger = safeJson(strongCall.text);
