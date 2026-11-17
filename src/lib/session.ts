@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { mergeLinkedSession } from "@/lib/space-entry-policy";
 import { buildInviteUrl } from "@/lib/rejoin-links";
+import { isDefinitiveAuthSessionFailure } from "@/lib/auth-session-health";
 
 const KEY = "us.session.v1";
 
@@ -29,15 +30,36 @@ export async function clearSession() {
   await supabase.auth.signOut().catch(() => {});
 }
 
-/** Ensures this browser has its own invisible guest identity. */
+/** Ensures this browser has its own invisible guest identity.
+ * A transient network/auth refresh error never replaces the current identity.
+ * A definitively dead Supabase session may be replaced with a fresh anonymous
+ * identity; membership is then restored separately with the saved recovery key.
+ */
 export async function ensureIdentity() {
+  const createAnonymous = async () => {
+    const { data: anon, error } = await supabase.auth.signInAnonymously();
+    if (error || !anon.user) throw new Error("OFFLINE_OR_UNAVAILABLE");
+    return anon.user.id;
+  };
+
   const { data, error: sessionError } = await supabase.auth.getSession();
-  // A failed refresh or network request is not permission to replace an identity.
-  if (sessionError) throw new Error("OFFLINE_OR_UNAVAILABLE");
-  if (data.session) return data.session.user.id;
-  const { data: anon, error } = await supabase.auth.signInAnonymously();
-  if (error || !anon.user) throw new Error("OFFLINE_OR_UNAVAILABLE");
-  return anon.user.id;
+  if (sessionError) {
+    if (isDefinitiveAuthSessionFailure(sessionError)) return createAnonymous();
+    throw new Error("OFFLINE_OR_UNAVAILABLE");
+  }
+
+  if (!data.session) return createAnonymous();
+
+  // getSession() reads local state; validate the token with Supabase before
+  // trusting it as the current browser identity.
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (!userError && userData.user) return userData.user.id;
+
+  if (userError && isDefinitiveAuthSessionFailure(userError)) {
+    return createAnonymous();
+  }
+
+  throw new Error("OFFLINE_OR_UNAVAILABLE");
 }
 
 export function inviteUrl(code: string, inviteToken: string) {
