@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpace } from "@/lib/space";
-import { clearSession, inviteUrl, readSession } from "@/lib/session";
-import { leaveRoom } from "@/lib/room.functions";
+import { clearSession, readSession } from "@/lib/session";
+import { createPartnerInvite, leaveRoom } from "@/lib/room.functions";
+import { buildInviteUrl } from "@/lib/rejoin-links";
 import { RecoveryLinks } from "@/components/us/RecoveryLinks";
 import { DeviceCenter } from "@/components/us/DeviceCenter";
 import { exportMyMealsCsv } from "@/lib/export-meals.functions";
@@ -303,7 +304,11 @@ function SettingsPage() {
 
       <div className="mt-10 space-y-3">
         <Eyebrow>Space</Eyebrow>
-        {!partner && <Btn variant="outline" className="w-full" onClick={() => navigator.clipboard.writeText(inviteUrl(room.room_code)).then(() => toast.success("Invite link copied"), () => toast.error("Couldn't copy"))}>
+        {!partner && <Btn variant="outline" className="w-full" onClick={() => void createPartnerInvite()
+          .then((invite) => navigator.clipboard.writeText(
+            buildInviteUrl(window.location.origin, invite.roomCode, invite.token),
+          ))
+          .then(() => toast.success("Private invitation copied"), () => toast.error("Couldn't create the invitation."))}>
           Invite your partner to join · {room.room_code}
         </Btn>}
 
