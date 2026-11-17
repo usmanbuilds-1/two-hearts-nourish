@@ -52,6 +52,11 @@ BEGIN
        'public.join_room_with_invite(text,uuid,text,text,text,text)',
        'EXECUTE'
      )
+    OR has_function_privilege(
+       'authenticated',
+       'public.consume_rejoin_link(uuid,text,uuid,text,text)',
+       'EXECUTE'
+     )
     THEN RAISE EXCEPTION 'Room capability RPC exposed to browser'; END IF;
   IF has_table_privilege('authenticated','public.scan_events','SELECT')
     OR has_table_privilege('authenticated','public.scan_items','SELECT')
