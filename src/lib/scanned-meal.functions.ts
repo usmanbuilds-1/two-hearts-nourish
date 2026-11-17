@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import type { Meal } from "./nutrition";
 
 const componentSchema = z.object({
@@ -35,7 +37,7 @@ async function admin() {
   return supabaseAdmin;
 }
 
-async function currentMember(context: { userId: string; supabase: any }) {
+async function currentMember(context: { userId: string; supabase: SupabaseClient<Database> }) {
   const { data: device, error } = await context.supabase
     .from("member_devices").select("member_id").eq("auth_user_id", context.userId).maybeSingle();
   if (error || !device) return null;
