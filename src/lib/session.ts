@@ -55,6 +55,8 @@ const MESSAGES: Record<string, string> = {
   NO_PARTNER: "Your partner has not joined this space yet.",
   RECOVERY_STORAGE_UNAVAILABLE: "Recovery needs a database update. Please contact the app owner.",
   NOT_MEMBER: "Your session has expired. Please rejoin with your invite link.",
+  TOO_MANY_ATTEMPTS: "Too many sign-in attempts from this browser. Try again in a few minutes.",
+  SECURITY_BUDGET_UNAVAILABLE: "The sign-in safety check is unavailable. Please try again later.",
 };
 
 export function friendlyError(e: unknown) {
