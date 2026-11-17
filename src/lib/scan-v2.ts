@@ -1,0 +1,170 @@
+export type HiddenFatRisk = "low" | "medium" | "high";
+
+export type DeterministicContext = {
+  identityOverride?: string;
+  totalGrams?: number;
+  packCount?: number;
+  gramsPerPack?: number;
+  addedFat?: { kind: "oil" | "ghee" | "butter"; grams: number };
+};
+
+const MAX_CONTEXT = 300;
+
+function cleanLabel(value: string): string {
+  return value.trim().replace(/\s+/g, " ").slice(0, 120);
+}
+
+export function normalizeFoodAlias(value: string): string {
+  const s = cleanLabel(value).toLowerCase();
+  const aliases: Record<string, string> = {
+    dal: "Daal",
+    daal: "Daal",
+    dhal: "Daal",
+    roti: "Roti",
+    chapati: "Roti",
+    phulka: "Roti",
+    dahi: "Yogurt",
+    yoghurt: "Yogurt",
+    yogurt: "Yogurt",
+    "doodh patti": "Milk tea",
+    chai: "Milk tea",
+    "kadai chicken": "Chicken karahi",
+    "karahi chicken": "Chicken karahi",
+    nihari: "Nihari",
+    biryani: "Biryani",
+    pulao: "Pulao",
+    pilaf: "Pulao",
+  };
+  return aliases[s] ?? cleanLabel(value);
+}
+
+function finitePositive(value: number, max: number): number | undefined {
+  return Number.isFinite(value) && value > 0 && value <= max ? value : undefined;
+}
+
+export function parseDeterministicContext(raw: string): DeterministicContext {
+  const text = raw.trim().slice(0, MAX_CONTEXT);
+  const lower = text.toLowerCase();
+  const out: DeterministicContext = {};
+
+  const pack = lower.match(/\b(\d{1,2})\s*(?:x|packets?|packs?)\b/);
+  if (pack) out.packCount = finitePositive(Number(pack[1]), 20);
+
+  const gramsEach = lower.match(/\b(\d{1,4}(?:\.\d+)?)\s*g(?:rams?)?\s*(?:each|per\s*(?:packet|pack))\b/);
+  if (gramsEach) out.gramsPerPack = finitePositive(Number(gramsEach[1]), 2000);
+
+  const explicitTotal = lower.match(/\b(?:total|about|around|approx(?:imately)?|roughly)?\s*(\d{1,4}(?:\.\d+)?)\s*g(?:rams?)?\b/);
+  if (explicitTotal && !gramsEach) out.totalGrams = finitePositive(Number(explicitTotal[1]), 10000);
+
+  if (out.packCount && out.gramsPerPack) {
+    out.totalGrams = finitePositive(out.packCount * out.gramsPerPack, 10000);
+  }
+
+  const fat = lower.match(/\b(\d+(?:\.\d+)?)\s*(tbsp|tablespoons?|tsp|teaspoons?)\s*(?:of\s*)?(oil|ghee|butter)\b/);
+  if (fat) {
+    const amount = Number(fat[1]);
+    const unit = fat[2].startsWith("t") && !fat[2].startsWith("tb") ? "tsp" : "tbsp";
+    const kind = fat[3] as "oil" | "ghee" | "butter";
+    const gramsPerUnit = unit === "tbsp" ? (kind === "oil" ? 13.6 : 14) : (kind === "oil" ? 4.5 : 4.7);
+    const grams = finitePositive(amount * gramsPerUnit, 500);
+    if (grams) out.addedFat = { kind, grams: Math.round(grams * 10) / 10 };
+  }
+
+  const identityPatterns = [
+    /\b(?:this|it)(?:\s+is|'s)\s+([^,.]{2,60})/i,
+    /\b(?:actually|food is|dish is)\s+([^,.]{2,60})/i,
+  ];
+  for (const pattern of identityPatterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      const candidate = cleanLabel(match[1].replace(/\b(?:not|instead of)\b.*$/i, ""));
+      if (candidate) out.identityOverride = normalizeFoodAlias(candidate);
+      break;
+    }
+  }
+
+  return out;
+}
+
+export function addedFatNutrition(context: DeterministicContext): {
+  calories: number; protein: number; carbs: number; fat: number;
+} | null {
+  const grams = context.addedFat?.grams;
+  if (!grams) return null;
+  return {
+    calories: Math.round(grams * 9),
+    protein: 0,
+    carbs: 0,
+    fat: Math.round(grams * 10) / 10,
+  };
+}
+
+export function labelEnergyWarning(input: {
+  calories: number; protein: number; carbs: number; fat: number;
+}): string | null {
+  const { calories, protein, carbs, fat } = input;
+  if (![calories, protein, carbs, fat].every(Number.isFinite)) return "Label contains invalid numbers.";
+  if ([calories, protein, carbs, fat].some((n) => n < 0)) return "Label contains negative nutrition values.";
+  const generic = 4 * protein + 4 * carbs + 9 * fat;
+  const delta = Math.abs(calories - generic);
+  // 4/4/9 is only a warning heuristic: fiber, polyols, alcohol, specific Atwater
+  // factors and label rounding can legitimately create larger differences.
+  if (calories > 0 && delta > Math.max(40, calories * 0.2)) {
+    return "Energy and macros differ more than expected. Check the printed label before saving.";
+  }
+  return null;
+}
+
+export function evidenceConfidence(input: {
+  recognition: number;
+  portion: number;
+  databaseScore?: number | null;
+  gramsEstimate?: number | null;
+  gramsMin?: number | null;
+  gramsMax?: number | null;
+  hiddenFatRisk: HiddenFatRisk;
+  imageQuality: "poor" | "fair" | "good";
+  componentCount: number;
+}): number {
+  const clamp = (n: number) => Math.max(0, Math.min(1, n));
+  let score = clamp(input.recognition) * 0.42 + clamp(input.portion) * 0.28;
+  if (typeof input.databaseScore === "number") score += clamp(input.databaseScore) * 0.22;
+  else score += 0.08;
+
+  if (
+    input.gramsEstimate && input.gramsMin != null && input.gramsMax != null &&
+    input.gramsMax >= input.gramsMin
+  ) {
+    const width = (input.gramsMax - input.gramsMin) / Math.max(input.gramsEstimate, 1);
+    score -= Math.min(0.18, Math.max(0, width - 0.2) * 0.22);
+  }
+  if (input.hiddenFatRisk === "medium") score -= 0.06;
+  if (input.hiddenFatRisk === "high") score -= 0.12;
+  if (input.imageQuality === "fair") score -= 0.05;
+  if (input.imageQuality === "poor") score -= 0.14;
+  if (input.componentCount >= 4) score -= 0.05;
+  return Math.round(clamp(score) * 100) / 100;
+}
+
+export function contextualQuestions(input: {
+  hiddenFatRisk: HiddenFatRisk;
+  confidence: number;
+  gramsEstimate?: number | null;
+  gramsMin?: number | null;
+  gramsMax?: number | null;
+  ambiguousIdentity?: boolean;
+}): string[] {
+  const questions: string[] = [];
+  if (input.ambiguousIdentity) questions.push("Which food is this closest to?");
+  if (input.hiddenFatRisk === "high") questions.push("Was this light, normal, or heavy on oil/ghee/butter?");
+  if (
+    input.gramsEstimate && input.gramsMin != null && input.gramsMax != null &&
+    (input.gramsMax - input.gramsMin) / Math.max(input.gramsEstimate, 1) > 0.45
+  ) {
+    questions.push("Can you confirm the portion size or approximate grams?");
+  }
+  if (input.confidence < 0.5 && questions.length === 0) {
+    questions.push("Add one detail that would help identify or size this meal.");
+  }
+  return questions.slice(0, 2);
+}
