@@ -33,7 +33,7 @@ See [SECURITY.md](SECURITY.md) for the detailed threat model and controls.
 
 ## Scanner V2
 
-Scanner V2 is additive and rollback-safe. V1 remains available behind a client feature flag until V2 has passed live benchmark checks.
+Scanner V2 is the production default and remains rollback-safe. V1 stays available behind the kill switches as an emergency fallback.
 
 V2 flow:
 
@@ -59,18 +59,18 @@ Server-only secrets include:
 - `GEMINI_API_KEY`
 - `USDA_FDC_API_KEY`
 
-Scanner V2 has two independent kill switches:
+Scanner V2 has two independent emergency kill switches:
 
-- `SCANNER_V2_ENABLED=false` — server gate
-- `VITE_SCANNER_V2_ENABLED=false` — client gate
+- `SCANNER_V2_ENABLED=false` — disables the V2 backend
+- `VITE_SCANNER_V2_ENABLED=false` — routes the UI back to V1
 
-Keep both off until migrations and smoke checks are deployed successfully.
+If either variable is absent, V2 stays enabled by default.
 
 ## Database deployment order
 
 Production already contains earlier migrations. For this security/scanner release, apply in order:
 
-`0014` → `0015` → `0016` → `0017` → `0018` → `0019` → `0020` → `0021` → `0022` → `0023` → `0024` → `0025`
+`0014` → `0015` → `0016` → `0017` → `0018` → `0019` → `0020` → `0021` → `0022` → `0023` → `0024` → `0025` → `0026`
 
 Do not enable Scanner V2 before `0019–0026` are present.
 
