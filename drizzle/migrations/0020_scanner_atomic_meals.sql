@@ -37,7 +37,7 @@ BEGIN
   END IF;
   RETURN OLD;
 END;
-$;
+$$;
 REVOKE ALL ON FUNCTION public.queue_deleted_meal_photo()
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.queue_deleted_meal_photo()
