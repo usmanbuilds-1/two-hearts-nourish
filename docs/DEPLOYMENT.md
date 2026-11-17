@@ -31,6 +31,7 @@ Apply in numeric order. If production already has 0014–0018, continue from 001
 0023_food_prior_memory
 0024_private_scan_cache
 0025_security_attempt_budgets
+0026_scanner_evidence
 ```
 
 Do not skip migrations in the middle.
