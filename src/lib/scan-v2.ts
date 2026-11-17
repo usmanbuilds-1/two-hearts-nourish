@@ -1,5 +1,53 @@
 export type HiddenFatRisk = "low" | "medium" | "high";
 
+export type FoodProfile = {
+  canonicalLabel: string;
+  aliases: string[];
+  cuisine: "south_asian";
+  typicalPortionG: readonly [number, number];
+  hiddenFatRisk: HiddenFatRisk;
+  preparations: readonly string[];
+};
+
+/**
+ * Conservative South Asian profile layer.
+ * Typical portions are context metadata only; they never replace a visual/user weight.
+ * Hidden-fat risk may raise uncertainty, never lower it.
+ */
+export const SOUTH_ASIAN_FOOD_PROFILES: readonly FoodProfile[] = [
+  { canonicalLabel:"Biryani", aliases:["biryani","chicken biryani","beef biryani"], cuisine:"south_asian", typicalPortionG:[250,500], hiddenFatRisk:"high", preparations:["dum","pot rice","restaurant"] },
+  { canonicalLabel:"Nihari", aliases:["nihari","beef nihari"], cuisine:"south_asian", typicalPortionG:[250,450], hiddenFatRisk:"high", preparations:["stew","gravy"] },
+  { canonicalLabel:"Chicken karahi", aliases:["chicken karahi","karahi chicken","kadai chicken"], cuisine:"south_asian", typicalPortionG:[200,400], hiddenFatRisk:"high", preparations:["karahi","gravy"] },
+  { canonicalLabel:"Pulao", aliases:["pulao","pilaf","chicken pulao"], cuisine:"south_asian", typicalPortionG:[250,450], hiddenFatRisk:"medium", preparations:["rice"] },
+  { canonicalLabel:"Daal", aliases:["dal","daal","dhal"], cuisine:"south_asian", typicalPortionG:[180,320], hiddenFatRisk:"medium", preparations:["tarka","plain"] },
+  { canonicalLabel:"Roti", aliases:["roti","chapati","phulka"], cuisine:"south_asian", typicalPortionG:[35,70], hiddenFatRisk:"low", preparations:["tawa"] },
+  { canonicalLabel:"Paratha", aliases:["paratha","parantha"], cuisine:"south_asian", typicalPortionG:[70,140], hiddenFatRisk:"high", preparations:["tawa","fried"] },
+  { canonicalLabel:"Haleem", aliases:["haleem"], cuisine:"south_asian", typicalPortionG:[250,450], hiddenFatRisk:"medium", preparations:["stew"] },
+  { canonicalLabel:"Korma", aliases:["korma","qorma","chicken korma","beef korma"], cuisine:"south_asian", typicalPortionG:[200,400], hiddenFatRisk:"high", preparations:["gravy"] },
+  { canonicalLabel:"Samosa", aliases:["samosa","aloo samosa","chicken samosa"], cuisine:"south_asian", typicalPortionG:[60,130], hiddenFatRisk:"high", preparations:["deep fried"] },
+  { canonicalLabel:"Milk tea", aliases:["chai","doodh patti","milk tea"], cuisine:"south_asian", typicalPortionG:[180,350], hiddenFatRisk:"medium", preparations:["milk tea"] },
+  { canonicalLabel:"Yogurt", aliases:["dahi","yoghurt","yogurt"], cuisine:"south_asian", typicalPortionG:[100,250], hiddenFatRisk:"low", preparations:["plain"] },
+] as const;
+
+export function foodProfile(value: string): FoodProfile | null {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+  return SOUTH_ASIAN_FOOD_PROFILES.find((profile) =>
+    profile.canonicalLabel.toLowerCase() === normalized ||
+    profile.aliases.some((alias) => alias === normalized)
+  ) ?? null;
+}
+
+const RISK_ORDER: Record<HiddenFatRisk, number> = { low:0, medium:1, high:2 };
+
+export function conservativeHiddenFatRisk(
+  visualRisk: HiddenFatRisk,
+  label: string,
+): HiddenFatRisk {
+  const profileRisk = foodProfile(label)?.hiddenFatRisk ?? "low";
+  return RISK_ORDER[profileRisk] > RISK_ORDER[visualRisk] ? profileRisk : visualRisk;
+}
+
+
 export type DeterministicContext = {
   identityOverride?: string;
   totalGrams?: number;
