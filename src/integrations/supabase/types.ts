@@ -270,9 +270,9 @@ export type Database = {
         Relationships: []
       }
       scan_events: {
-        Row: { id:string; member_id:string; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens:number; output_tokens:number; thinking_tokens:number; total_tokens:number; latency_ms:number|null; estimated_cost_microusd:number; cache_hit:boolean; escalated:boolean; escalation_reason:string|null; grounding_sources:Json; confidence:number|null; created_at:string }
-        Insert: { id?:string; member_id:string; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
-        Update: { id?:string; member_id?:string; scanner_version?:string; prompt_version?:string; model?:string; route?:string; status?:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
+        Row: { id:string; member_id:string; meal_id:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens:number; output_tokens:number; thinking_tokens:number; total_tokens:number; latency_ms:number|null; estimated_cost_microusd:number; cache_hit:boolean; escalated:boolean; escalation_reason:string|null; grounding_sources:Json; confidence:number|null; created_at:string }
+        Insert: { id?:string; member_id:string; meal_id?:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
+        Update: { id?:string; member_id?:string; meal_id?:string|null; scanner_version?:string; prompt_version?:string; model?:string; route?:string; status?:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
         Relationships: []
       }
       scan_items: {
@@ -303,6 +303,12 @@ export type Database = {
         Row: { id:string; alias:string; normalized_alias:string; canonical_label:string; cuisine:string|null; metadata:Json; created_at:string }
         Insert: { id?:string; alias:string; normalized_alias:string; canonical_label:string; cuisine?:string|null; metadata?:Json; created_at?:string }
         Update: { id?:string; alias?:string; normalized_alias?:string; canonical_label?:string; cuisine?:string|null; metadata?:Json; created_at?:string }
+        Relationships: []
+      }
+      storage_cleanup_queue: {
+        Row: { id:string; bucket:string; object_path:string; member_id:string; room_id:string; attempts:number; last_error:string|null; cleaned_at:string|null; created_at:string }
+        Insert: { id?:string; bucket:string; object_path:string; member_id:string; room_id:string; attempts?:number; last_error?:string|null; cleaned_at?:string|null; created_at?:string }
+        Update: { id?:string; bucket?:string; object_path?:string; member_id?:string; room_id?:string; attempts?:number; last_error?:string|null; cleaned_at?:string|null; created_at?:string }
         Relationships: []
       }
       member_devices: {
@@ -561,6 +567,15 @@ export type Database = {
       my_room_id: { Args: never; Returns: string }
       claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
       claim_ai_request_v2: { Args: { p_member_id:string; p_mode:string; p_member_daily_cap:number; p_global_daily_cap:number }; Returns:boolean }
+      save_scanned_meal_v2: {
+        Args: {
+          p_member_id:string; p_room_id:string; p_meal_date:string; p_meal_type:string;
+          p_food_name:string; p_serving_description:string; p_calories:number;
+          p_protein:number; p_carbs:number; p_fat:number; p_ai_confidence:string|null;
+          p_photo_url:string|null; p_components:Json; p_scan_id:string|null
+        };
+        Returns:string
+      }
       room_activity_rollup: { Args: { p_room_id: string; p_today: string }; Returns: Json }
       rebind_member_device: {
         Args: { p_member_id:string; p_device_id:string; p_new_auth_user_id:string; p_update_primary?:boolean };
