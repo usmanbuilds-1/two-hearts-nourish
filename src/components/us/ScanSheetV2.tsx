@@ -587,6 +587,13 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
                           {item.source_name} · {Math.round(item.confidence * 100)}% evidence confidence
                           {item.hidden_fat_risk !== "low" ? " · " + item.hidden_fat_risk + " hidden-fat uncertainty" : ""}
                         </p>
+                        {item.personal_prior_grams && item.personal_prior_confirmations && (
+                          <button type="button"
+                            className="mt-2 text-xs font-medium text-primary underline-offset-2 hover:underline"
+                            onClick={() => updateGrams(index, String(item.personal_prior_grams))}>
+                            Use my usual {Math.round(item.personal_prior_grams)} g · confirmed {item.personal_prior_confirmations}×
+                          </button>
+                        )}
                       </div>
                       <button type="button" aria-label={"Remove " + item.label}
                         onClick={() => replaceComponents(components.filter((_, i) => i !== index))}
