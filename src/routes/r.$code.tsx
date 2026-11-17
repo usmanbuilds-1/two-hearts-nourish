@@ -46,11 +46,12 @@ function Join() {
     let mounted = true;
     setPreview(null);
     setLoadError(false);
-    getRoomPreview({ data: {
-      code,
-      ...(inviteToken ? { inviteToken } : {}),
-      ...(lc ? { rejoinToken: lc } : {}),
-    } })
+    ensureIdentity()
+      .then(() => getRoomPreview({ data: {
+        code,
+        ...(inviteToken ? { inviteToken } : {}),
+        ...(lc ? { rejoinToken: lc } : {}),
+      } }))
       .then((result) => { if (mounted) setPreview(result); })
       .catch(() => { if (mounted) setLoadError(true); });
     return () => { mounted = false; };
@@ -154,6 +155,17 @@ function Join() {
       </>,
     );
   if (!preview) return shell(<div className="text-muted-foreground">Opening your invite…</div>);
+  if (preview.status === "rate_limited")
+    return shell(
+      <>
+        <h1 className="font-display text-3xl leading-tight">Too many attempts</h1>
+        <p className="mt-3 text-muted-foreground">
+          This browser has tried to open private-space links too many times. Nothing was changed. Try again in a few minutes.
+        </p>
+        <Link to="/" className="mt-6 inline-block text-primary underline-offset-4 hover:underline">Go home</Link>
+      </>,
+    );
+
   if (preview.status === "invalid" || preview.status === "not_found")
     return shell(
       <>
