@@ -622,19 +622,17 @@ export const reportScanCorrection = createServerFn({ method: "POST" })
         .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 160);
       if (fingerprint.length >= 8) {
         const per100 = (value: number) => Math.round((value / grams) * 1000) / 10;
-        await db.from("member_food_priors").upsert({
-          member_id: memberId,
-          fingerprint,
-          canonical_label: normalizeFoodAlias(data.corrected.food_name),
-          typical_grams: grams,
-          calories_per_100g: per100(data.corrected.calories),
-          protein_per_100g: per100(data.corrected.protein),
-          carbs_per_100g: per100(data.corrected.carbs),
-          fat_per_100g: per100(data.corrected.fat),
-          structured_context: data.structuredContext,
-          confidence: 0.65,
-          last_confirmed_at: new Date().toISOString(),
-        }, { onConflict: "member_id,fingerprint" });
+        await db.rpc("record_member_food_prior", {
+          p_member_id: memberId,
+          p_fingerprint: fingerprint,
+          p_canonical_label: normalizeFoodAlias(data.corrected.food_name),
+          p_typical_grams: grams,
+          p_calories_per_100g: per100(data.corrected.calories),
+          p_protein_per_100g: per100(data.corrected.protein),
+          p_carbs_per_100g: per100(data.corrected.carbs),
+          p_fat_per_100g: per100(data.corrected.fat),
+          p_structured_context: data.structuredContext,
+        });
       }
     }
     return { ok: true };
