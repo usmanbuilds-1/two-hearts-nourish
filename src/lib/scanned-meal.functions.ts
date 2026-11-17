@@ -108,6 +108,33 @@ export const saveScannedMealV2 = createServerFn({ method: "POST" })
     return { ok: true, meal: meal as Meal };
   });
 
+export const attachMyMealPhoto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { mealId: string; photoPath: string }) => ({
+    mealId: z.string().uuid().parse(input.mealId),
+    photoPath: z.string().trim().max(1000).parse(input.photoPath),
+  }))
+  .handler(async ({ data, context }) => {
+    const member = await currentMember(context);
+    if (!member) return { ok: false, error: "NOT_MEMBER" };
+    const path = relativePhotoPath(data.photoPath, member.room_id);
+    if (!path) return { ok: false, error: "INVALID_PHOTO_PATH" };
+    const db = await admin();
+    const { data: meal, error: mealError } = await db.from("meals")
+      .select("id").eq("id", data.mealId).eq("member_id", member.id).maybeSingle();
+    if (mealError || !meal) {
+      await db.storage.from("meal-photos").remove([path]);
+      return { ok: false, error: "MEAL_NOT_FOUND" };
+    }
+    const { error: updateError } = await db.from("meals")
+      .update({ photo_url: path }).eq("id", data.mealId).eq("member_id", member.id);
+    if (updateError) {
+      await db.storage.from("meal-photos").remove([path]);
+      return { ok: false, error: "PHOTO_ATTACH_FAILED" };
+    }
+    return { ok: true, photoPath: path };
+  });
+
 async function cleanQueuedPhoto(
   db: Awaited<ReturnType<typeof admin>>,
   row: { id: string; object_path: string; room_id: string; attempts: number },
