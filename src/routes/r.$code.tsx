@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Btn, Field, TextInput } from "@/components/us/primitives";
 import { getRoomPreview, joinRoom, linkDevice, rejoinRoom } from "@/lib/room.functions";
 import { ensureIdentity, friendlyError, writeSession } from "@/lib/session";
-import { readRejoinToken } from "@/lib/rejoin-links";
+import { readInviteToken, readRejoinToken } from "@/lib/rejoin-links";
 import { friendlyDeviceLabel } from "@/lib/device-label";
 
 export const Route = createFileRoute("/r/$code")({
@@ -39,24 +39,35 @@ function Join() {
   const lc = typeof window !== "undefined"
     ? readRejoinToken(window.location.search, window.location.hash)
     : null;
+  const inviteToken = typeof window !== "undefined" ? readInviteToken(window.location.hash) : null;
 
   useEffect(() => {
     // A stale local marker must not trap recovery in a /today redirect loop.
     let mounted = true;
     setPreview(null);
     setLoadError(false);
-    getRoomPreview({ data: { code } })
+    getRoomPreview({ data: {
+      code,
+      ...(inviteToken ? { inviteToken } : {}),
+      ...(lc ? { rejoinToken: lc } : {}),
+    } })
       .then((result) => { if (mounted) setPreview(result); })
       .catch(() => { if (mounted) setLoadError(true); });
     return () => { mounted = false; };
-  }, [code]);
+  }, [code, inviteToken, lc]);
 
   async function join(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       await ensureIdentity();
-      const r = await joinRoom({ data: { code, name: name.trim(), deviceLabel: friendlyDeviceLabel(navigator.userAgent) } });
+      if (!inviteToken) throw new Error("INVALID_INVITE");
+      const r = await joinRoom({ data: {
+        code,
+        inviteToken,
+        name: name.trim(),
+        deviceLabel: friendlyDeviceLabel(navigator.userAgent),
+      } });
       writeSession(r);
       void navigate({ to: "/today", replace: true });
     } catch (err) {
@@ -167,6 +178,22 @@ function Join() {
 
     </form>
   );
+
+  if (preview.status === "private")
+    return shell(
+      <>
+        <h1 className="font-display text-3xl leading-tight">This room code isn't a sign-in key.</h1>
+        <p className="mt-3 text-muted-foreground">
+          For a new partner, use the private invitation link sent from the existing member.
+          If this is already your space, use your personal recovery key below or ask your partner for a one-use reconnect link.
+        </p>
+        {!rejoin ? (
+          <Btn variant="outline" className="mt-7 w-full" onClick={() => setRejoin(true)}>
+            Use my recovery key
+          </Btn>
+        ) : rejoinForm}
+      </>,
+    );
 
   if (preview.status === "full")
     return shell(
