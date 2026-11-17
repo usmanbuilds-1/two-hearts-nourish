@@ -105,6 +105,56 @@ export const saveScannedMealV2 = createServerFn({ method: "POST" })
     const { data: meal, error: mealError } = await db.from("meals")
       .select("*").eq("id", mealId).eq("member_id", member.id).single();
     if (mealError || !meal) return { ok: false, error: "SAVE_FAILED" };
+
+    // Cache only the final, user-confirmed result. Raw model output is never cached.
+    const { data: scanEvent } = await db.from("scan_events")
+      .select("image_fingerprint,context_fingerprint,scanner_version")
+      .eq("id", data.scanId).eq("member_id", member.id).maybeSingle();
+    if (scanEvent?.image_fingerprint && /^[a-f0-9]{16}$/.test(scanEvent.image_fingerprint)) {
+      const confidenceScore = components.length
+        ? Math.round((components.reduce((sum, item) => sum + Number(item.confidence ?? 0.5), 0) / components.length) * 100) / 100
+        : 0.5;
+      const finalEstimate = {
+        food_name: data.foodName,
+        serving_description: data.servingDescription,
+        calories: data.calories,
+        protein: data.protein,
+        carbs: data.carbs,
+        fat: data.fat,
+        confidence: data.confidence ?? "medium",
+        confidence_score: confidenceScore,
+        components: components.map((item) => ({
+          label: item.label,
+          serving_description: item.grams ? String(item.grams) + " g" : "",
+          grams_estimate: item.grams,
+          grams_min: item.grams,
+          grams_max: item.grams,
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          confidence: item.confidence ?? 0.5,
+          hidden_fat_risk: "low",
+          source_name: item.source_name ?? "manual",
+          source_ref: item.source_ref ?? null,
+          packaged_food: null,
+        })),
+        questions: [],
+        escalated: false,
+        cache_hit: true,
+        packaged_food: null,
+      };
+      await db.from("member_scan_cache").upsert({
+        member_id: member.id,
+        image_fingerprint: scanEvent.image_fingerprint,
+        context_fingerprint: scanEvent.context_fingerprint ?? "",
+        scanner_version: scanEvent.scanner_version,
+        final_estimate: finalEstimate,
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "member_id,image_fingerprint,context_fingerprint,scanner_version" });
+    }
+
     return { ok: true, meal: meal as Meal };
   });
 
