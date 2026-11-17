@@ -7,6 +7,7 @@ import {
   contextualQuestions,
   evidenceConfidence,
   normalizeFoodAlias,
+  foodFingerprint,
   parseDeterministicContext,
   type HiddenFatRisk,
 } from "./scan-v2";
@@ -72,6 +73,8 @@ export type ScannerV2Component = {
   source_name: "USDA" | "Open Food Facts" | "nutrition-label" | "model-fallback" | "user-context" | "manual";
   source_ref: string | null;
   packaged_food?: DetectedPackage | null;
+  personal_prior_grams?: number | null;
+  personal_prior_confirmations?: number;
 };
 
 export type ScannerV2Estimate = {
@@ -336,6 +339,34 @@ async function groundOutput(output: VisionOutput): Promise<ScannerV2Component[]>
   });
 }
 
+async function attachMemberPriors(
+  db: Awaited<ReturnType<typeof admin>>,
+  memberId: string,
+  components: ScannerV2Component[],
+): Promise<ScannerV2Component[]> {
+  const fingerprints = [...new Set(components.map((item) => foodFingerprint(item.label)).filter((value) => value.length >= 8))];
+  if (!fingerprints.length) return components;
+  const cutoff = new Date(Date.now() - 120 * 24 * 60 * 60_000).toISOString();
+  const { data, error } = await db.from("member_food_priors")
+    .select("fingerprint,typical_grams,confirmations,confidence,last_confirmed_at")
+    .eq("member_id", memberId)
+    .in("fingerprint", fingerprints)
+    .gte("confirmations", 2)
+    .gte("confidence", 0.65)
+    .gte("last_confirmed_at", cutoff);
+  if (error || !data?.length) return components;
+  const byFingerprint = new Map(data.map((row) => [row.fingerprint, row]));
+  return components.map((item) => {
+    const prior = byFingerprint.get(foodFingerprint(item.label));
+    if (!prior?.typical_grams) return item;
+    return {
+      ...item,
+      personal_prior_grams: Number(prior.typical_grams),
+      personal_prior_confirmations: Number(prior.confirmations),
+    };
+  });
+}
+
 function combined(components: ScannerV2Component[]) {
   return components.reduce(
     (sum, item) => ({
@@ -460,7 +491,8 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
         }
       }
 
-      const components = await groundOutput(parsed);
+      const groundedComponents = await groundOutput(parsed);
+      const components = await attachMemberPriors(db, memberId, groundedComponents);
       const totals = combined(components);
       const confidenceScore = components.length
         ? Math.round((components.reduce((sum, item) => sum + item.confidence, 0) / components.length) * 100) / 100
@@ -618,8 +650,7 @@ export const reportScanCorrection = createServerFn({ method: "POST" })
 
     const grams = data.corrected.grams ?? null;
     if (grams && grams > 0) {
-      const fingerprint = normalizeFoodAlias(data.corrected.food_name).toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 160);
+      const fingerprint = foodFingerprint(data.corrected.food_name);
       if (fingerprint.length >= 8) {
         const per100 = (value: number) => Math.round((value / grams) * 1000) / 10;
         await db.rpc("record_member_food_prior", {
