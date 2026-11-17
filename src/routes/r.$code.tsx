@@ -210,13 +210,13 @@ function Join() {
   if (preview.status === "full")
     return shell(
       <>
-        <h1 className="font-display text-3xl leading-tight">Welcome back.</h1>
+        <h1 className="font-display text-3xl leading-tight">This space already has two people.</h1>
         <p className="mt-3 text-muted-foreground">
-          This space already has two people. To return to your existing meals, ask your partner for a private reconnect link from Settings → Come back to us. Open that link on this phone to sign in.
+          If one of them is you, use your saved recovery key or ask your partner for a private reconnect link from Settings → Come back to us.
         </p>
         {!rejoin ? (
           <Btn variant="outline" className="mt-7 w-full" onClick={() => setRejoin(true)}>
-            Use my saved recovery key instead
+            Use my recovery key
           </Btn>
         ) : (
           <>
