@@ -38,6 +38,14 @@ BEGIN
     THEN RAISE EXCEPTION 'Storage cleanup queue exposed'; END IF;
   IF has_table_privilege('authenticated','public.member_scan_cache','SELECT')
     THEN RAISE EXCEPTION 'Private scan cache exposed'; END IF;
+  IF has_table_privilege('authenticated','public.security_attempt_budgets','SELECT')
+    THEN RAISE EXCEPTION 'Security attempt budgets exposed'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.claim_security_attempt(uuid,text,integer,integer)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Security attempt RPC exposed to browser'; END IF;
   IF has_function_privilege(
        'authenticated',
        'public.save_scanned_meal_v2(uuid,uuid,date,text,text,text,integer,numeric,numeric,numeric,text,text,jsonb,uuid)',
@@ -108,6 +116,13 @@ BEGIN
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 member cap exceeded'; END IF;
   SELECT public.claim_ai_request_v2(member_b,'strong_scan',2,1) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 global cap exceeded'; END IF;
+
+  SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Security budget first attempt'; END IF;
+  SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Security budget second attempt'; END IF;
+  SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'Security budget exceeded'; END IF;
 
   INSERT INTO public.scan_events(id,member_id,scanner_version,prompt_version,model,route,status)
     VALUES(scan_a,member_a,'test','test','test-model','vision','succeeded');
