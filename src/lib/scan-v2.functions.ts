@@ -146,31 +146,31 @@ function hammingHex(a: string, b: string): number {
 function cachedEstimate(value: unknown): Omit<ScannerV2Estimate, "scan_id"> | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Record<string, unknown>;
-  if (!Array.isArray(raw.components) || typeof raw.food_name !== "string") return null;
+  if (!Array.isArray(raw["components"]) || typeof raw["food_name"] !== "string") return null;
   const components: ScannerV2Component[] = [];
-  for (const candidate of raw.components.slice(0, 20)) {
+  for (const candidate of raw["components"].slice(0, 20)) {
     if (!candidate || typeof candidate !== "object") return null;
     const item = candidate as Record<string, unknown>;
-    const source = item.source_name;
+    const source = item["source_name"];
     if (!["USDA","Open Food Facts","nutrition-label","model-fallback","user-context","manual"].includes(String(source))) return null;
     const numbers = ["calories","protein","carbs","fat","confidence"];
     if (numbers.some((key) => typeof item[key] !== "number" || !Number.isFinite(item[key] as number))) return null;
     components.push(item as unknown as ScannerV2Component);
   }
-  const confidence = raw.confidence;
+  const confidence = raw["confidence"];
   if (confidence !== "low" && confidence !== "medium" && confidence !== "high") return null;
   return {
-    food_name: String(raw.food_name).slice(0, 200),
-    serving_description: typeof raw.serving_description === "string" ? raw.serving_description.slice(0, 300) : "",
-    calories: Number(raw.calories ?? 0),
-    protein: Number(raw.protein ?? 0),
-    carbs: Number(raw.carbs ?? 0),
-    fat: Number(raw.fat ?? 0),
+    food_name: String(raw["food_name"]).slice(0, 200),
+    serving_description: typeof raw["serving_description"] === "string" ? raw["serving_description"].slice(0, 300) : "",
+    calories: Number(raw["calories"] ?? 0),
+    protein: Number(raw["protein"] ?? 0),
+    carbs: Number(raw["carbs"] ?? 0),
+    fat: Number(raw["fat"] ?? 0),
     confidence,
-    confidence_score: Number(raw.confidence_score ?? 0.5),
+    confidence_score: Number(raw["confidence_score"] ?? 0.5),
     components,
-    questions: Array.isArray(raw.questions) ? raw.questions.filter((q): q is string => typeof q === "string").slice(0, 2) : [],
-    escalated: Boolean(raw.escalated),
+    questions: Array.isArray(raw["questions"]) ? raw["questions"].filter((q): q is string => typeof q === "string").slice(0, 2) : [],
+    escalated: Boolean(raw["escalated"]),
     cache_hit: true,
     packaged_food: null,
   };
@@ -485,7 +485,7 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
           member_id: memberId, scanner_version: SCANNER_VERSION, prompt_version: PROMPT_VERSION,
           model: "cache", route: "cache", status: "succeeded", cache_hit: true,
           image_fingerprint: data.imageFingerprint, context_fingerprint: data.contextFingerprint,
-          grounding_sources: [...new Set(cached.components.map((item) => item.source_name))],
+          grounding_sources: [...new Set(cached.components.map((item) => item["source_name"]))],
           confidence: cached.confidence_score,
         }).select("id").single();
         if (cacheEventError || !cacheEvent) return { ok: false, error: "V2_STORAGE_UNAVAILABLE" };
@@ -495,12 +495,15 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
             grams_estimate: item.grams_estimate, grams_min: item.grams_min, grams_max: item.grams_max,
             calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat,
             confidence: item.confidence, hidden_fat_risk: item.hidden_fat_risk,
-            source_name: item.source_name, source_ref: item.source_ref,
+            source_name: item["source_name"], source_ref: item.source_ref,
           })),
         ).select("id,item_index");
         if (itemError) return { ok: false, error: "V2_STORAGE_UNAVAILABLE" };
         const ids = new Map((stored ?? []).map((row) => [row.item_index,row.id]));
-        cached.components.forEach((item,index) => { item.id = ids.get(index); });
+        cached.components.forEach((item,index) => {
+          const id = ids.get(index);
+          if (id) item.id = id;
+        });
         return { ok: true, estimate: { ...cached, scan_id: cacheEvent.id } };
       }
     }
@@ -592,7 +595,7 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
         gramsEstimate: item.grams_estimate,
         gramsMin: item.grams_min,
         gramsMax: item.grams_max,
-        ambiguousIdentity: parsed!.components.find((raw) => normalizeFoodAlias(raw.label) === item.label)?.ambiguous_identity,
+        ambiguousIdentity: parsed!.components.find((raw) => normalizeFoodAlias(raw.label) === item.label)?.ambiguous_identity ?? false,
       })).filter((question, index, all) => all.indexOf(question) === index).slice(0, 2);
 
       const calls = [cheapCall, strongCall].filter((call): call is GeminiCall => Boolean(call));
@@ -603,7 +606,7 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
         total: sum.total + call.usage.total,
       }), { input: 0, output: 0, thinking: 0, total: 0 });
       const cost = calls.reduce((sum, call) => sum + estimatedMicrousd(call), 0);
-      const sources = [...new Set(components.map((item) => item.source_name))];
+      const sources = [...new Set(components.map((item) => item["source_name"]))];
 
       const { error: updateError } = await db.from("scan_events").update({
         model: calls.map((call) => call.model).join("+"),
@@ -635,13 +638,16 @@ export const analyzeFoodV2 = createServerFn({ method: "POST" })
         fat: item.fat,
         confidence: item.confidence,
         hidden_fat_risk: item.hidden_fat_risk,
-        source_name: item.source_name,
+        source_name: item["source_name"],
         source_ref: item.source_ref,
       }));
       const { data: storedItems, error: itemError } = await db.from("scan_items").insert(rows).select("id,item_index");
       if (itemError) return { ok: false, error: "V2_STORAGE_UNAVAILABLE" };
       const ids = new Map((storedItems ?? []).map((row) => [row.item_index, row.id]));
-      components.forEach((item, index) => { item.id = ids.get(index); });
+      components.forEach((item, index) => {
+        const id = ids.get(index);
+        if (id) item.id = id;
+      });
 
       const primaryPackage = components.length === 1 ? components[0]?.packaged_food ?? null : null;
       return {
