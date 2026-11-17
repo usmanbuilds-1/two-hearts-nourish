@@ -579,6 +579,10 @@ export type Database = {
       my_room_id: { Args: never; Returns: string }
       claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
       claim_ai_request_v2: { Args: { p_member_id:string; p_mode:string; p_member_daily_cap:number; p_global_daily_cap:number }; Returns:boolean }
+      claim_security_attempt: {
+        Args: { p_actor_auth_user_id:string; p_action:string; p_window_seconds:number; p_max_attempts:number };
+        Returns:boolean
+      }
       consume_rejoin_link: {
         Args: { p_member_id:string; p_claim_hash:string; p_auth_user_id:string; p_device_label:string; p_new_recovery_hash:string };
         Returns:Json
