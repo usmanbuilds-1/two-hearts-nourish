@@ -582,7 +582,7 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-medium">Meal components</h3>
-                  <Btn size="sm" variant="outline" onClick={addManualComponent}><Plus className="size-4" /> Add missing</Btn>
+                  <Btn size="md" variant="outline" onClick={addManualComponent}><Plus className="size-4" /> Add missing</Btn>
                 </div>
                 {components.map((item, index) => (
                   <div key={item.id ?? "new-" + index} className="rounded-2xl border border-border bg-card p-4">
