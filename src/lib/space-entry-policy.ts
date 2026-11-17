@@ -17,6 +17,8 @@ export type SpaceEntryDependencies<T> = {
   getUserId: () => Promise<string | null>;
   loadSpace: (userId: string) => Promise<T | null>;
   restoreMember: (saved: StoredSpaceSession) => Promise<T>;
+  isDefinitiveAuthFailure: (error: unknown) => boolean;
+  replaceInvalidAuthSession: () => Promise<void>;
 };
 
 /** A six-digit link cannot reproduce the original personal key stored as a hash. */
@@ -53,28 +55,41 @@ export async function resolveSpaceEntry<T>(deps: SpaceEntryDependencies<T>): Pro
     }
   };
 
+  const recoverDeadAuth = async (error: unknown): Promise<SpaceEntry<T>> => {
+    if (!deps.isDefinitiveAuthFailure(error)) return retry();
+    if (!hasRecoveryKey(saved)) return recover();
+    try {
+      await deps.replaceInvalidAuthSession();
+    } catch {
+      return retry();
+    }
+    return restore();
+  };
+
   let hasAuth: boolean;
   try {
     hasAuth = await deps.hasAuthSession();
-  } catch {
-    return retry();
+  } catch (error) {
+    return recoverDeadAuth(error);
   }
   if (!hasAuth) return restore();
 
   let userId: string | null;
   try {
     userId = await deps.getUserId();
-  } catch {
-    // Don't create another anonymous identity while an auth session exists.
-    return retry();
+  } catch (error) {
+    // Transient failures preserve the current identity. A definitively dead
+    // Supabase session may be replaced only when we can securely rebind with
+    // the saved member recovery key.
+    return recoverDeadAuth(error);
   }
   if (!userId) return recover();
 
   try {
     const space = await deps.loadSpace(userId);
     if (space) return { kind: "ready", space };
-  } catch {
-    return retry();
+  } catch (error) {
+    return deps.isDefinitiveAuthFailure(error) ? recoverDeadAuth(error) : retry();
   }
 
   // An authenticated identity without a device mapping may rebind securely
