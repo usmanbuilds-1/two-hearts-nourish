@@ -28,6 +28,16 @@ BEGIN
     THEN RAISE EXCEPTION 'Room stats exposed'; END IF;
   IF has_function_privilege('authenticated','public.claim_ai_request(uuid,text,integer)','EXECUTE')
     THEN RAISE EXCEPTION 'AI quota claim exposed'; END IF;
+  IF has_function_privilege('authenticated','public.claim_ai_request_v2(uuid,text,integer,integer)','EXECUTE')
+    THEN RAISE EXCEPTION 'AI quota v2 claim exposed'; END IF;
+  IF has_table_privilege('authenticated','public.ai_usage_global','SELECT')
+    THEN RAISE EXCEPTION 'Global AI usage exposed'; END IF;
+  IF has_table_privilege('authenticated','public.scan_events','SELECT')
+    OR has_table_privilege('authenticated','public.scan_items','SELECT')
+    OR has_table_privilege('authenticated','public.scan_corrections','SELECT')
+    OR has_table_privilege('authenticated','public.member_food_priors','SELECT')
+    OR has_table_privilege('authenticated','public.meal_components','SELECT')
+    THEN RAISE EXCEPTION 'Private scanner learning tables exposed'; END IF;
 
   INSERT INTO public.rooms(id) VALUES(room);
   INSERT INTO public.members(id,room_id,participant_token_hash,daily_protein_target)
@@ -56,6 +66,19 @@ BEGIN
   IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Quota second request'; END IF;
   SELECT public.claim_ai_request(member_a,'scan',2) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'Quota exceeded'; END IF;
+
+  -- V2 quota must enforce member and project ceilings atomically.
+  SELECT public.claim_ai_request_v2(member_a,'strong_scan',1,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'V2 quota first request'; END IF;
+  SELECT public.claim_ai_request_v2(member_a,'strong_scan',1,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 member cap exceeded'; END IF;
+  SELECT public.claim_ai_request_v2(member_b,'strong_scan',2,1) INTO succeeded;
+  IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 global cap exceeded'; END IF;
+
+  INSERT INTO public.scan_events(member_id,scanner_version,prompt_version,model,route,status)
+    VALUES(member_a,'test','test','test-model','vision','succeeded');
+  IF (SELECT count(*) FROM public.scan_events WHERE member_id=member_a) <> 1
+    THEN RAISE EXCEPTION 'Scanner telemetry insert failed'; END IF;
 
   -- Device-specific login recovery must move an existing slot, not insert a row.
   UPDATE public.members SET auth_user_id=actor WHERE id=member_a;
