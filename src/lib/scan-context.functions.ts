@@ -30,9 +30,10 @@ function totals(components: ScannerV2Component[]) {
 
 export const applyScanContext = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { scanId: string; context: string }) => ({
+  .inputValidator((input: { scanId: string; context: string; contextFingerprint?: string }) => ({
     scanId: z.string().uuid().parse(input.scanId),
     context: z.string().trim().min(2).max(300).parse(input.context),
+    contextFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional().parse(input.contextFingerprint),
   }))
   .handler(async ({ data, context }): Promise<
     | { ok: true; applied: true; needsVision: false; estimate: ScannerV2Estimate }
@@ -160,6 +161,11 @@ export const applyScanContext = createServerFn({ method: "POST" })
         addedFatGrams: parsed.addedFat.grams,
       } : {}),
     };
+    if (data.contextFingerprint) {
+      await db.from("scan_events").update({ context_fingerprint: data.contextFingerprint })
+        .eq("id", data.scanId).eq("member_id", memberId);
+    }
+
     const { error: correctionError } = await db.from("scan_corrections").insert({
       scan_id: data.scanId,
       scan_item_id: first.id ?? null,
