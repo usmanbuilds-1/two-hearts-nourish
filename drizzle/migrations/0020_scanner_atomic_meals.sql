@@ -21,6 +21,7 @@ GRANT ALL ON public.storage_cleanup_queue TO service_role;
 CREATE OR REPLACE FUNCTION public.queue_deleted_meal_photo()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -32,7 +33,11 @@ BEGIN
   END IF;
   RETURN OLD;
 END;
-$$;
+$;
+REVOKE ALL ON FUNCTION public.queue_deleted_meal_photo()
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.queue_deleted_meal_photo()
+  TO service_role;
 
 DROP TRIGGER IF EXISTS meals_queue_photo_cleanup ON public.meals;
 CREATE TRIGGER meals_queue_photo_cleanup
