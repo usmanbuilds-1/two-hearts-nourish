@@ -336,6 +336,7 @@ function applyDeterministicContext(output: VisionOutput, rawContext: string): Vi
       recognition_confidence: 1,
       portion_confidence: 1,
       hidden_fat_risk: "low",
+      occlusion_risk: "low",
       cooking_method: "user supplied",
       scale_evidence: "explicit context",
       ambiguous_identity: false,
