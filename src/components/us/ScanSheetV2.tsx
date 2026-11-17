@@ -28,6 +28,7 @@ import {
 } from "@/lib/packaged-scan";
 import type { PackagedFood } from "@/lib/off-food";
 import { FoodSearchSheet } from "./FoodSearchSheet";
+import { BarcodeScanner } from "./BarcodeScanner";
 import { scanNutritionLabel } from "@/lib/nutrition-label.functions";
 import type { ScanSheetProps } from "./ScanSheet";
 
@@ -95,6 +96,7 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
   const [keepPhoto, setKeepPhoto] = useState(false);
   const [rememberPortion, setRememberPortion] = useState(false);
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [packageGrams, setPackageGrams] = useState("");
   const [errMsg, setErrMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -120,6 +122,7 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
       setRememberPortion(false);
       setPackageGrams("");
       setFoodSearchOpen(false);
+      setBarcodeOpen(false);
     }
   }, [open]);
 
@@ -658,12 +661,31 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
 
               <div className="rounded-2xl border border-border p-4">
                 <p className="text-sm font-medium">Packaged food?</p>
-                <p className="mt-1 text-xs text-muted-foreground">Barcode or an exact package label beats a camera estimate.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use the barcode or exact package label instead of a photo estimate.
+                </p>
                 <div className="mt-3 flex gap-2">
-                  <TextInput type="number" inputMode="decimal" min={1} max={2000}
-                    value={packageGrams} onChange={(event) => setPackageGrams(event.target.value)}
-                    placeholder="Total g/ml" />
-                  <Btn variant="outline" onClick={() => setFoodSearchOpen(true)}>Find label</Btn>
+                  <Btn variant="outline" className="flex-1" onClick={() => setBarcodeOpen((value) => !value)}>
+                    {barcodeOpen ? "Hide barcode" : "Scan barcode"}
+                  </Btn>
+                  <Btn variant="outline" className="flex-1" onClick={() => setFoodSearchOpen(true)}>
+                    Find package
+                  </Btn>
+                </div>
+                {barcodeOpen && (
+                  <div className="mt-4 border-t border-border pt-4">
+                    <BarcodeScanner onSelect={(food, amount) => {
+                      applyPackagedFood(food, amount);
+                      setBarcodeOpen(false);
+                    }} />
+                  </div>
+                )}
+                <div className="mt-3">
+                  <label className="text-xs text-muted-foreground">Package amount for search result
+                    <TextInput type="number" inputMode="decimal" min={1} max={2000}
+                      value={packageGrams} onChange={(event) => setPackageGrams(event.target.value)}
+                      placeholder="Total g/ml" className="mt-1" />
+                  </label>
                 </div>
                 <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen}
                   onSelect={(food) => applyPackagedFood(food, Number(packageGrams))} />
