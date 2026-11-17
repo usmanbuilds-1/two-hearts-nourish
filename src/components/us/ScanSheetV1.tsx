@@ -13,6 +13,7 @@ import type { PackagedFood } from "@/lib/off-food";
 import { detectedTotalGrams, packageSearchQuery, scalePackagedLabel, strictPackageMatch, type DetectedPackage } from "@/lib/packaged-scan";
 import { FoodSearchSheet } from "./FoodSearchSheet";
 import { saveFavoriteMeal } from "@/lib/meal-operations.functions";
+import { attachMyMealPhoto } from "@/lib/scanned-meal.functions";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
 
@@ -177,12 +178,19 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setBusy(true);
     editedRef.current = true;
     try {
-      // Privacy default: the analysis image is discarded unless the user opts in.
-      let photoUrl: string | null = null;
+      // Save nutrition first. Uploading an optional photo afterward avoids orphan
+      // objects if the meal insert itself fails.
+      let savedMeal = await save({ ...draft, photo_url: null });
       if (keepPhoto && image) {
-        photoUrl = await uploadMealPhoto(room.id, image);
+        const uploaded = await uploadMealPhoto(room.id, image);
+        if (uploaded) {
+          const attached = await attachMyMealPhoto({ data: { mealId: savedMeal.id, photoPath: uploaded } });
+          if (attached.ok) savedMeal = { ...savedMeal, photo_url: attached.photoPath };
+          else toast.error("Meal saved, but the photo could not be attached.");
+        } else {
+          toast.error("Meal saved, but the photo upload failed.");
+        }
       }
-      await save({ ...draft, photo_url: photoUrl });
       if (rememberPortion && me) {
         try {
           await saveFavoriteMeal({ data: {
