@@ -14,6 +14,11 @@ function cleanLabel(value: string): string {
   return value.trim().replace(/\s+/g, " ").slice(0, 120);
 }
 
+export function foodFingerprint(value: string): string {
+  return normalizeFoodAlias(value).toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 160);
+}
+
 export function normalizeFoodAlias(value: string): string {
   const s = cleanLabel(value).toLowerCase();
   const aliases: Record<string, string> = {
