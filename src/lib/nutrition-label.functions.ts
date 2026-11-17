@@ -41,7 +41,7 @@ export const scanNutritionLabel = createServerFn({ method: "POST" })
     image: z.string().max(3_100_000).parse(input.image),
   }))
   .handler(async ({ data, context }) => {
-    if (process.env["SCANNER_V2_ENABLED"] !== "true") return { ok: false as const, error: "V2_DISABLED" };
+    if (process.env["SCANNER_V2_ENABLED"] === "false") return { ok: false as const, error: "V2_DISABLED" };
     const image = parseImage(data.image);
     if (!image) return { ok: false as const, error: "INVALID_IMAGE" };
     const { data: device, error: deviceError } = await context.supabase
