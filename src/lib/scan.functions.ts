@@ -186,8 +186,13 @@ export const analyzeFood = createServerFn({ method: "POST" })
     if (!me) return { ok: false, error: "NOT_MEMBER" };
     if (!process.env["GEMINI_API_KEY"]) return {ok:false,error:"AI_UNAVAILABLE"};
     // Token limits are enforced in Postgres across server instances.
-    if (!(await claimAiQuota(me.member_id, "scan"))) {
-      return {ok:false,error:"AI_LIMIT"};
+    try {
+      if (!(await claimAiQuota(me.member_id, "scan"))) {
+        return { ok: false, error: "AI_LIMIT" };
+      }
+    } catch {
+      // Rollback path must fail closed too; never bypass budgets if quota storage is unavailable.
+      return { ok: false, error: "AI_QUOTA_UNAVAILABLE" };
     }
 
     let text = "";
