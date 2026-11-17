@@ -141,16 +141,16 @@ Return ONLY valid JSON matching:
       return { ok: false, error: "AI_FAILED" };
     }
 
-    let parsed: z.SafeParseReturnType<unknown, z.infer<typeof planSchema>>;
+    let p: z.infer<typeof planSchema> | null = null;
     try {
       const match = text.replace(/```(json)?/gi, "").match(/\{[\s\S]*\}/);
-      parsed = planSchema.safeParse(JSON.parse(match ? match[0] : text));
+      const parsed = planSchema.safeParse(JSON.parse(match ? match[0] : text));
+      if (!parsed.success) return { ok: false, error: "AI_MALFORMED" };
+      p = parsed.data;
     } catch {
       return { ok: false, error: "AI_MALFORMED" };
     }
-    if (!parsed.success) return { ok: false, error: "AI_MALFORMED" };
-
-    const p = parsed.data;
+    if (!p) return { ok: false, error: "AI_MALFORMED" };
     const round = (n: number) => Math.max(0, Math.round(n));
     const meals = p.meals.map((meal) => ({
       ...meal,
