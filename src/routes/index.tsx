@@ -140,19 +140,19 @@ function Onboarding() {
           <div className="animate-arrive">
             <h1 className="font-display text-4xl">Welcome back.</h1>
             <p className="mt-3 text-muted-foreground">
-              Paste your private reconnect link, invitation, or room code.
+              Paste your private invitation or reconnect link. A room code can find the space, but it cannot sign you in by itself.
             </p>
             <form className="mt-8 space-y-4" onSubmit={enter}>
-              <Field label="Your link or room code">
+              <Field label="Private link or room code">
                 <TextInput value={link} onChange={e=>setLink(e.target.value)}
-                  placeholder="Paste a link or XXXX-XXXX" autoCapitalize="off"
+                  placeholder="Paste a private link or XXXX-XXXX" autoCapitalize="off"
                   autoCorrect="off" spellCheck={false} autoComplete="off"/>
               </Field>
               <Btn size="lg" className="w-full" disabled={!link.trim()}>Continue</Btn>
             </form>
             <p className="mt-5 text-sm text-muted-foreground">
-              Lost access on this phone? Ask your partner to open Settings → Come back to us and share a private reconnect link.
-              A room code alone cannot recover an existing profile.
+              Lost access on this phone? Ask your partner for a private reconnect link from Settings → Come back to us.
+              Your room code is only an identifier; it cannot recover a profile.
             </p>
             <button type="button" className="mt-6 min-h-11 text-sm text-primary" onClick={()=>setMode("welcome")}>Back</button>
           </div>
