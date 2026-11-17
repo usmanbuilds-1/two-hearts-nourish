@@ -1,3 +1,5 @@
+import { createPartnerInvite } from "@/lib/room.functions";
+import { buildInviteUrl } from "@/lib/rejoin-links";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
@@ -179,9 +181,9 @@ function Today() {
         <div className="mt-5 rounded-2xl border border-border bg-card p-4">
           <p className="font-medium">Invite your person</p>
           <p className="mt-1 text-sm text-muted-foreground">Share your private room link so you can log meals together.</p>
-          <Btn variant="outline" className="mt-3 w-full" onClick={()=>void navigator.clipboard.writeText(
-            `${window.location.origin}/r/${room.room_code}`
-          ).then(()=>toast.success("Invitation copied"),()=>toast.error("Couldn't copy the invite."))}>
+          <Btn variant="outline" className="mt-3 w-full" onClick={()=>void createPartnerInvite().then((invite)=>
+            navigator.clipboard.writeText(buildInviteUrl(window.location.origin, invite.roomCode, invite.token))
+          ).then(()=>toast.success("Private invitation copied"),()=>toast.error("Couldn't create the invitation."))}>
             Copy invitation link
           </Btn>
         </div>
