@@ -185,7 +185,8 @@ function cachedEstimate(value: unknown): Omit<ScannerV2Estimate, "scan_id"> | nu
 }
 
 function enabled() {
-  return process.env["SCANNER_V2_ENABLED"] === "true";
+  // V2 is the production default. An explicit false remains an emergency kill switch.
+  return process.env["SCANNER_V2_ENABLED"] !== "false";
 }
 
 function parseImage(dataUrl: string): { mime: string; base64: string } | null {
