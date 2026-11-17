@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   addedFatNutrition,
   contextualQuestions,
+  conservativeHiddenFatRisk,
   evidenceConfidence,
+  foodProfile,
   labelEnergyWarning,
   normalizeFoodAlias,
   parseDeterministicContext,
@@ -36,6 +38,15 @@ describe("scanner v2 deterministic helpers", () => {
   it("uses 4/4/9 only as a warning rather than a reject rule", () => {
     expect(labelEnergyWarning({ calories: 200, protein: 10, carbs: 20, fat: 8 })).toBeNull();
     expect(labelEnergyWarning({ calories: 500, protein: 2, carbs: 2, fat: 1 })).toContain("Check");
+  });
+
+  it("uses South Asian profiles to raise uncertainty without replacing portions", () => {
+    const biryani = foodProfile("chicken biryani");
+    expect(biryani?.canonicalLabel).toBe("Biryani");
+    expect(biryani?.typicalPortionG).toEqual([250, 500]);
+    expect(conservativeHiddenFatRisk("low", "chicken biryani")).toBe("high");
+    expect(conservativeHiddenFatRisk("high", "Roti")).toBe("high");
+    expect(foodProfile("plain apple")).toBeNull();
   });
 
   it("penalizes uncertain portions and hidden fat", () => {
