@@ -80,7 +80,7 @@ CI verifies:
 - strict TypeScript
 - ESLint
 - production build
-- SQL migrations `0014–0025`
+- SQL migrations `0014–0026`
 - server-only privilege assertions for security RPCs/tables
 
 ## Incident response
