@@ -4,7 +4,7 @@ import { Camera, ImageIcon, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Btn, Field, TextInput } from "./primitives";
-import { compressImage, uploadMealPhoto } from "@/lib/image";
+import { compressImage, contextFingerprint, perceptualImageHash, uploadMealPhoto } from "@/lib/image";
 import { useSpace } from "@/lib/space";
 import { MEAL_TYPES, defaultMealType, type MealType } from "@/lib/nutrition";
 import {
@@ -182,11 +182,17 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
     const request = ++requestRef.current;
     setStage("analyzing");
     try {
+      const [imageHash, contextHash] = await Promise.all([
+        secondImage ? Promise.resolve<string | null>(null) : perceptualImageHash(image).catch(() => null),
+        contextFingerprint(extraContext).catch(() => ""),
+      ]);
       const result = await analyzeFoodV2({
         data: {
           image,
           ...(secondImage ? { secondImage } : {}),
           ...(extraContext.trim() ? { context: extraContext.trim() } : {}),
+          ...(imageHash ? { imageFingerprint: imageHash } : {}),
+          contextFingerprint: contextHash,
         },
       });
       if (request !== requestRef.current) return;
@@ -305,7 +311,12 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
     if (!estimate || !contextText.trim() || !image) return;
     setApplyingContext(true);
     try {
-      const result = await applyScanContext({ data: { scanId: estimate.scan_id, context: contextText.trim() } });
+      const contextHash = await contextFingerprint(contextText);
+      const result = await applyScanContext({ data: {
+        scanId: estimate.scan_id,
+        context: contextText.trim(),
+        ...(contextHash ? { contextFingerprint: contextHash } : {}),
+      } });
       if (!result.ok) {
         toast.error("Couldn't apply that context safely.");
         return;
