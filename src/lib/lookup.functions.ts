@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { normalizeFoodAlias } from "./scan-v2";
+import { scaleUsda, searchUsdaFood } from "./usda-food.server";
 import { isPlausibleNutrition } from "./ai-estimate";
 import { claimAiQuota } from "./ai-quota.server";
 import type { FoodEstimate } from "./scan.functions";
@@ -125,6 +127,20 @@ async function callGeminiDirect(
   throw lastError ?? new Error("All Gemini models failed");
 }
 
+function deterministicTextLookup(description: string): { query: string; grams: number } | null {
+  const gramsMatch = description.match(/\b(\d{1,4}(?:\.\d+)?)\s*g(?:rams?)?\b/i);
+  if (!gramsMatch) return null;
+  const grams = Number(gramsMatch[1]);
+  if (!Number.isFinite(grams) || grams <= 0 || grams > 10000) return null;
+  const query = description
+    .replace(gramsMatch[0], " ")
+    .replace(/\b(?:about|around|approx(?:imately)?|plate|bowl|serving|portion|of)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return query.length >= 2 ? { query: normalizeFoodAlias(query), grams } : null;
+}
+
 // ── Server function ───────────────────────────────────────────────────────
 type LookupResult = { ok: true; estimate: FoodEstimate } | { ok: false; error: string };
 
@@ -140,10 +156,31 @@ export const lookupFood = createServerFn({ method: "POST" })
       .eq("auth_user_id", context.userId)
       .maybeSingle();
     if (!me) return { ok: false, error: "NOT_MEMBER" };
+    const deterministic = deterministicTextLookup(data.description);
+    if (deterministic) {
+      const match = await searchUsdaFood(deterministic.query);
+      if (match) {
+        const nutrition = scaleUsda(match, deterministic.grams);
+        return {
+          ok: true,
+          estimate: {
+            food_name: match.label.slice(0, 120),
+            serving_description: deterministic.grams + " g · USDA FoodData Central",
+            ...nutrition,
+            confidence: match.score >= 0.78 ? "high" : "medium",
+          },
+        };
+      }
+    }
+
     if (!process.env["GEMINI_API_KEY"]) return {ok:false,error:"AI_UNAVAILABLE"};
-    // Token limits are enforced in Postgres across server instances.
-    if (!(await claimAiQuota(me.member_id, "text"))) {
-      return {ok:false,error:"AI_LIMIT"};
+    // Only fallback AI consumes the text quota.
+    try {
+      if (!(await claimAiQuota(me.member_id, "text"))) {
+        return {ok:false,error:"AI_LIMIT"};
+      }
+    } catch {
+      return {ok:false,error:"AI_QUOTA_UNAVAILABLE"};
     }
 
     let text = "";
