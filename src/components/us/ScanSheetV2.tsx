@@ -28,6 +28,7 @@ import {
 } from "@/lib/packaged-scan";
 import type { PackagedFood } from "@/lib/off-food";
 import { FoodSearchSheet } from "./FoodSearchSheet";
+import { scanNutritionLabel } from "@/lib/nutrition-label.functions";
 import type { ScanSheetProps } from "./ScanSheet";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
@@ -41,6 +42,8 @@ const ERRORS: Record<string, string> = {
   INVALID_IMAGE: "That image could not be verified. Try another photo.",
   V2_DISABLED: "The safer scanner is not enabled on the server yet.",
   V2_STORAGE_UNAVAILABLE: "Scanner safety storage is unavailable, so the AI request was stopped.",
+  LABEL_INCOMPLETE: "Some nutrition values are not visible enough to trust. Enter them manually from the package.",
+  LABEL_MALFORMED: "The nutrition panel could not be read safely. Try a clearer photo.",
 };
 
 function cloneComponents(items: ScannerV2Component[]) {
@@ -190,6 +193,20 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
       if (!result.ok) return setError(result.error);
       setFromEstimate(result.estimate);
       await maybeGroundExactPackage(result.estimate);
+    } catch {
+      if (request === requestRef.current) setError("AI_FAILED");
+    }
+  }
+
+  async function analyzeLabel() {
+    if (!image) return;
+    const request = ++requestRef.current;
+    setStage("analyzing");
+    try {
+      const result = await scanNutritionLabel({ data: { image } });
+      if (request !== requestRef.current) return;
+      if (!result.ok) return setError(result.error);
+      setFromEstimate(result.estimate);
     } catch {
       if (request === requestRef.current) setError("AI_FAILED");
     }
@@ -493,7 +510,8 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
           {stage === "preview" && (
             <div className="mt-5 space-y-3">
               <Btn size="lg" className="w-full" onClick={() => void runAnalyze()}>Analyze meal</Btn>
-              <Btn size="lg" variant="outline" className="w-full" onClick={retake}>Retake</Btn>
+              <Btn size="lg" variant="outline" className="w-full" onClick={() => void analyzeLabel()}>Read nutrition label</Btn>
+              <Btn size="lg" variant="ghost" className="w-full" onClick={retake}>Retake</Btn>
             </div>
           )}
 
