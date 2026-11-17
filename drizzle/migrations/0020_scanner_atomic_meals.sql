@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS public.storage_cleanup_queue (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   bucket text NOT NULL CHECK (char_length(bucket) BETWEEN 1 AND 80),
   object_path text NOT NULL CHECK (char_length(object_path) BETWEEN 1 AND 1000),
+  member_id uuid NOT NULL,
+  room_id uuid NOT NULL,
   attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   last_error text,
   cleaned_at timestamptz,
@@ -26,10 +28,12 @@ SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF OLD.photo_url IS NOT NULL AND btrim(OLD.photo_url) <> '' THEN
-    INSERT INTO public.storage_cleanup_queue(bucket, object_path)
-    VALUES('meal-photos', OLD.photo_url)
+    INSERT INTO public.storage_cleanup_queue(bucket, object_path, member_id, room_id)
+    VALUES('meal-photos', OLD.photo_url, OLD.member_id, OLD.room_id)
     ON CONFLICT(bucket, object_path) DO UPDATE
-      SET cleaned_at = NULL;
+      SET member_id = EXCLUDED.member_id,
+          room_id = EXCLUDED.room_id,
+          cleaned_at = NULL;
   END IF;
   RETURN OLD;
 END;
