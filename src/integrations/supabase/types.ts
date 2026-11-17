@@ -258,9 +258,63 @@ export type Database = {
         ]
       }
       ai_usage_daily: {
-        Row: { member_id: string; usage_date: string; scan_requests: number; text_requests: number }
-        Insert: { member_id: string; usage_date?: string; scan_requests?: number; text_requests?: number }
-        Update: { member_id?: string; usage_date?: string; scan_requests?: number; text_requests?: number }
+        Row: { member_id: string; usage_date: string; scan_requests: number; text_requests: number; plan_requests: number; strong_scan_requests: number }
+        Insert: { member_id: string; usage_date?: string; scan_requests?: number; text_requests?: number; plan_requests?: number; strong_scan_requests?: number }
+        Update: { member_id?: string; usage_date?: string; scan_requests?: number; text_requests?: number; plan_requests?: number; strong_scan_requests?: number }
+        Relationships: []
+      }
+      ai_usage_global: {
+        Row: { usage_date: string; scan_requests: number; text_requests: number; plan_requests: number; strong_scan_requests: number }
+        Insert: { usage_date?: string; scan_requests?: number; text_requests?: number; plan_requests?: number; strong_scan_requests?: number }
+        Update: { usage_date?: string; scan_requests?: number; text_requests?: number; plan_requests?: number; strong_scan_requests?: number }
+        Relationships: []
+      }
+      scan_events: {
+        Row: { id:string; member_id:string; meal_id:string|null; image_fingerprint:string|null; context_fingerprint:string|null; image_quality:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens:number; output_tokens:number; thinking_tokens:number; total_tokens:number; latency_ms:number|null; estimated_cost_microusd:number; cache_hit:boolean; escalated:boolean; escalation_reason:string|null; grounding_sources:Json; confidence:number|null; created_at:string }
+        Insert: { id?:string; member_id:string; meal_id?:string|null; image_fingerprint?:string|null; context_fingerprint?:string|null; image_quality?:string|null; scanner_version:string; prompt_version:string; model:string; route:string; status:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
+        Update: { id?:string; member_id?:string; meal_id?:string|null; image_fingerprint?:string|null; context_fingerprint?:string|null; image_quality?:string|null; scanner_version?:string; prompt_version?:string; model?:string; route?:string; status?:string; input_tokens?:number; output_tokens?:number; thinking_tokens?:number; total_tokens?:number; latency_ms?:number|null; estimated_cost_microusd?:number; cache_hit?:boolean; escalated?:boolean; escalation_reason?:string|null; grounding_sources?:Json; confidence?:number|null; created_at?:string }
+        Relationships: []
+      }
+      scan_items: {
+        Row: { id:string; scan_id:string; member_id:string; item_index:number; label:string; grams_estimate:number|null; grams_min:number|null; grams_max:number|null; calories:number|null; protein:number|null; carbs:number|null; fat:number|null; confidence:number|null; hidden_fat_risk:string|null; occlusion_risk:string|null; scale_evidence:string|null; source_name:string|null; source_ref:string|null; created_at:string }
+        Insert: { id?:string; scan_id:string; member_id:string; item_index:number; label:string; grams_estimate?:number|null; grams_min?:number|null; grams_max?:number|null; calories?:number|null; protein?:number|null; carbs?:number|null; fat?:number|null; confidence?:number|null; hidden_fat_risk?:string|null; occlusion_risk?:string|null; scale_evidence?:string|null; source_name?:string|null; source_ref?:string|null; created_at?:string }
+        Update: { id?:string; scan_id?:string; member_id?:string; item_index?:number; label?:string; grams_estimate?:number|null; grams_min?:number|null; grams_max?:number|null; calories?:number|null; protein?:number|null; carbs?:number|null; fat?:number|null; confidence?:number|null; hidden_fat_risk?:string|null; occlusion_risk?:string|null; scale_evidence?:string|null; source_name?:string|null; source_ref?:string|null; created_at?:string }
+        Relationships: []
+      }
+      scan_corrections: {
+        Row: { id:string; scan_id:string; scan_item_id:string|null; member_id:string; correction_type:string; original:Json; corrected:Json; structured_context:Json; created_at:string }
+        Insert: { id?:string; scan_id:string; scan_item_id?:string|null; member_id:string; correction_type:string; original:Json; corrected:Json; structured_context?:Json; created_at?:string }
+        Update: { id?:string; scan_id?:string; scan_item_id?:string|null; member_id?:string; correction_type?:string; original?:Json; corrected?:Json; structured_context?:Json; created_at?:string }
+        Relationships: []
+      }
+      member_scan_cache: {
+        Row: { member_id:string; image_fingerprint:string; context_fingerprint:string; scanner_version:string; final_estimate:Json; expires_at:string; updated_at:string; created_at:string }
+        Insert: { member_id:string; image_fingerprint:string; context_fingerprint?:string; scanner_version:string; final_estimate:Json; expires_at:string; updated_at?:string; created_at?:string }
+        Update: { member_id?:string; image_fingerprint?:string; context_fingerprint?:string; scanner_version?:string; final_estimate?:Json; expires_at?:string; updated_at?:string; created_at?:string }
+        Relationships: []
+      }
+      member_food_priors: {
+        Row: { id:string; member_id:string; fingerprint:string; canonical_label:string; typical_grams:number|null; calories_per_100g:number|null; protein_per_100g:number|null; carbs_per_100g:number|null; fat_per_100g:number|null; preparation:string|null; structured_context:Json; confirmations:number; confidence:number; last_confirmed_at:string; created_at:string }
+        Insert: { id?:string; member_id:string; fingerprint:string; canonical_label:string; typical_grams?:number|null; calories_per_100g?:number|null; protein_per_100g?:number|null; carbs_per_100g?:number|null; fat_per_100g?:number|null; preparation?:string|null; structured_context?:Json; confirmations?:number; confidence?:number; last_confirmed_at?:string; created_at?:string }
+        Update: { id?:string; member_id?:string; fingerprint?:string; canonical_label?:string; typical_grams?:number|null; calories_per_100g?:number|null; protein_per_100g?:number|null; carbs_per_100g?:number|null; fat_per_100g?:number|null; preparation?:string|null; structured_context?:Json; confirmations?:number; confidence?:number; last_confirmed_at?:string; created_at?:string }
+        Relationships: []
+      }
+      meal_components: {
+        Row: { id:string; meal_id:string; member_id:string; position:number; label:string; grams:number|null; calories:number; protein:number; carbs:number; fat:number; source_name:string|null; source_ref:string|null; confidence:number|null; created_at:string }
+        Insert: { id?:string; meal_id:string; member_id:string; position:number; label:string; grams?:number|null; calories:number; protein:number; carbs:number; fat:number; source_name?:string|null; source_ref?:string|null; confidence?:number|null; created_at?:string }
+        Update: { id?:string; meal_id?:string; member_id?:string; position?:number; label?:string; grams?:number|null; calories?:number; protein?:number; carbs?:number; fat?:number; source_name?:string|null; source_ref?:string|null; confidence?:number|null; created_at?:string }
+        Relationships: []
+      }
+      food_aliases: {
+        Row: { id:string; alias:string; normalized_alias:string; canonical_label:string; cuisine:string|null; metadata:Json; created_at:string }
+        Insert: { id?:string; alias:string; normalized_alias:string; canonical_label:string; cuisine?:string|null; metadata?:Json; created_at?:string }
+        Update: { id?:string; alias?:string; normalized_alias?:string; canonical_label?:string; cuisine?:string|null; metadata?:Json; created_at?:string }
+        Relationships: []
+      }
+      storage_cleanup_queue: {
+        Row: { id:string; bucket:string; object_path:string; member_id:string; room_id:string; attempts:number; last_error:string|null; cleaned_at:string|null; created_at:string }
+        Insert: { id?:string; bucket:string; object_path:string; member_id:string; room_id:string; attempts?:number; last_error?:string|null; cleaned_at?:string|null; created_at?:string }
+        Update: { id?:string; bucket?:string; object_path?:string; member_id?:string; room_id?:string; attempts?:number; last_error?:string|null; cleaned_at?:string|null; created_at?:string }
         Relationships: []
       }
       member_devices: {
@@ -457,6 +511,8 @@ export type Database = {
           created_at: string
           id: string
           room_code: string
+          invite_token_hash: string | null
+          invite_expires_at: string | null
           shared_goal: string | null
           together_since: string | null
         }
@@ -465,6 +521,8 @@ export type Database = {
           created_at?: string
           id?: string
           room_code: string
+          invite_token_hash?: string | null
+          invite_expires_at?: string | null
           shared_goal?: string | null
           together_since?: string | null
         }
@@ -473,6 +531,8 @@ export type Database = {
           created_at?: string
           id?: string
           room_code?: string
+          invite_token_hash?: string | null
+          invite_expires_at?: string | null
           shared_goal?: string | null
           together_since?: string | null
         }
@@ -518,7 +578,37 @@ export type Database = {
       my_member_id: { Args: never; Returns: string }
       my_room_id: { Args: never; Returns: string }
       claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
+      claim_ai_request_v2: { Args: { p_member_id:string; p_mode:string; p_member_daily_cap:number; p_global_daily_cap:number }; Returns:boolean }
+      claim_security_attempt: {
+        Args: { p_actor_auth_user_id:string; p_action:string; p_window_seconds:number; p_max_attempts:number };
+        Returns:boolean
+      }
+      consume_rejoin_link: {
+        Args: { p_member_id:string; p_claim_hash:string; p_auth_user_id:string; p_device_label:string; p_new_recovery_hash:string };
+        Returns:Json
+      }
+      create_room_with_owner: {
+        Args: { p_room_code:string; p_auth_user_id:string; p_display_name:string; p_device_label:string; p_participant_hash:string; p_invite_hash:string; p_invite_expires_at:string };
+        Returns:Json
+      }
+      join_room_with_invite: {
+        Args: { p_room_code:string; p_auth_user_id:string; p_display_name:string; p_device_label:string; p_participant_hash:string; p_invite_hash:string };
+        Returns:string
+      }
+      save_scanned_meal_v2: {
+        Args: {
+          p_member_id:string; p_room_id:string; p_meal_date:string; p_meal_type:string;
+          p_food_name:string; p_serving_description:string; p_calories:number;
+          p_protein:number; p_carbs:number; p_fat:number; p_ai_confidence:string|null;
+          p_photo_url:string|null; p_components:Json; p_scan_id:string|null
+        };
+        Returns:string
+      }
       room_activity_rollup: { Args: { p_room_id: string; p_today: string }; Returns: Json }
+      record_member_food_prior: {
+        Args: { p_member_id:string; p_fingerprint:string; p_canonical_label:string; p_typical_grams:number; p_calories_per_100g:number; p_protein_per_100g:number; p_carbs_per_100g:number; p_fat_per_100g:number; p_structured_context:Json };
+        Returns:boolean
+      }
       rebind_member_device: {
         Args: { p_member_id:string; p_device_id:string; p_new_auth_user_id:string; p_update_primary?:boolean };
         Returns: boolean

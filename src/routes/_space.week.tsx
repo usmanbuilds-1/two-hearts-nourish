@@ -207,9 +207,9 @@ function WeekView() {
       {tab === "week" && (
         <div className="space-y-5">
           <div>
-            <h1 className="text-3xl">Our Week ❤️</h1>
+            <h1 className="text-3xl">Our week</h1>
             <p className="mt-1 text-muted-foreground">
-              {both} of 7 days you showed up for each other{both === 7 ? " — a perfect week 🌟" : " 💕"}
+              {partner ? `${both} of 7 days with meals from both of you.` : "Your last seven days, in one place."}
             </p>
           </div>
 
@@ -337,21 +337,18 @@ function WeekView() {
             );
           })()}
 
-          {/* ── Weekly Synergy Card ── */}
+          {/* ── Shared weekly summary ── */}
           <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            <Eyebrow>Weekly Synergy 💕</Eyebrow>
+            <Eyebrow>This week, together</Eyebrow>
             <div className="space-y-2.5 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Days logged together</span>
                 <span className="num font-semibold">{both} / 7{both >= 5 ? " 💕" : ""}</span>
               </div>
-              {partner && a1.kcal > 0 && a2.kcal > 0 && (
+              {partner && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Calorie gap (daily avg)</span>
-                  <span className="num font-semibold">
-                    {fmt(Math.abs(Math.round(a1.kcal - a2.kcal)))} kcal
-                    {" "}<span className="text-muted-foreground text-xs">{a1.kcal > a2.kcal ? `(you eat more)` : `(${partner.display_name?.split(" ")[0]} eats more)`}</span>
-                  </span>
+                  <span className="text-muted-foreground">Meals logged this week</span>
+                  <span className="num font-semibold">{a1.n + a2.n}</span>
                 </div>
               )}
               {me.daily_calorie_target && (

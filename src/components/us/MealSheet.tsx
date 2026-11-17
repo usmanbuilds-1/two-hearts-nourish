@@ -17,6 +17,7 @@ import { FoodSearchSheet } from "./FoodSearchSheet";
 import type { PackagedFood } from "@/lib/off-food";
 import { cn } from "@/lib/utils";
 import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
+import { deleteMyMeal } from "@/lib/scanned-meal.functions";
 
 export type MealDraft = {
   food_name: string;
@@ -461,12 +462,20 @@ export function MealSheet({
   async function remove() {
     if (!meal || !confirm(`Delete "${meal.food_name}"?`)) return;
     setBusy(true);
-    const { error } = await supabase.from("meals").delete().eq("id", meal.id);
-    setBusy(false);
-    if (error) return void toast.error("Couldn't delete that meal. Please try again.");
-    removeLocal(meal.id);
-    toast("Meal deleted");
-    onOpenChange(false);
+    try {
+      const result = await deleteMyMeal({ data: { mealId: meal.id } });
+      if (!result.ok) {
+        toast.error("Couldn't delete that meal. Please try again.");
+        return;
+      }
+      removeLocal(meal.id);
+      toast(result.photoCleanupPending ? "Meal deleted · photo cleanup will retry securely" : "Meal deleted");
+      onOpenChange(false);
+    } catch {
+      toast.error("Couldn't delete that meal. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

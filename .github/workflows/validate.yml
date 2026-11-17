@@ -2,8 +2,10 @@ name: Test and build
 on:
   push:
     branches:
+      - "main"
       - "fix/**"
       - "feat/**"
+      - "chatgpt/**"
   pull_request:
 
 permissions:
@@ -18,12 +20,27 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Dependency vulnerability audit
+        run: bun audit --audit-level=high
       - name: Unit tests
         run: bun run test
       - name: Strict TypeScript typecheck
         run: bun x tsc --noEmit
       - name: Semantic lint
         run: bun x eslint . --rule 'prettier/prettier:off'
+      - name: Security source guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f .env
+          if rg -n 'generateContent\?key=|VITE_[A-Z0-9_]*(GEMINI|OPENAI|SERVICE_ROLE|SECRET)|SUPABASE_SERVICE_ROLE_KEY.*import\.meta\.env' src; then
+            echo "Unsafe client/provider secret pattern found"
+            exit 1
+          fi
+          if rg -n 'gemini-[A-Za-z0-9.-]*-latest|gemini-flash-latest' src; then
+            echo "Unpinned Gemini model alias found"
+            exit 1
+          fi
       - name: Production build
         run: bun run build
 
@@ -58,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           psql -h localhost -U postgres -d app_test -v ON_ERROR_STOP=1 -f src/test/sql-migration-fixture.sql
-          for migration in 0014_private_meal_photos 0015_device_security 0016_lifetime_couple_stats 0017_ai_quotas 0018_bulk_device_cleanup; do
+          for migration in 0014_private_meal_photos 0015_device_security 0016_lifetime_couple_stats 0017_ai_quotas 0018_bulk_device_cleanup 0019_scanner_v2_security 0020_scanner_atomic_meals 0021_secure_partner_invites 0022_atomic_rejoin 0023_food_prior_memory 0024_private_scan_cache 0025_security_attempt_budgets 0026_scanner_evidence; do
             psql -h localhost -U postgres -d app_test -v ON_ERROR_STOP=1 -f "drizzle/migrations/${migration}.sql"
           done
           psql -h localhost -U postgres -d app_test -v ON_ERROR_STOP=1 -f src/test/sql-migration-verify.sql

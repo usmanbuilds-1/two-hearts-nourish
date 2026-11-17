@@ -9,6 +9,8 @@ DECLARE
   actor uuid := 'ffffffff-ffff-4fff-8fff-ffffffffffff';
   counter jsonb;
   succeeded boolean;
+  scan_a uuid := '99999999-9999-4999-8999-999999999999';
+  scanned_meal uuid;
 BEGIN
   IF (SELECT public FROM storage.buckets WHERE id='meal-photos') IS DISTINCT FROM false
     THEN RAISE EXCEPTION 'Bucket must be private'; END IF;
@@ -28,20 +30,74 @@ BEGIN
     THEN RAISE EXCEPTION 'Room stats exposed'; END IF;
   IF has_function_privilege('authenticated','public.claim_ai_request(uuid,text,integer)','EXECUTE')
     THEN RAISE EXCEPTION 'AI quota claim exposed'; END IF;
+  IF has_function_privilege('authenticated','public.claim_ai_request_v2(uuid,text,integer,integer)','EXECUTE')
+    THEN RAISE EXCEPTION 'AI quota v2 claim exposed'; END IF;
+  IF has_table_privilege('authenticated','public.ai_usage_global','SELECT')
+    THEN RAISE EXCEPTION 'Global AI usage exposed'; END IF;
+  IF has_table_privilege('authenticated','public.storage_cleanup_queue','SELECT')
+    THEN RAISE EXCEPTION 'Storage cleanup queue exposed'; END IF;
+  IF has_table_privilege('authenticated','public.member_scan_cache','SELECT')
+    THEN RAISE EXCEPTION 'Private scan cache exposed'; END IF;
+  IF has_table_privilege('authenticated','public.security_attempt_budgets','SELECT')
+    THEN RAISE EXCEPTION 'Security attempt budgets exposed'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.claim_security_attempt(uuid,text,integer,integer)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Security attempt RPC exposed to browser'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.save_scanned_meal_v2(uuid,uuid,date,text,text,text,integer,numeric,numeric,numeric,text,text,jsonb,uuid)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Atomic scan save exposed to browser'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.create_room_with_owner(text,uuid,text,text,text,text,timestamptz)',
+       'EXECUTE'
+     )
+    OR has_function_privilege(
+       'authenticated',
+       'public.join_room_with_invite(text,uuid,text,text,text,text)',
+       'EXECUTE'
+     )
+    OR has_function_privilege(
+       'authenticated',
+       'public.consume_rejoin_link(uuid,text,uuid,text,text)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Room capability RPC exposed to browser'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.record_member_food_prior(uuid,text,text,numeric,numeric,numeric,numeric,numeric,jsonb)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Private food-memory RPC exposed to browser'; END IF;
+  IF has_table_privilege('authenticated','public.scan_events','SELECT')
+    OR has_table_privilege('authenticated','public.scan_items','SELECT')
+    OR has_table_privilege('authenticated','public.scan_corrections','SELECT')
+    OR has_table_privilege('authenticated','public.member_food_priors','SELECT')
+    OR has_table_privilege('authenticated','public.meal_components','SELECT')
+    THEN RAISE EXCEPTION 'Private scanner learning tables exposed'; END IF;
 
-  INSERT INTO public.rooms(id) VALUES(room);
-  INSERT INTO public.members(id,room_id,participant_token_hash,daily_protein_target)
-    VALUES(member_a,room,repeat('a',64),10),(member_b,room,repeat('b',64),10);
+  INSERT INTO public.rooms(id,room_code) VALUES(room,'TEST-ROOM');
+  INSERT INTO public.members(
+    id,room_id,seat,display_name,participant_token_hash,daily_protein_target
+  ) VALUES
+    (member_a,room,1,'Member A',repeat('a',64),10),
+    (member_b,room,2,'Member B',repeat('b',64),10);
   INSERT INTO public.member_devices(id,member_id,auth_user_id)
     VALUES (device_a,member_a,actor),(device_b,member_a,'11111111-1111-4111-8111-111111111111');
   INSERT INTO public.member_recovery_keys(member_id,device_id,token_hash)
     VALUES(member_a,device_b,repeat('c',64));
 
-  INSERT INTO public.meals(room_id,member_id,meal_date,meal_type,protein,is_planned)
-    VALUES
-      (room,member_a,'2026-11-13','dinner',20,false),
-      (room,member_b,'2026-11-13','dinner',15,false),
-      (room,member_a,'2026-11-13','lunch',500,true);
+  INSERT INTO public.meals(
+    room_id,member_id,food_name,calories,protein,carbs,fat,meal_date,meal_type,is_planned
+  ) VALUES
+      (room,member_a,'Dinner A',500,20,50,20,'2026-11-13','dinner',false),
+      (room,member_b,'Dinner B',450,15,45,18,'2026-11-13','dinner',false),
+      (room,member_a,'Planned lunch',800,500,40,20,'2026-11-13','lunch',true);
   SELECT public.room_activity_rollup(room,'2026-11-13') INTO counter;
   IF (counter->>'totalMeals')::int <> 2
     OR (counter->>'daysBoth')::int <> 1
@@ -56,6 +112,110 @@ BEGIN
   IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Quota second request'; END IF;
   SELECT public.claim_ai_request(member_a,'scan',2) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'Quota exceeded'; END IF;
+
+  -- V2 quota must enforce member and project ceilings atomically.
+  SELECT public.claim_ai_request_v2(member_a,'strong_scan',1,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'V2 quota first request'; END IF;
+  SELECT public.claim_ai_request_v2(member_a,'strong_scan',1,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 member cap exceeded'; END IF;
+  SELECT public.claim_ai_request_v2(member_b,'strong_scan',2,1) INTO succeeded;
+  IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 global cap exceeded'; END IF;
+
+  SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Security budget first attempt'; END IF;
+  SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Security budget second attempt'; END IF;
+  SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
+  IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'Security budget exceeded'; END IF;
+
+  -- A reconnect capability issued for one member cannot be consumed as the other member.
+  UPDATE public.members SET
+    link_code_hash = repeat('d',64),
+    link_code_expires_at = now() + interval '10 minutes'
+  WHERE id = member_a;
+  BEGIN
+    PERFORM public.consume_rejoin_link(
+      member_b,
+      repeat('d',64),
+      '22222222-2222-4222-8222-222222222222',
+      'Unknown browser',
+      repeat('e',64)
+    );
+    RAISE EXCEPTION 'Cross-member reconnect unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Cross-member reconnect unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%INVALID_LINK%' THEN RAISE; END IF;
+  END;
+
+  -- A wrong partner-invite secret cannot claim a room, even when its room code is known.
+  UPDATE public.rooms SET
+    invite_token_hash = repeat('f',64),
+    invite_expires_at = now() + interval '10 minutes'
+  WHERE id = room;
+  BEGIN
+    PERFORM public.join_room_with_invite(
+      'TEST-ROOM',
+      '33333333-3333-4333-8333-333333333333',
+      'Unknown person',
+      'Unknown browser',
+      repeat('1',64),
+      repeat('0',64)
+    );
+    RAISE EXCEPTION 'Invalid partner invite unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Invalid partner invite unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%INVALID_INVITE%' THEN RAISE; END IF;
+  END;
+
+  INSERT INTO public.scan_events(id,member_id,scanner_version,prompt_version,model,route,status)
+    VALUES(scan_a,member_a,'test','test','test-model','vision','succeeded');
+  IF (SELECT count(*) FROM public.scan_events WHERE member_id=member_a) <> 1
+    THEN RAISE EXCEPTION 'Scanner telemetry insert failed'; END IF;
+
+  -- A member may never attach another member's scan to their own meal.
+  BEGIN
+    PERFORM public.save_scanned_meal_v2(
+      member_b, room, '2026-11-14', 'dinner', 'Cross-member attempt', '', 100, 10, 10, 2,
+      'low', NULL,
+      '[{"label":"test","calories":100,"protein":10,"carbs":10,"fat":2}]'::jsonb,
+      scan_a
+    );
+    RAISE EXCEPTION 'Cross-member scan ownership unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Cross-member scan ownership unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%SCAN_NOT_OWNED%' THEN RAISE; END IF;
+  END;
+
+  -- Room/member mismatches are rejected below the UI/RLS layer.
+  BEGIN
+    PERFORM public.save_scanned_meal_v2(
+      member_a, gen_random_uuid(), '2026-11-14', 'dinner', 'Wrong room attempt', '', 100, 10, 10, 2,
+      'low', NULL,
+      '[{"label":"test","calories":100,"protein":10,"carbs":10,"fat":2}]'::jsonb,
+      scan_a
+    );
+    RAISE EXCEPTION 'Member-room mismatch unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Member-room mismatch unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%MEMBER_ROOM_MISMATCH%' THEN RAISE; END IF;
+  END;
+
+  SELECT public.save_scanned_meal_v2(
+    member_a, room, '2026-11-14', 'dinner', 'Test biryani', '350 g', 620, 28, 70, 24,
+    'medium', room::text || '/test-photo.jpg',
+    '[{"label":"Biryani","grams":350,"calories":620,"protein":28,"carbs":70,"fat":24,"source_name":"USDA","source_ref":"fdc:1","confidence":0.72}]'::jsonb,
+    scan_a
+  ) INTO scanned_meal;
+  IF scanned_meal IS NULL THEN RAISE EXCEPTION 'Atomic scanned meal save returned null'; END IF;
+  IF (SELECT count(*) FROM public.meal_components WHERE meal_id=scanned_meal) <> 1
+    THEN RAISE EXCEPTION 'Atomic scanned meal components missing'; END IF;
+  IF (SELECT meal_id FROM public.scan_events WHERE id=scan_a) <> scanned_meal
+    THEN RAISE EXCEPTION 'Scan event was not linked to saved meal'; END IF;
+  DELETE FROM public.meals WHERE id=scanned_meal;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.storage_cleanup_queue
+    WHERE member_id=member_a AND object_path=room::text || '/test-photo.jpg'
+  ) THEN RAISE EXCEPTION 'Deleted meal photo was not queued for cleanup'; END IF;
 
   -- Device-specific login recovery must move an existing slot, not insert a row.
   UPDATE public.members SET auth_user_id=actor WHERE id=member_a;

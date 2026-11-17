@@ -28,7 +28,7 @@ function Onboarding() {
   const [checkError,setCheckError]=useState(false);
   const [name,setName]=useState("");
   const [busy,setBusy]=useState(false);
-  const [created,setCreated]=useState<string|null>(null);
+  const [created,setCreated]=useState<{roomCode:string;inviteToken:string}|null>(null);
   const [copied,setCopied]=useState(false);
   const [link,setLink]=useState("");
 
@@ -58,7 +58,7 @@ function Onboarding() {
         name:name.trim(),deviceLabel:friendlyDeviceLabel(navigator.userAgent)
       }});
       writeSession(result);
-      setCreated(result.roomCode);
+      setCreated({roomCode:result.roomCode,inviteToken:result.inviteToken});
     }catch(error){toast.error(friendlyError(error));}
     finally{setBusy(false);}
   }
@@ -66,7 +66,7 @@ function Onboarding() {
   async function copy(){
     if(!created)return;
     try{
-      await navigator.clipboard.writeText(inviteUrl(created));
+      await navigator.clipboard.writeText(inviteUrl(created.roomCode,created.inviteToken));
       setCopied(true);
       window.setTimeout(()=>setCopied(false),2000);
     }catch{toast.error("Couldn't copy the invitation.");}
@@ -75,7 +75,7 @@ function Onboarding() {
   async function share(){
     if(!created)return;
     if(navigator.share){
-      await navigator.share({title:"Our space",text:"Join our private space",url:inviteUrl(created)}).catch(()=>{});
+      await navigator.share({title:"Our space",text:"Join our private space",url:inviteUrl(created.roomCode,created.inviteToken)}).catch(()=>{});
     }else void copy();
   }
 
@@ -112,14 +112,14 @@ function Onboarding() {
             <p className="mt-3 text-muted-foreground">Invite your partner with one private link.</p>
             <div className="mt-8 border-y border-border py-5">
               <p className="text-sm text-muted-foreground">Invitation link</p>
-              <p className="mt-2 break-all text-sm">{inviteUrl(created)}</p>
+              <p className="mt-2 break-all text-sm">{inviteUrl(created.roomCode,created.inviteToken)}</p>
               <div className="mt-4 flex gap-2">
                 <Btn className="flex-1" onClick={()=>void copy()}>
                   {copied?<Check className="size-4"/>:<Copy className="size-4"/>}{copied?"Copied":"Copy"}
                 </Btn>
                 <Btn variant="outline" onClick={()=>void share()}>Share</Btn>
               </div>
-              <p className="mt-4 text-xs text-muted-foreground">Room code: <span className="font-mono">{created}</span></p>
+              <p className="mt-4 text-xs text-muted-foreground">Room code: <span className="font-mono">{created.roomCode}</span></p>
             </div>
             <Btn className="mt-7 w-full" onClick={()=>void navigate({to:"/today"})}>Open our space</Btn>
           </div>
@@ -140,19 +140,19 @@ function Onboarding() {
           <div className="animate-arrive">
             <h1 className="font-display text-4xl">Welcome back.</h1>
             <p className="mt-3 text-muted-foreground">
-              Paste your private reconnect link, invitation, or room code.
+              Paste your private invitation or reconnect link. A room code can find the space, but it cannot sign you in by itself.
             </p>
             <form className="mt-8 space-y-4" onSubmit={enter}>
-              <Field label="Your link or room code">
+              <Field label="Private link or room code">
                 <TextInput value={link} onChange={e=>setLink(e.target.value)}
-                  placeholder="Paste a link or XXXX-XXXX" autoCapitalize="off"
+                  placeholder="Paste a private link or XXXX-XXXX" autoCapitalize="off"
                   autoCorrect="off" spellCheck={false} autoComplete="off"/>
               </Field>
               <Btn size="lg" className="w-full" disabled={!link.trim()}>Continue</Btn>
             </form>
             <p className="mt-5 text-sm text-muted-foreground">
-              Lost access on this phone? Ask your partner to open Settings → Come back to us and share a private reconnect link.
-              A room code alone cannot recover an existing profile.
+              Lost access on this phone? Ask your partner for a private reconnect link from Settings → Come back to us.
+              Your room code is only an identifier; it cannot recover a profile.
             </p>
             <button type="button" className="mt-6 min-h-11 text-sm text-primary" onClick={()=>setMode("welcome")}>Back</button>
           </div>

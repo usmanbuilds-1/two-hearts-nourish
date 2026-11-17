@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Btn, Field, TextInput } from "@/components/us/primitives";
 import { getRoomPreview, joinRoom, linkDevice, rejoinRoom } from "@/lib/room.functions";
 import { ensureIdentity, friendlyError, writeSession } from "@/lib/session";
-import { readRejoinToken } from "@/lib/rejoin-links";
+import { readInviteToken, readRejoinToken } from "@/lib/rejoin-links";
 import { friendlyDeviceLabel } from "@/lib/device-label";
 
 export const Route = createFileRoute("/r/$code")({
@@ -39,24 +39,36 @@ function Join() {
   const lc = typeof window !== "undefined"
     ? readRejoinToken(window.location.search, window.location.hash)
     : null;
+  const inviteToken = typeof window !== "undefined" ? readInviteToken(window.location.hash) : null;
 
   useEffect(() => {
     // A stale local marker must not trap recovery in a /today redirect loop.
     let mounted = true;
     setPreview(null);
     setLoadError(false);
-    getRoomPreview({ data: { code } })
+    ensureIdentity()
+      .then(() => getRoomPreview({ data: {
+        code,
+        ...(inviteToken ? { inviteToken } : {}),
+        ...(lc ? { rejoinToken: lc } : {}),
+      } }))
       .then((result) => { if (mounted) setPreview(result); })
       .catch(() => { if (mounted) setLoadError(true); });
     return () => { mounted = false; };
-  }, [code]);
+  }, [code, inviteToken, lc]);
 
   async function join(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       await ensureIdentity();
-      const r = await joinRoom({ data: { code, name: name.trim(), deviceLabel: friendlyDeviceLabel(navigator.userAgent) } });
+      if (!inviteToken) throw new Error("INVALID_INVITE");
+      const r = await joinRoom({ data: {
+        code,
+        inviteToken,
+        name: name.trim(),
+        deviceLabel: friendlyDeviceLabel(navigator.userAgent),
+      } });
       writeSession(r);
       void navigate({ to: "/today", replace: true });
     } catch (err) {
@@ -143,6 +155,17 @@ function Join() {
       </>,
     );
   if (!preview) return shell(<div className="text-muted-foreground">Opening your invite…</div>);
+  if (preview.status === "rate_limited")
+    return shell(
+      <>
+        <h1 className="font-display text-3xl leading-tight">Too many attempts</h1>
+        <p className="mt-3 text-muted-foreground">
+          This browser has tried to open private-space links too many times. Nothing was changed. Try again in a few minutes.
+        </p>
+        <Link to="/" className="mt-6 inline-block text-primary underline-offset-4 hover:underline">Go home</Link>
+      </>,
+    );
+
   if (preview.status === "invalid" || preview.status === "not_found")
     return shell(
       <>
@@ -168,16 +191,32 @@ function Join() {
     </form>
   );
 
-  if (preview.status === "full")
+  if (preview.status === "private")
     return shell(
       <>
-        <h1 className="font-display text-3xl leading-tight">Welcome back.</h1>
+        <h1 className="font-display text-3xl leading-tight">This room code isn't a sign-in key.</h1>
         <p className="mt-3 text-muted-foreground">
-          This space already has two people. To return to your existing meals, ask your partner for a private reconnect link from Settings → Come back to us. Open that link on this phone to sign in.
+          For a new partner, use the private invitation link sent from the existing member.
+          If this is already your space, use your personal recovery key below or ask your partner for a one-use reconnect link.
         </p>
         {!rejoin ? (
           <Btn variant="outline" className="mt-7 w-full" onClick={() => setRejoin(true)}>
-            Use my saved recovery key instead
+            Use my recovery key
+          </Btn>
+        ) : rejoinForm}
+      </>,
+    );
+
+  if (preview.status === "full")
+    return shell(
+      <>
+        <h1 className="font-display text-3xl leading-tight">This space already has two people.</h1>
+        <p className="mt-3 text-muted-foreground">
+          If one of them is you, use your saved recovery key or ask your partner for a private reconnect link from Settings → Come back to us.
+        </p>
+        {!rejoin ? (
+          <Btn variant="outline" className="mt-7 w-full" onClick={() => setRejoin(true)}>
+            Use my recovery key
           </Btn>
         ) : (
           <>

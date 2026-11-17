@@ -11,7 +11,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:scanner": "vitest run src/lib/scan-v2.test.ts src/lib/usda-food.server.test.ts src/lib/packaged-scan.test.ts src/lib/scan-benchmark.test.ts",
+    "benchmark:scanner": "bun scripts/scan-benchmark.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -96,7 +98,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "8.1.5",
+    "vite": "8.1.6",
     "vitest": "^4.1.10"
   }
 }

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { mergeLinkedSession } from "@/lib/space-entry-policy";
+import { buildInviteUrl } from "@/lib/rejoin-links";
 
 const KEY = "us.session.v1";
 
@@ -39,8 +40,8 @@ export async function ensureIdentity() {
   return anon.user.id;
 }
 
-export function inviteUrl(code: string) {
-  return `${window.location.origin}/r/${code}`;
+export function inviteUrl(code: string, inviteToken: string) {
+  return buildInviteUrl(window.location.origin, code, inviteToken);
 }
 
 const MESSAGES: Record<string, string> = {
@@ -54,6 +55,8 @@ const MESSAGES: Record<string, string> = {
   NO_PARTNER: "Your partner has not joined this space yet.",
   RECOVERY_STORAGE_UNAVAILABLE: "Recovery needs a database update. Please contact the app owner.",
   NOT_MEMBER: "Your session has expired. Please rejoin with your invite link.",
+  TOO_MANY_ATTEMPTS: "Too many sign-in attempts from this browser. Try again in a few minutes.",
+  SECURITY_BUDGET_UNAVAILABLE: "The sign-in safety check is unavailable. Please try again later.",
 };
 
 export function friendlyError(e: unknown) {

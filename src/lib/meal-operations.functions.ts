@@ -585,14 +585,48 @@ export const suggestMealsForMacros = createServerFn({ method: "POST" })
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
-    
-    const commonMeals: MealSuggestion[] = [
-      { name: "Grilled chicken breast", serving: "150g", calories: 275, protein: 52, carbs: 0, fat: 6, confidence: "high" },
-      { name: "Salmon fillet", serving: "150g", calories: 280, protein: 38, carbs: 0, fat: 14, confidence: "high" },
-      { name: "Brown rice", serving: "1 cup cooked", calories: 215, protein: 5, carbs: 45, fat: 2, confidence: "high" },
-      { name: "Broccoli", serving: "2 cups steamed", calories: 70, protein: 7, carbs: 14, fat: 1, confidence: "high" },
-      { name: "Eggs", serving: "2 large", calories: 155, protein: 13, carbs: 1, fat: 11, confidence: "high" },
-    ];
-    
-    return commonMeals.filter(m => m.calories <= data.remainingCalories).slice(0, 5);
+
+    const [recentResult, favoriteResult] = await Promise.all([
+      db.from("meals")
+        .select("food_name,serving_description,calories,protein,carbs,fat")
+        .eq("member_id", memberId).eq("is_planned", false)
+        .order("meal_date", { ascending: false }).order("created_at", { ascending: false }).limit(120),
+      db.from("meal_favorites")
+        .select("food_name,serving_description,calories,protein,carbs,fat")
+        .eq("member_id", memberId).order("created_at", { ascending: false }).limit(60),
+    ]);
+    if (recentResult.error || favoriteResult.error) throw new Error("SERVER_ERROR");
+
+    const unique = new Map<string, MealSuggestion>();
+    for (const row of [...(favoriteResult.data ?? []), ...(recentResult.data ?? [])]) {
+      const key = row.food_name.trim().toLowerCase() + "|" + (row.serving_description ?? "").trim().toLowerCase();
+      if (unique.has(key)) continue;
+      unique.set(key, {
+        name: row.food_name,
+        serving: row.serving_description ?? "Saved portion",
+        calories: Number(row.calories),
+        protein: Number(row.protein),
+        carbs: Number(row.carbs),
+        fat: Number(row.fat),
+        confidence: "high",
+      });
+    }
+
+    const candidates = [...unique.values()].filter((meal) =>
+      meal.calories > 0 && meal.calories <= data.remainingCalories * 1.1,
+    );
+    const scale = (value: number, target: number) => target > 0 ? Math.abs(value - target) / target : value > 0 ? 1 : 0;
+    return candidates
+      .map((meal) => ({
+        meal,
+        score:
+          scale(meal.protein, data.targetProtein) * 0.45 +
+          scale(meal.carbs, data.targetCarbs) * 0.20 +
+          scale(meal.fat, data.targetFat) * 0.20 +
+          scale(meal.calories, data.remainingCalories) * 0.15,
+      }))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 5)
+      .map(({ meal }) => meal);
   });
+
