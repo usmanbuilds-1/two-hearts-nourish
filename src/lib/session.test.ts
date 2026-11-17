@@ -11,7 +11,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { auth },
 }));
 
-import { ensureIdentity } from "./session";
+import { ensureIdentity, sessionCanRecoverRoom } from "./session";
 
 describe("ensureIdentity", () => {
   beforeEach(() => {
@@ -81,5 +81,35 @@ describe("ensureIdentity", () => {
 
     await expect(ensureIdentity()).rejects.toThrow("OFFLINE_OR_UNAVAILABLE");
     expect(auth.signInAnonymously).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("sessionCanRecoverRoom", () => {
+  const key = "a".repeat(64);
+
+  it("accepts the saved recovery key only for the same canonical room", () => {
+    expect(sessionCanRecoverRoom(
+      { roomCode: "ABCD-2345", memberId: "member-1", key },
+      "abcd2345",
+    )).toBe(true);
+  });
+
+  it("rejects a saved key belonging to a different room", () => {
+    expect(sessionCanRecoverRoom(
+      { roomCode: "ABCD-2345", memberId: "member-1", key },
+      "WXYZ-6789",
+    )).toBe(false);
+  });
+
+  it("rejects missing or malformed recovery keys", () => {
+    expect(sessionCanRecoverRoom(
+      { roomCode: "ABCD-2345", memberId: "member-1" },
+      "ABCD-2345",
+    )).toBe(false);
+    expect(sessionCanRecoverRoom(
+      { roomCode: "ABCD-2345", memberId: "member-1", key: "short" },
+      "ABCD-2345",
+    )).toBe(false);
   });
 });
