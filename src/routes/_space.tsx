@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { markMyDeviceActive } from "@/lib/devices.functions";
+import { cleanupMyPendingMealPhotos } from "@/lib/scanned-meal.functions";
 import { friendlyDeviceLabel } from "@/lib/device-label";
 import { BookOpen, CalendarDays, Heart, Settings, Sun, WifiOff } from "lucide-react";
 import { SpaceProvider, useSpace } from "@/lib/space";
@@ -94,6 +95,15 @@ function InnerLayout() {
   // This makes device history reflect real app access, not just Settings visits.
   useEffect(()=>{
     let lastSent=0;
+    try {
+      const cleanupKey = "us.photo-cleanup.last." + me.id;
+      const previousCleanup = Number(localStorage.getItem(cleanupKey) ?? 0);
+      if (Date.now() - previousCleanup > 24 * 60 * 60_000) {
+        void cleanupMyPendingMealPhotos()
+          .then(() => localStorage.setItem(cleanupKey, String(Date.now())))
+          .catch(() => {});
+      }
+    } catch { /* cleanup is best-effort; private browsing may block storage */ }
     const ping=()=>{
       if(Date.now()-lastSent<20*60_000)return;
       const key="us.device.last-active."+me.id;
