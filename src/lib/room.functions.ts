@@ -53,6 +53,22 @@ async function addDevice(db: Db, memberId: string, uid: string, deviceLabel?: st
   if (error) throw new Error("SERVER_ERROR");
 }
 
+async function claimSecurityAttempt(
+  db: Db,
+  actorAuthUserId: string,
+  action: "room_preview" | "partner_join" | "rejoin_link" | "recovery_key",
+  maxAttempts: number,
+): Promise<boolean> {
+  const { data, error } = await db.rpc("claim_security_attempt", {
+    p_actor_auth_user_id: actorAuthUserId,
+    p_action: action,
+    p_window_seconds: 600,
+    p_max_attempts: maxAttempts,
+  });
+  if (error) throw new Error("SECURITY_BUDGET_UNAVAILABLE");
+  return data === true;
+}
+
 function throwRpcError(error: { message?: string } | null, fallback = "SERVER_ERROR"): never {
   const message = error?.message ?? "";
   for (const code of ["ALREADY_IN_SPACE","ROOM_FULL","ROOM_NOT_FOUND","INVALID_INVITE","INVALID_ROOM_CREATE"]) {
@@ -107,6 +123,9 @@ export const linkDevice = createServerFn({ method: "POST" })
     const code = normalizeCode(data.code);
     if (!code) throw new Error("INVALID_CODE");
     const db = await admin();
+    if (!(await claimSecurityAttempt(db, context.userId, "rejoin_link", 10))) {
+      throw new Error("TOO_MANY_ATTEMPTS");
+    }
     const { data: room } = await db.from("rooms").select("id").eq("room_code", code).maybeSingle();
     if (!room) throw new Error("ROOM_NOT_FOUND");
     const { data: members } = await db.from("members").select("id, link_code_hash, link_code_expires_at").eq("room_id", room.id);
@@ -142,15 +161,19 @@ export const linkDevice = createServerFn({ method: "POST" })
   });
 
 export const getRoomPreview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((i: { code: string; inviteToken?: string; rejoinToken?: string }) => ({
     code: codeSchema.parse(i.code),
     inviteToken: capabilitySchema.optional().parse(i.inviteToken),
     rejoinToken: capabilitySchema.optional().parse(i.rejoinToken),
   }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const code = normalizeCode(data.code);
     if (!code) return { status: "invalid" as const };
     const db = await admin();
+    if (!(await claimSecurityAttempt(db, context.userId, "room_preview", 30))) {
+      return { status: "rate_limited" as const };
+    }
     const { data: room, error: roomError } = await db.from("rooms")
       .select("id,invite_token_hash,invite_expires_at").eq("room_code", code).maybeSingle();
     if (roomError) throw new Error("SERVER_ERROR");
@@ -275,6 +298,9 @@ export const joinRoom = createServerFn({ method: "POST" })
     const code = normalizeCode(data.code);
     if (!code) throw new Error("INVALID_CODE");
     const db = await admin();
+    if (!(await claimSecurityAttempt(db, context.userId, "partner_join", 10))) {
+      throw new Error("TOO_MANY_ATTEMPTS");
+    }
     if (await deviceMemberId(db, context.userId)) throw new Error("ALREADY_IN_SPACE");
 
     const recoveryToken = randomToken();
@@ -301,6 +327,9 @@ export const rejoinRoom = createServerFn({ method: "POST" })
     const code = normalizeCode(data.code);
     if (!code) throw new Error("INVALID_CODE");
     const db = await admin();
+    if (!(await claimSecurityAttempt(db, context.userId, "recovery_key", 10))) {
+      throw new Error("TOO_MANY_ATTEMPTS");
+    }
     const { data: room } = await db.from("rooms").select("id").eq("room_code", code).maybeSingle();
     if (!room) throw new Error("ROOM_NOT_FOUND");
     const tokenHash = await sha256(data.key.toLowerCase());
