@@ -505,6 +505,8 @@ export type Database = {
           created_at: string
           id: string
           room_code: string
+          invite_token_hash: string | null
+          invite_expires_at: string | null
           shared_goal: string | null
           together_since: string | null
         }
@@ -513,6 +515,8 @@ export type Database = {
           created_at?: string
           id?: string
           room_code: string
+          invite_token_hash?: string | null
+          invite_expires_at?: string | null
           shared_goal?: string | null
           together_since?: string | null
         }
@@ -521,6 +525,8 @@ export type Database = {
           created_at?: string
           id?: string
           room_code?: string
+          invite_token_hash?: string | null
+          invite_expires_at?: string | null
           shared_goal?: string | null
           together_since?: string | null
         }
@@ -567,6 +573,14 @@ export type Database = {
       my_room_id: { Args: never; Returns: string }
       claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
       claim_ai_request_v2: { Args: { p_member_id:string; p_mode:string; p_member_daily_cap:number; p_global_daily_cap:number }; Returns:boolean }
+      create_room_with_owner: {
+        Args: { p_room_code:string; p_auth_user_id:string; p_display_name:string; p_device_label:string; p_participant_hash:string; p_invite_hash:string; p_invite_expires_at:string };
+        Returns:Json
+      }
+      join_room_with_invite: {
+        Args: { p_room_code:string; p_auth_user_id:string; p_display_name:string; p_device_label:string; p_participant_hash:string; p_invite_hash:string };
+        Returns:string
+      }
       save_scanned_meal_v2: {
         Args: {
           p_member_id:string; p_room_id:string; p_meal_date:string; p_meal_type:string;
