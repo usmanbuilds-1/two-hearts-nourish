@@ -36,6 +36,8 @@ BEGIN
     THEN RAISE EXCEPTION 'Global AI usage exposed'; END IF;
   IF has_table_privilege('authenticated','public.storage_cleanup_queue','SELECT')
     THEN RAISE EXCEPTION 'Storage cleanup queue exposed'; END IF;
+  IF has_table_privilege('authenticated','public.member_scan_cache','SELECT')
+    THEN RAISE EXCEPTION 'Private scan cache exposed'; END IF;
   IF has_function_privilege(
        'authenticated',
        'public.save_scanned_meal_v2(uuid,uuid,date,text,text,text,integer,numeric,numeric,numeric,text,text,jsonb,uuid)',
