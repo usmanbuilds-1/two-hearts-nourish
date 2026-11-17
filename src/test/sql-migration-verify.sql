@@ -42,6 +42,17 @@ BEGIN
        'EXECUTE'
      )
     THEN RAISE EXCEPTION 'Atomic scan save exposed to browser'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.create_room_with_owner(text,uuid,text,text,text,text,timestamptz)',
+       'EXECUTE'
+     )
+    OR has_function_privilege(
+       'authenticated',
+       'public.join_room_with_invite(text,uuid,text,text,text,text)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Room capability RPC exposed to browser'; END IF;
   IF has_table_privilege('authenticated','public.scan_events','SELECT')
     OR has_table_privilege('authenticated','public.scan_items','SELECT')
     OR has_table_privilege('authenticated','public.scan_corrections','SELECT')
