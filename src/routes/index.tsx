@@ -28,7 +28,7 @@ function Onboarding() {
   const [checkError,setCheckError]=useState(false);
   const [name,setName]=useState("");
   const [busy,setBusy]=useState(false);
-  const [created,setCreated]=useState<string|null>(null);
+  const [created,setCreated]=useState<{roomCode:string;inviteToken:string}|null>(null);
   const [copied,setCopied]=useState(false);
   const [link,setLink]=useState("");
 
@@ -58,7 +58,7 @@ function Onboarding() {
         name:name.trim(),deviceLabel:friendlyDeviceLabel(navigator.userAgent)
       }});
       writeSession(result);
-      setCreated(result.roomCode);
+      setCreated({roomCode:result.roomCode,inviteToken:result.inviteToken});
     }catch(error){toast.error(friendlyError(error));}
     finally{setBusy(false);}
   }
@@ -66,7 +66,7 @@ function Onboarding() {
   async function copy(){
     if(!created)return;
     try{
-      await navigator.clipboard.writeText(inviteUrl(created));
+      await navigator.clipboard.writeText(inviteUrl(created.roomCode,created.inviteToken));
       setCopied(true);
       window.setTimeout(()=>setCopied(false),2000);
     }catch{toast.error("Couldn't copy the invitation.");}
@@ -75,7 +75,7 @@ function Onboarding() {
   async function share(){
     if(!created)return;
     if(navigator.share){
-      await navigator.share({title:"Our space",text:"Join our private space",url:inviteUrl(created)}).catch(()=>{});
+      await navigator.share({title:"Our space",text:"Join our private space",url:inviteUrl(created.roomCode,created.inviteToken)}).catch(()=>{});
     }else void copy();
   }
 
@@ -112,14 +112,14 @@ function Onboarding() {
             <p className="mt-3 text-muted-foreground">Invite your partner with one private link.</p>
             <div className="mt-8 border-y border-border py-5">
               <p className="text-sm text-muted-foreground">Invitation link</p>
-              <p className="mt-2 break-all text-sm">{inviteUrl(created)}</p>
+              <p className="mt-2 break-all text-sm">{inviteUrl(created.roomCode,created.inviteToken)}</p>
               <div className="mt-4 flex gap-2">
                 <Btn className="flex-1" onClick={()=>void copy()}>
                   {copied?<Check className="size-4"/>:<Copy className="size-4"/>}{copied?"Copied":"Copy"}
                 </Btn>
                 <Btn variant="outline" onClick={()=>void share()}>Share</Btn>
               </div>
-              <p className="mt-4 text-xs text-muted-foreground">Room code: <span className="font-mono">{created}</span></p>
+              <p className="mt-4 text-xs text-muted-foreground">Room code: <span className="font-mono">{created.roomCode}</span></p>
             </div>
             <Btn className="mt-7 w-full" onClick={()=>void navigate({to:"/today"})}>Open our space</Btn>
           </div>
