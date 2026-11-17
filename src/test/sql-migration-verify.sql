@@ -58,6 +58,12 @@ BEGIN
        'EXECUTE'
      )
     THEN RAISE EXCEPTION 'Room capability RPC exposed to browser'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.record_member_food_prior(uuid,text,text,numeric,numeric,numeric,numeric,numeric,jsonb)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Private food-memory RPC exposed to browser'; END IF;
   IF has_table_privilege('authenticated','public.scan_events','SELECT')
     OR has_table_privilege('authenticated','public.scan_items','SELECT')
     OR has_table_privilege('authenticated','public.scan_corrections','SELECT')
