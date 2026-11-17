@@ -94,3 +94,8 @@ If a server secret is exposed:
 5. Do not rely on deleting the visible file alone.
 
 If a member recovery capability may be exposed, rotate that member's recovery keys from Device Center.
+
+
+## Temporary dependency advisory exception
+
+CI currently ignores only `GHSA-fc5q-39xc-vjpf` (picomatch repeated-extglob ReDoS) because, as of 2026-11-18, npm has no patched picomatch release. The application has no direct picomatch/micromatch/minimatch/glob imports and does not pass user-controlled glob patterns into the transitive framework/build-tool copies. All other high/critical advisories remain blocking. Remove this exception as soon as a patched upstream release becomes available.
