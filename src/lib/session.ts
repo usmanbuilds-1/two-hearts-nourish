@@ -7,6 +7,18 @@ const KEY = "us.session.v1";
 
 export type LocalSession = { roomCode: string; memberId: string; key?: string };
 
+function canonicalRoomCode(raw: string): string | null {
+  const value = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return value.length === 8 ? value.slice(0, 4) + "-" + value.slice(4) : null;
+}
+
+export function sessionCanRecoverRoom(session: LocalSession | null, roomCode: string): session is LocalSession & { key: string } {
+  if (!session || !/^[a-f0-9]{64}$/i.test(session.key ?? "")) return false;
+  const savedCode = canonicalRoomCode(session.roomCode);
+  const requestedCode = canonicalRoomCode(roomCode);
+  return Boolean(savedCode && requestedCode && savedCode === requestedCode);
+}
+
 export function readSession(): LocalSession | null {
   if (typeof window === "undefined") return null;
   try {
