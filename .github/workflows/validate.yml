@@ -21,7 +21,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Dependency vulnerability audit
-        run: bun audit --audit-level=high
+        # GHSA-fc5q-39xc-vjpf currently has no patched picomatch release.
+        # The repo has no direct picomatch/glob use and affected copies are pulled
+        # through framework/build tooling. Keep every other high/critical advisory blocking.
+        run: bun audit --audit-level=high --ignore GHSA-fc5q-39xc-vjpf
       - name: Unit tests
         run: bun run test
       - name: Strict TypeScript typecheck

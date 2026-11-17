@@ -14,6 +14,10 @@ function deps(override: Partial<SpaceEntryDependencies<Space>> = {}): SpaceEntry
     getUserId: async () => "user-1",
     loadSpace: async () => ({ id: "room-1" }),
     restoreMember: async () => ({ id: "restored" }),
+    isDefinitiveAuthFailure: (error) =>
+      typeof error === "object" && error !== null &&
+      "code" in error && (error as { code?: unknown }).code === "session_not_found",
+    replaceInvalidAuthSession: async () => {},
     ...override,
   };
 }
@@ -32,6 +36,47 @@ describe("persistent private space policy", () => {
     expect(state.kind).toBe("retry");
     expect(restored).toBe(false);
   });
+  it("replaces a definitively dead auth session and rebinds with the saved key", async () => {
+    let replaced = 0;
+    const state = await resolveSpaceEntry(deps({
+      getUserId: async () => { throw { code: "session_not_found" }; },
+      replaceInvalidAuthSession: async () => { replaced += 1; },
+    }));
+    expect(replaced).toBe(1);
+    expect(state).toEqual({ kind: "ready", space: { id: "restored" } });
+  });
+
+  it("recovers when getSession itself reports a dead refresh token", async () => {
+    let replaced = 0;
+    const state = await resolveSpaceEntry(deps({
+      hasAuthSession: async () => { throw { code: "session_not_found" }; },
+      replaceInvalidAuthSession: async () => { replaced += 1; },
+    }));
+    expect(replaced).toBe(1);
+    expect(state).toEqual({ kind: "ready", space: { id: "restored" } });
+  });
+
+  it("does not replace auth for a transient timeout", async () => {
+    let replaced = 0;
+    const state = await resolveSpaceEntry(deps({
+      hasAuthSession: async () => { throw { code: "request_timeout" }; },
+      replaceInvalidAuthSession: async () => { replaced += 1; },
+    }));
+    expect(replaced).toBe(0);
+    expect(state).toEqual({ kind: "retry", roomCode: saved.roomCode });
+  });
+
+  it("requires manual recovery if auth is dead but no saved recovery key exists", async () => {
+    let replaced = 0;
+    const state = await resolveSpaceEntry(deps({
+      readSavedSession: () => ({ roomCode: saved.roomCode, memberId: saved.memberId }),
+      getUserId: async () => { throw { code: "session_not_found" }; },
+      replaceInvalidAuthSession: async () => { replaced += 1; },
+    }));
+    expect(replaced).toBe(0);
+    expect(state).toEqual({ kind: "recover", roomCode: saved.roomCode });
+  });
+
   it("rebinds a missing guest session with a saved personal key", async () => {
     expect(await resolveSpaceEntry(deps({ hasAuthSession: async () => false })))
       .toEqual({ kind: "ready", space: { id: "restored" } });
