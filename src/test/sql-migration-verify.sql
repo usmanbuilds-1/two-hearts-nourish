@@ -9,6 +9,8 @@ DECLARE
   actor uuid := 'ffffffff-ffff-4fff-8fff-ffffffffffff';
   counter jsonb;
   succeeded boolean;
+  scan_a uuid := '99999999-9999-4999-8999-999999999999';
+  scanned_meal uuid;
 BEGIN
   IF (SELECT public FROM storage.buckets WHERE id='meal-photos') IS DISTINCT FROM false
     THEN RAISE EXCEPTION 'Bucket must be private'; END IF;
@@ -32,6 +34,14 @@ BEGIN
     THEN RAISE EXCEPTION 'AI quota v2 claim exposed'; END IF;
   IF has_table_privilege('authenticated','public.ai_usage_global','SELECT')
     THEN RAISE EXCEPTION 'Global AI usage exposed'; END IF;
+  IF has_table_privilege('authenticated','public.storage_cleanup_queue','SELECT')
+    THEN RAISE EXCEPTION 'Storage cleanup queue exposed'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.save_scanned_meal_v2(uuid,uuid,date,text,text,text,integer,numeric,numeric,numeric,text,text,jsonb,uuid)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Atomic scan save exposed to browser'; END IF;
   IF has_table_privilege('authenticated','public.scan_events','SELECT')
     OR has_table_privilege('authenticated','public.scan_items','SELECT')
     OR has_table_privilege('authenticated','public.scan_corrections','SELECT')
@@ -75,10 +85,27 @@ BEGIN
   SELECT public.claim_ai_request_v2(member_b,'strong_scan',2,1) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 global cap exceeded'; END IF;
 
-  INSERT INTO public.scan_events(member_id,scanner_version,prompt_version,model,route,status)
-    VALUES(member_a,'test','test','test-model','vision','succeeded');
+  INSERT INTO public.scan_events(id,member_id,scanner_version,prompt_version,model,route,status)
+    VALUES(scan_a,member_a,'test','test','test-model','vision','succeeded');
   IF (SELECT count(*) FROM public.scan_events WHERE member_id=member_a) <> 1
     THEN RAISE EXCEPTION 'Scanner telemetry insert failed'; END IF;
+
+  SELECT public.save_scanned_meal_v2(
+    member_a, room, '2026-11-14', 'dinner', 'Test biryani', '350 g', 620, 28, 70, 24,
+    'medium', room::text || '/test-photo.jpg',
+    '[{"label":"Biryani","grams":350,"calories":620,"protein":28,"carbs":70,"fat":24,"source_name":"USDA","source_ref":"fdc:1","confidence":0.72}]'::jsonb,
+    scan_a
+  ) INTO scanned_meal;
+  IF scanned_meal IS NULL THEN RAISE EXCEPTION 'Atomic scanned meal save returned null'; END IF;
+  IF (SELECT count(*) FROM public.meal_components WHERE meal_id=scanned_meal) <> 1
+    THEN RAISE EXCEPTION 'Atomic scanned meal components missing'; END IF;
+  IF (SELECT meal_id FROM public.scan_events WHERE id=scan_a) <> scanned_meal
+    THEN RAISE EXCEPTION 'Scan event was not linked to saved meal'; END IF;
+  DELETE FROM public.meals WHERE id=scanned_meal;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.storage_cleanup_queue
+    WHERE member_id=member_a AND object_path=room::text || '/test-photo.jpg'
+  ) THEN RAISE EXCEPTION 'Deleted meal photo was not queued for cleanup'; END IF;
 
   -- Device-specific login recovery must move an existing slot, not insert a row.
   UPDATE public.members SET auth_user_id=actor WHERE id=member_a;
