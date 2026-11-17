@@ -44,6 +44,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const [amountGrams, setAmountGrams] = useState("");
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const [rememberPortion, setRememberPortion] = useState(false);
+  const [keepPhoto, setKeepPhoto] = useState(false);
   const save = useSaveMeal();
   const { room, me } = useSpace();
   const queryClient = useQueryClient();
@@ -61,6 +62,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setAmountGrams("");
       setFoodSearchOpen(false);
       setRememberPortion(false);
+      setKeepPhoto(false);
       setEditing(false);
     }
   }, [open]);
@@ -175,9 +177,9 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setBusy(true);
     editedRef.current = true;
     try {
-      // Upload the photo first (non-blocking — meal still saves if upload fails)
+      // Privacy default: the analysis image is discarded unless the user opts in.
       let photoUrl: string | null = null;
-      if (image) {
+      if (keepPhoto && image) {
         photoUrl = await uploadMealPhoto(room.id, image);
       }
       await save({ ...draft, photo_url: photoUrl });
@@ -227,7 +229,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini. On its free tier, Google may use submitted content to improve its services. This app stores a copy only when you save."}
+            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis. A copy is kept only if you explicitly choose to save the photo with the meal."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
@@ -346,6 +348,14 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                    <div className="mt-4 text-xs text-muted-foreground">{labelSource ? "Source: Open Food Facts community label (check packet)" : <>AI estimate · Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></>}</div>
                 </div>
               )}
+              <label className="mt-4 flex min-h-12 items-start gap-3 rounded-xl border border-border p-3 text-sm text-foreground">
+                <input type="checkbox" checked={keepPhoto} onChange={event => setKeepPhoto(event.target.checked)}
+                  className="mt-0.5 size-4 accent-primary" />
+                <span>
+                  <span className="block font-medium">Keep this photo with the meal</span>
+                  <span className="block text-xs text-muted-foreground">Off by default. If you leave this off, the analysis image is discarded when you close the scanner.</span>
+                </span>
+              </label>
               <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-foreground">
                 <input type="checkbox" checked={rememberPortion} onChange={event => setRememberPortion(event.target.checked)}
                   className="size-4 accent-primary" />
