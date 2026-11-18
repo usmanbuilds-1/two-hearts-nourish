@@ -35,6 +35,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const [image, setImage] = useState<string | null>(null);
   const [contextText, setContextText] = useState("");
   const [appliedContext, setAppliedContext] = useState("");
+  const [rechecking, setRechecking] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
   const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [editing, setEditing] = useState(false);
   const [errMsg, setErrMsg] = useState("");
@@ -63,6 +65,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setImage(null);
       setContextText("");
       setAppliedContext("");
+      setRechecking(false);
+      setCorrectionError("");
       setDetectedPackage(null);
       setCandidates([]);
       setCheckingLabel(false);
@@ -87,6 +91,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setCheckingLabel(false);
     setContextText("");
     setAppliedContext("");
+    setCorrectionError("");
     try {
       const compressed = await compressImage(file);
       if (id !== requestRef.current) return;
@@ -125,26 +130,36 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   }
 
   async function analyze() {
-    if (!image) return;
+    if (!image || rechecking) return;
+    const isCorrection = stage === "confirm";
     const id = ++requestRef.current;
     const foodContext = contextText.trim();
-    editedRef.current = false;
-    setStage("analyzing");
-    setLabelSource(null);
-    setLabelAdjusted(false);
-    setCandidates([]);
-    setDetectedPackage(null);
-    setCheckingLabel(false);
+    setCorrectionError("");
+    if (isCorrection) {
+      setRechecking(true);
+    } else {
+      setStage("analyzing");
+    }
     try {
       // One normal Gemini photo request. Product search below uses NO Gemini tokens.
       const r = await analyzeFood({ data: { image, ...(foodContext ? { context: foodContext } : {}) } });
       if (requestRef.current !== id) return;
       if (!r.ok) {
-        setErrMsg(ERRORS[r.error] ?? "Couldn't figure that one out. Try another photo?");
-        setStage("error");
+        const message = ERRORS[r.error] ?? "Couldn't analyze that correction. Please try again.";
+        if (isCorrection) setCorrectionError(message);
+        else {
+          setErrMsg(message);
+          setStage("error");
+        }
         return;
       }
       const estimate = r.estimate;
+      editedRef.current = false;
+      setLabelSource(null);
+      setLabelAdjusted(false);
+      setCandidates([]);
+      setDetectedPackage(null);
+      setCheckingLabel(false);
       setAppliedContext(foodContext);
       setDraft({
         ...emptyDraft(),
@@ -179,13 +194,21 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       }
     } catch {
       if (requestRef.current !== id) return;
-      setErrMsg(navigator.onLine ? "Couldn't figure that one out. Try another photo?" : "You're offline. We'll reconnect when you're back.");
-      setStage("error");
+      const message = navigator.onLine
+        ? "Couldn't recalculate. Retry or discard the correction to keep the previous estimate."
+        : "You're offline. Your previous estimate is still available.";
+      if (isCorrection) setCorrectionError(message);
+      else {
+        setErrMsg(message);
+        setStage("error");
+      }
+    } finally {
+      if (requestRef.current === id) setRechecking(false);
     }
   }
 
   async function confirm() {
-    if (contextText.trim() !== appliedContext) {
+    if (rechecking || contextText.trim() !== appliedContext) {
       toast.error("Update the estimate with your new context before saving.");
       return;
     }
@@ -239,6 +262,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setAmountGrams("");
     setContextText("");
     setAppliedContext("");
+    setCorrectionError("");
+    setRechecking(false);
     setImage(null);
     setStage("pick");
     cameraRef.current?.click();
@@ -385,14 +410,23 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   <p className="mt-1 text-xs text-muted-foreground">
                     Correct the food, ingredients, cooking method, or portion. We’ll analyze the same photo again using your correction.
                   </p>
-                  {contextNeedsRescan && (
+                  {(contextNeedsRescan || correctionError) && (
                     <div className="mt-3 space-y-2">
-                      <p className="text-sm text-muted-foreground">
+                      {contextNeedsRescan && <p className="text-sm text-muted-foreground">
                         The estimate above still uses the previous information.
-                      </p>
-                      <Btn size="lg" variant="outline" className="w-full" onClick={() => void analyze()}>
-                        Recalculate with correction
-                      </Btn>
+                      </p>}
+                      {correctionError && <p role="alert" className="text-sm text-destructive">{correctionError}</p>}
+                      {contextNeedsRescan && (
+                        <Btn size="lg" variant="outline" className="w-full" disabled={rechecking} onClick={() => void analyze()}>
+                          {rechecking ? "Recalculating…" : "Recalculate with correction"}
+                        </Btn>
+                      )}
+                      {contextNeedsRescan && (
+                        <Btn size="lg" variant="ghost" className="w-full" disabled={rechecking}
+                          onClick={() => { setContextText(appliedContext); setCorrectionError(""); }}>
+                          Discard correction and keep previous estimate
+                        </Btn>
+                      )}
                     </div>
                   )}
               </div>
@@ -411,7 +445,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                 Save this portion to my favourites for next time
               </label>
               <div className="mt-5 flex flex-col gap-2">
-                <Btn size="lg" onClick={confirm} disabled={busy || contextNeedsRescan}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
+                <Btn size="lg" onClick={confirm} disabled={busy || rechecking || contextNeedsRescan}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
                 <div className="flex gap-2">
                   {!editing && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
                   <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy}>Retake photo</Btn>

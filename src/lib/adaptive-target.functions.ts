@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { addDays, daysBetween } from "./nutrition";
 import { bmr } from "./health";
+import { isCurrentLocalCalendarDate } from "./local-calendar-boundary";
 import {
   fitHallMaintenance,
   sufficientAdaptiveEvidence,
@@ -463,6 +464,9 @@ export const markNutritionDayComplete = createServerFn({ method: "POST" })
     complete: z.boolean().parse(input.complete),
   }))
   .handler(async ({ data, context }) => {
+    if (!isCurrentLocalCalendarDate(data.clientDate)) {
+      return { ok: false as const, error: "INVALID_CLIENT_DATE" };
+    }
     if (data.logDate > data.clientDate) {
       return { ok: false as const, error: "FUTURE_DATE" };
     }

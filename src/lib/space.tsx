@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Meal, Member, Room } from "./nutrition";
 import { addDays, localDate } from "./nutrition";
+import { collectPages } from "./paginated-query";
 
 type SpaceCtx = {
   room: Room;
@@ -47,25 +48,30 @@ export async function loadSpace(userId: string) {
     .maybeSingle();
   if (error) throw error;
   if (!meRow) return null;
-  const [roomRes, membersRes, mealsRes] = await Promise.all([
+  const [roomRes, membersRes, recentMeals] = await Promise.all([
     supabase.from("rooms").select("*").eq("id", meRow.room_id).single(),
     supabase.from("members").select(MEMBER_COLS).eq("room_id", meRow.room_id).order("seat"),
-    supabase
-      .from("meals")
-      .select("*")
-      .eq("room_id", meRow.room_id)
-      .gte("meal_date", addDays(localDate(), -89))
-      .order("created_at", { ascending: false })
-      .limit(2000),
+    collectPages<Meal>(async (from, to) => {
+      const { data, error: mealError } = await supabase
+        .from("meals")
+        .select("*")
+        .eq("room_id", meRow.room_id)
+        .gte("meal_date", addDays(localDate(), -89))
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to);
+      if (mealError) throw mealError;
+      return (data ?? []) as Meal[];
+    }),
   ]);
-  if (roomRes.error || membersRes.error || mealsRes.error) {
-    throw roomRes.error ?? membersRes.error ?? mealsRes.error;
+  if (roomRes.error || membersRes.error) {
+    throw roomRes.error ?? membersRes.error;
   }
   return {
     room: roomRes.data as Room,
     me: meRow as Member,
     members: membersRes.data as Member[],
-    meals: [...(mealsRes.data as Meal[])].reverse(),
+    meals: recentMeals.reverse(),
   };
 }
 
