@@ -27,6 +27,7 @@ import { signedMealPhotoUrl } from "@/lib/private-photo";
 import { cn } from "@/lib/utils";
 import { copyMealToDay } from "@/lib/meal-operations.functions";
 import { quoteForDay } from "@/lib/quotes";
+import { AdaptiveTargetCard } from "@/components/us/AdaptiveTargetCard";
 
 export const Route = createFileRoute("/_space/today")({
   head: () => ({ meta: [{ title: "Today — Us" }, { name: "description", content: "Your shared day of meals." }, { property: "og:title", content: "Today — Us" }, { property: "og:description", content: "Your shared day of meals." }] }),
@@ -176,6 +177,8 @@ function Today() {
         <PersonCard label="You" member={me} meals={mine} />
         {partner&&<PersonCard label={partner.display_name} member={partner} meals={theirs} partner />}
       </div>
+
+      <AdaptiveTargetCard />
 
       {!partner&&(
         <div className="mt-5 rounded-2xl border border-border bg-card p-4">

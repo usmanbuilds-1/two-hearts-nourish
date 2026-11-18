@@ -355,6 +355,10 @@ export type Database = {
       members: {
         Row: {
           activity_level: string | null
+          adaptive_targets_enabled: boolean
+          adaptive_target_configured_at: string | null
+          physical_activity_level: number | null
+          target_rate_pct_per_week: number | null
           age: number | null
           auth_user_id: string | null
           body_goal: string | null
@@ -379,6 +383,10 @@ export type Database = {
         }
         Insert: {
           activity_level?: string | null
+          adaptive_targets_enabled?: boolean
+          adaptive_target_configured_at?: string | null
+          physical_activity_level?: number | null
+          target_rate_pct_per_week?: number | null
           age?: number | null
           auth_user_id?: string | null
           body_goal?: string | null
@@ -403,6 +411,10 @@ export type Database = {
         }
         Update: {
           activity_level?: string | null
+          adaptive_targets_enabled?: boolean
+          adaptive_target_configured_at?: string | null
+          physical_activity_level?: number | null
+          target_rate_pct_per_week?: number | null
           age?: number | null
           auth_user_id?: string | null
           body_goal?: string | null
@@ -431,6 +443,112 @@ export type Database = {
             columns: ["room_id"]
             isOneToOne: false
             referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nutrition_day_completeness: {
+        Row: {
+          member_id: string
+          log_date: string
+          completed_at: string
+        }
+        Insert: {
+          member_id: string
+          log_date: string
+          completed_at?: string
+        }
+        Update: {
+          member_id?: string
+          log_date?: string
+          completed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_day_completeness_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calorie_target_history: {
+        Row: {
+          id: string
+          member_id: string
+          old_target: number | null
+          new_target: number
+          estimated_maintenance: number
+          maintenance_ci95_low: number
+          maintenance_ci95_high: number
+          target_ci95_low: number
+          target_ci95_high: number
+          target_rate_pct_per_week: number
+          desired_kg_per_week: number
+          model_version: string
+          model_rmse_kg: number
+          data_start: string
+          data_end: string
+          complete_days: number
+          weight_points: number
+          change_reason: string
+          source_references: Json
+          created_at: string
+          seen_at: string | null
+        }
+        Insert: {
+          id?: string
+          member_id: string
+          old_target?: number | null
+          new_target: number
+          estimated_maintenance: number
+          maintenance_ci95_low: number
+          maintenance_ci95_high: number
+          target_ci95_low: number
+          target_ci95_high: number
+          target_rate_pct_per_week: number
+          desired_kg_per_week: number
+          model_version: string
+          model_rmse_kg: number
+          data_start: string
+          data_end: string
+          complete_days: number
+          weight_points: number
+          change_reason: string
+          source_references: Json
+          created_at?: string
+          seen_at?: string | null
+        }
+        Update: {
+          id?: string
+          member_id?: string
+          old_target?: number | null
+          new_target?: number
+          estimated_maintenance?: number
+          maintenance_ci95_low?: number
+          maintenance_ci95_high?: number
+          target_ci95_low?: number
+          target_ci95_high?: number
+          target_rate_pct_per_week?: number
+          desired_kg_per_week?: number
+          model_version?: string
+          model_rmse_kg?: number
+          data_start?: string
+          data_end?: string
+          complete_days?: number
+          weight_points?: number
+          change_reason?: string
+          source_references?: Json
+          created_at?: string
+          seen_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calorie_target_history_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
             referencedColumns: ["id"]
           },
         ]
@@ -575,6 +693,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_adaptive_target_change: {
+        Args: {
+          p_member_id:string
+          p_expected_old_target:number|null
+          p_new_target:number
+          p_estimated_maintenance:number
+          p_maintenance_ci95_low:number
+          p_maintenance_ci95_high:number
+          p_target_ci95_low:number
+          p_target_ci95_high:number
+          p_target_rate_pct_per_week:number
+          p_desired_kg_per_week:number
+          p_model_rmse_kg:number
+          p_data_start:string
+          p_data_end:string
+          p_complete_days:number
+          p_weight_points:number
+          p_source_references:Json
+        }
+        Returns:string
+      }
       my_member_id: { Args: never; Returns: string }
       my_room_id: { Args: never; Returns: string }
       claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }

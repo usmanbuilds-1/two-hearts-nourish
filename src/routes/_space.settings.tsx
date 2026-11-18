@@ -11,6 +11,7 @@ import { DeviceCenter } from "@/components/us/DeviceCenter";
 import { exportMyMealsCsv } from "@/lib/export-meals.functions";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
+import { evidenceRateBounds, isEvidenceSupportedRate } from "@/lib/adaptive-target";
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
 import { localDate } from "@/lib/nutrition";
@@ -51,6 +52,11 @@ function SettingsPage() {
     activity: (me.activity_level ?? "") as Activity | "",
     goal: (me.body_goal ?? "") as BodyGoal | "",
   });
+  const [adaptiveEnabled, setAdaptiveEnabled] = useState(Boolean(me.adaptive_targets_enabled));
+  const [adaptivePal, setAdaptivePal] = useState(String(me.physical_activity_level ?? "1.6"));
+  const [adaptiveRate, setAdaptiveRate] = useState(String(
+    me.target_rate_pct_per_week ?? (me.body_goal === "maintain" ? 0 : ""),
+  ));
 
   const liveBmi = useMemo(() => {
     const h = parseFloat(calc.heightCm), w = parseFloat(calc.weightKg);
@@ -70,6 +76,25 @@ function SettingsPage() {
   if (calc.activity) calcInput.activity = calc.activity;
   if (calc.goal) calcInput.goal = calc.goal;
   const calcError = validate(calcInput);
+  const adaptivePalNumber = Number(adaptivePal);
+  const adaptiveGoal = calc.goal as BodyGoal | "";
+  const adaptiveRateNumber = adaptiveGoal === "maintain" ? 0 : Number(adaptiveRate);
+  const adaptiveRateBounds = adaptiveGoal
+    ? evidenceRateBounds(adaptiveGoal)
+    : null;
+  const adaptiveConfigError = adaptiveEnabled
+    ? !adaptiveGoal
+      ? "Choose a body goal before enabling adaptive targets."
+      : !Number.isFinite(adaptivePalNumber) || adaptivePalNumber < 1.4 || adaptivePalNumber > 2.5
+        ? "Physical activity level must be between 1.4 and 2.5."
+        : !Number.isFinite(adaptiveRateNumber) || !isEvidenceSupportedRate(adaptiveGoal, adaptiveRateNumber)
+          ? adaptiveGoal === "gain"
+            ? "For gain, choose 0.25–0.50% body weight per week."
+            : adaptiveGoal === "lose"
+              ? "For loss, choose −1.00 to −0.50% body weight per week."
+              : "Maintenance uses 0% body weight change per week."
+          : null
+    : null;
 
   function applyTargets() {
     const input = {
@@ -118,13 +143,36 @@ function SettingsPage() {
   async function save() {
     if (!f.name.trim()) return void toast.error("Your name can't be empty.");
     setBusy(true);
+    if (adaptiveConfigError) {
+      setBusy(false);
+      return void toast.error(adaptiveConfigError);
+    }
+    const nextGoal = (calc.goal || null) as "lose" | "maintain" | "gain" | null;
+    const nextPal = adaptiveEnabled ? adaptivePalNumber : me.physical_activity_level;
+    const nextRate = adaptiveEnabled
+      ? (nextGoal === "maintain" ? 0 : adaptiveRateNumber)
+      : me.target_rate_pct_per_week;
+    const adaptiveConfigChanged =
+      adaptiveEnabled !== Boolean(me.adaptive_targets_enabled) ||
+      nextPal !== me.physical_activity_level ||
+      nextRate !== me.target_rate_pct_per_week ||
+      nextGoal !== me.body_goal;
+
     const healthFields = {
       height_cm: parseFloat(calc.heightCm) || null,
       weight_kg: parseFloat(calc.weightKg) || null,
       age: parseInt(calc.age) || null,
       sex: (calc.sex || null) as "male" | "female" | null,
       activity_level: calc.activity || null,
-      body_goal: (calc.goal || null) as "lose" | "maintain" | "gain" | null,
+      body_goal: nextGoal,
+      adaptive_targets_enabled: adaptiveEnabled,
+      physical_activity_level: adaptiveEnabled ? adaptivePalNumber : me.physical_activity_level,
+      target_rate_pct_per_week: adaptiveEnabled
+        ? (nextGoal === "maintain" ? 0 : adaptiveRateNumber)
+        : me.target_rate_pct_per_week,
+      adaptive_target_configured_at: adaptiveConfigChanged
+        ? new Date().toISOString()
+        : me.adaptive_target_configured_at,
     };
     const [a, b] = await Promise.all([
       supabase.from("members").update({
@@ -132,7 +180,7 @@ function SettingsPage() {
         daily_calorie_target: n(f.kcal), daily_protein_target: n(f.p),
         daily_carbs_target: n(f.c), daily_fat_target: n(f.fat),
         ...healthFields,
-      }).eq("id", me.id).select("id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, height_cm, weight_kg, age, sex, activity_level, body_goal, created_at").single(),
+      }).eq("id", me.id).select("id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, height_cm, weight_kg, age, sex, activity_level, adaptive_targets_enabled, adaptive_target_configured_at, physical_activity_level, target_rate_pct_per_week, body_goal, daily_food_budget, currency, locality, created_at").single(),
       supabase.from("rooms").update({ shared_goal: f.goal.trim().slice(0, 120) || null, couple_message: f.msg.trim().slice(0, 160) || null, together_since: f.since || null }).eq("id", room.id).select().single(),
     ]);
     setBusy(false);
@@ -259,6 +307,59 @@ function SettingsPage() {
             <Btn className="w-full" disabled={!!calcError} onClick={applyTargets}>
               Apply to daily targets ↑
             </Btn>
+          </div>
+        )}
+
+        <Eyebrow className="pt-2">Adaptive calorie target</Eyebrow>
+        <label className="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-card px-3 py-3">
+          <input
+            type="checkbox"
+            className="size-5 accent-primary"
+            checked={adaptiveEnabled}
+            onChange={(e) => setAdaptiveEnabled(e.target.checked)}
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">Adapt from my real data</span>
+            <span className="block text-xs text-muted-foreground">
+              Uses fully logged days, weight measurements and the Hall/NIDDK body-weight model. AI does not set the number.
+            </span>
+          </span>
+        </label>
+        {adaptiveEnabled && (
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <Field label="Physical activity level (PAL)" hint="NIDDK Body Weight Planner typical adult range: 1.4–2.5; its default is 1.6.">
+              <TextInput
+                inputMode="decimal"
+                value={adaptivePal}
+                onChange={(e) => setAdaptivePal(e.target.value)}
+                placeholder="1.6"
+              />
+            </Field>
+            {adaptiveGoal && adaptiveGoal !== "maintain" ? (
+              <Field
+                label="Goal pace (% body weight / week)"
+                hint={adaptiveGoal === "gain"
+                  ? "Published natural-bodybuilding review: 0.25–0.50%/week."
+                  : "Published contest-prep review: −1.00 to −0.50%/week."}
+              >
+                <TextInput
+                  inputMode="decimal"
+                  value={adaptiveRate}
+                  onChange={(e) => setAdaptiveRate(e.target.value)}
+                  placeholder={adaptiveGoal === "gain" ? "0.25" : "-0.5"}
+                />
+              </Field>
+            ) : adaptiveGoal === "maintain" ? (
+              <p className="text-sm text-muted-foreground">
+                Maintenance is defined as 0% intended body-weight change per week.
+              </p>
+            ) : null}
+            {adaptiveRateBounds && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                The app will not choose a pace for you. It only accepts the published range for the selected goal, then solves the calorie target from the Hall model.
+              </p>
+            )}
+            {adaptiveConfigError && <p className="text-sm text-destructive">{adaptiveConfigError}</p>}
           </div>
         )}
 
