@@ -9,6 +9,7 @@ import { buildInviteUrl } from "@/lib/rejoin-links";
 import { RecoveryLinks } from "@/components/us/RecoveryLinks";
 import { DeviceCenter } from "@/components/us/DeviceCenter";
 import { exportMyMealsCsv } from "@/lib/export-meals.functions";
+import { exportMyDataJson } from "@/lib/export-data.functions";
 import { Btn, Eyebrow, Field, Screen, TextInput } from "@/components/us/primitives";
 import { ACTIVITY, type Activity, type BodyGoal, type HealthInput, type Sex, bmi, bmiCategory, bmr, suggest, validate } from "@/lib/health";
 import { evidenceRateBounds, isEvidenceSupportedRate } from "@/lib/adaptive-target";
@@ -38,6 +39,7 @@ function SettingsPage() {
     since: room.together_since ?? "",
   });
   const [busy, setBusy] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
   const [dark, setDark] = useState(true);
   const [showKey, setShowKey] = useState(false);
   const [personalKey, setPersonalKey] = useState(() => readSession()?.key ?? "");
@@ -208,6 +210,36 @@ function SettingsPage() {
         "Export exceeds the current limit. Contact the app owner.":"Couldn't export your meals.");
     }
   }
+
+  async function exportAllData() {
+    if (exportingData) return;
+    setExportingData(true);
+    try {
+      const json = await exportMyDataJson();
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `my-health-data-${localDate()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success("Your private data export is ready");
+    } catch (error) {
+      const message = String(error);
+      toast.error(
+        message.includes("EXPORT_RATE_LIMITED")
+          ? "Too many exports in a short time. Try again in a minute."
+          : message.includes("EXPORT_TOO_LARGE")
+            ? "Your export is too large for one file."
+            : "Couldn't export your data."
+      );
+    } finally {
+      setExportingData(false);
+    }
+  }
+
 
   function toggleTheme() {
     const next = !dark;
@@ -422,6 +454,19 @@ function SettingsPage() {
           {showKey ? <div className="mt-2 break-all font-mono text-xs">{key}</div> : <button className="mt-2 text-primary" onClick={() => setShowKey(true)}>Show my key</button>}
         </div>
         <Btn variant="outline" className="w-full" onClick={()=>void exportMeals()}>Export my meals (CSV)</Btn>
+        <div className="rounded-xl border border-border p-4">
+          <Btn
+            variant="outline"
+            className="w-full"
+            disabled={exportingData}
+            onClick={()=>void exportAllData()}
+          >
+            {exportingData ? "Preparing export…" : "Export all my data (JSON)"}
+          </Btn>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Includes your meals, body-weight history, recipes, targets, saved foods and notes. It excludes recovery keys, auth/session data, invite secrets, private photo paths and your partner&apos;s private records. The file contains sensitive health and nutrition data, so store it somewhere private.
+          </p>
+        </div>
         <Btn variant="outline" className="w-full" onClick={reset}>Reset this phone</Btn>
         <Btn variant="danger" className="w-full" onClick={leave}>Leave space</Btn>
       </div>
