@@ -35,7 +35,7 @@ async function retryTransientRead<T>(operation: () => Promise<T>): Promise<T> {
       ) {
         throw error;
       }
-      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_READ_RETRY_MS[attempt]));
+      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_READ_RETRY_MS[attempt] ?? 500));
     }
   }
   throw lastError;
