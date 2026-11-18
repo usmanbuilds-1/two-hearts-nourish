@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Star, Trash2 } from "lucide-react";
+import { BookOpen, Loader2, Sparkles, Star, Trash2 } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { supabase } from "@/integrations/supabase/client";
 import { Btn, Field, TextInput } from "./primitives";
@@ -82,6 +83,7 @@ export function MealFields({
   const [lookingUp, setLookingUp] = useState(false);
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   // Favourites — Supabase-backed (replaces localStorage)
   const { data: favs = [] } = useQuery<MealFavorite[]>({
@@ -229,6 +231,14 @@ export function MealFields({
         <>
           <Btn variant="outline" className="w-full" onClick={()=>setFoodSearchOpen(true)}>
             Search food labels or scan a barcode
+          </Btn>
+          <Btn
+            variant="outline"
+            className="w-full"
+            onClick={() => void navigate({ to: "/recipes" })}
+          >
+            <BookOpen className="size-4" />
+            Create or log a recipe
           </Btn>
           <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyPackagedFood}/>
         </>
