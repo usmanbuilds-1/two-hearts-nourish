@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarDaysAgo, calendarRollingAverage, dayNumber, weightTrendKgPerWeek } from "./weight-math";
+import { calendarDaysAgo, calendarRollingAverage, dayNumber, weightPlateauSpan, weightTrendKgPerWeek } from "./weight-math";
 
 describe("calendar aware weight analytics", () => {
   it("respects real days when recordings are irregular", () => {
@@ -17,5 +17,21 @@ describe("calendar aware weight analytics", () => {
   });
   it("does not estimate a slope from too few readings", () => {
     expect(weightTrendKgPerWeek([{logged_date:"2026-11-11",weight_kg:65}])).toBeNull();
+  });
+
+  it("does not call three similar weigh-ins over two days a two-week plateau", () => {
+    expect(weightPlateauSpan([
+      { logged_date: "2026-11-10", weight_kg: 70.0 },
+      { logged_date: "2026-11-11", weight_kg: 70.1 },
+      { logged_date: "2026-11-12", weight_kg: 70.0 },
+    ])).toEqual({ detected: false, spanDays: 2 });
+  });
+
+  it("detects a stable trend only when measurements span enough calendar time", () => {
+    expect(weightPlateauSpan([
+      { logged_date: "2026-11-01", weight_kg: 70.0 },
+      { logged_date: "2026-11-07", weight_kg: 70.2 },
+      { logged_date: "2026-11-13", weight_kg: 70.1 },
+    ])).toEqual({ detected: true, spanDays: 12 });
   });
 });
