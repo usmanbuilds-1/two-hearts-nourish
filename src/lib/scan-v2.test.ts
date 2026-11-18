@@ -25,6 +25,12 @@ describe("scanner v2 deterministic helpers", () => {
     });
   });
 
+  it("does not confuse a single ingredient's weight with total meal weight", () => {
+    expect(parseDeterministicContext("10 g oil in a large bowl of rice").totalGrams).toBeUndefined();
+    expect(parseDeterministicContext("Meal weighs 400 g with 10 g oil").totalGrams).toBe(400);
+    expect(parseDeterministicContext("about 150 g beef in a stew").totalGrams).toBeUndefined();
+  });
+
   it("converts explicit added oil to nutrition without an AI call", () => {
     const context = parseDeterministicContext("cooked with 2 tbsp oil");
     expect(context.addedFat?.grams).toBeCloseTo(27.2, 1);
