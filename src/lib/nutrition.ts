@@ -40,6 +40,9 @@ export type Member = {
   age: number | null;
   sex: "male" | "female" | null;
   activity_level: string | null;
+  adaptive_targets_enabled: boolean;
+  physical_activity_level: number | null;
+  target_rate_pct_per_week: number | null;
   body_goal: "lose" | "maintain" | "gain" | null;
   daily_food_budget: number | null;
   currency: string | null;
