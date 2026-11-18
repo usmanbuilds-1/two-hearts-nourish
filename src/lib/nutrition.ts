@@ -259,9 +259,12 @@ export function adherencePct(
   byDate: Map<string, { calories: number }>,
   target: number,
   today: string,
+  confirmedCompleteDays: ReadonlySet<string>,
 ): number {
   if (target <= 0 || byDate.size === 0) return 0;
-  const completed = [...byDate.entries()].filter(([d]) => d < today);
+  const completed = [...byDate.entries()].filter(
+    ([d]) => d < today && confirmedCompleteDays.has(d),
+  );
   if (completed.length === 0) return 0;
   const threshold = Math.max(target * 0.1, 150);
   const hits = completed.filter(([, v]) => Math.abs(v.calories - target) <= threshold).length;
