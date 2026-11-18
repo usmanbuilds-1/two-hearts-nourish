@@ -84,6 +84,24 @@ BEGIN
   IF has_table_privilege('authenticated','public.nutrition_day_completeness','SELECT')
     OR has_table_privilege('authenticated','public.calorie_target_history','SELECT')
     THEN RAISE EXCEPTION 'Adaptive target evidence tables exposed'; END IF;
+
+  -- The app's MEMBER_COLS query reads these four fields on every entry.
+  -- Missing column grants block all sign-ins with a permission error despite
+  -- a healthy Supabase auth session.
+  IF NOT (
+    has_column_privilege('authenticated','public.members','adaptive_targets_enabled','SELECT')
+    AND has_column_privilege('authenticated','public.members','adaptive_target_configured_at','SELECT')
+    AND has_column_privilege('authenticated','public.members','physical_activity_level','SELECT')
+    AND has_column_privilege('authenticated','public.members','target_rate_pct_per_week','SELECT')
+    AND has_column_privilege('authenticated','public.members','adaptive_targets_enabled','UPDATE')
+    AND has_column_privilege('authenticated','public.members','adaptive_target_configured_at','UPDATE')
+    AND has_column_privilege('authenticated','public.members','physical_activity_level','UPDATE')
+    AND has_column_privilege('authenticated','public.members','target_rate_pct_per_week','UPDATE')
+  ) THEN RAISE EXCEPTION 'Adaptive member column grants missing'; END IF;
+
+  IF has_column_privilege('authenticated','public.members','participant_token_hash','SELECT')
+    OR has_column_privilege('authenticated','public.members','link_code_hash','SELECT')
+    THEN RAISE EXCEPTION 'Recovery secret hashes exposed'; END IF;
   IF has_function_privilege(
        'authenticated',
        'public.apply_adaptive_target_change(uuid,integer,integer,integer,integer,integer,integer,integer,numeric,numeric,numeric,date,date,integer,integer,jsonb)',

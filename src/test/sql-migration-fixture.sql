@@ -114,7 +114,19 @@ CREATE TABLE public.meals (
 
 GRANT SELECT, UPDATE ON public.rooms TO authenticated;
 GRANT ALL ON public.rooms TO service_role;
-GRANT SELECT, UPDATE ON public.members TO authenticated;
+-- Match the restricted column-level grants used in production. Broad table
+-- grants masked the missing permissions introduced by migration 0027.
+GRANT SELECT (
+  id, room_id, auth_user_id, seat, display_name,
+  daily_calorie_target, daily_protein_target, daily_carbs_target,
+  daily_fat_target, created_at, height_cm, weight_kg, age, sex,
+  activity_level, body_goal, daily_food_budget, currency, locality
+) ON public.members TO authenticated;
+GRANT UPDATE (
+  activity_level, age, body_goal, currency, daily_calorie_target,
+  daily_carbs_target, daily_fat_target, daily_food_budget,
+  daily_protein_target, display_name, height_cm, locality, sex, weight_kg
+) ON public.members TO authenticated;
 GRANT ALL ON public.members TO service_role;
 GRANT SELECT ON public.member_devices TO authenticated;
 GRANT ALL ON public.member_devices TO service_role;
