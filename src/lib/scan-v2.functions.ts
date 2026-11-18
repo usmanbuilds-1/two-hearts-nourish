@@ -400,7 +400,7 @@ async function groundOutput(output: VisionOutput): Promise<ScannerV2Component[]>
       occlusion_risk: component.occlusion_risk,
       scale_evidence: component.scale_evidence ?? null,
       source_name: grounded ? "USDA" as const : component.cooking_method === "user supplied" ? "user-context" as const : "model-fallback" as const,
-      source_ref: match ? `fdc:${match.fdcId}` : null,
+      source_ref: grounded && match ? `fdc:${match.fdcId}` : null,
       packaged_food: component.packaged_food ?? null,
     };
   });
