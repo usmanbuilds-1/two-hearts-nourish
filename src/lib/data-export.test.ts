@@ -108,6 +108,12 @@ describe("secure full data export", () => {
     })).toThrow("EXPORT_SECRET_FIELD");
   });
 
+  it("does not reject user-written text that happens to contain a forbidden field name", () => {
+    const value = bundle();
+    value.progress_notes = [{ text: "I wrote room_code in my own note." }];
+    expect(() => assertNoSecretFields(value)).not.toThrow();
+  });
+
   it("serializes a stable versioned personal export structure", () => {
     const parsed = JSON.parse(serializeDataExport(bundle()));
     expect(parsed.manifest.schema).toBe("two-hearts-nourish-personal-export");
