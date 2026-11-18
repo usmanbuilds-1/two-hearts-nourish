@@ -79,7 +79,32 @@ export function MealFields({
   meId?: string;
   isNew?: boolean;
 }) {
-  const set = (k: keyof MealDraft) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...draft, [k]: e.target.value });
+  const set = (k: keyof MealDraft) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (k === "calories" || k === "protein" || k === "carbs" || k === "fat") {
+      const currentPct = draft.portion_percentage > 0 ? draft.portion_percentage : 100;
+      const parsed = num(value);
+      const nominalValue = Number.isFinite(parsed) ? parsed / currentPct * 100 : undefined;
+      const nominalKey = {
+        calories: "nominal_calories",
+        protein: "nominal_protein",
+        carbs: "nominal_carbs",
+        fat: "nominal_fat",
+      }[k] as "nominal_calories" | "nominal_protein" | "nominal_carbs" | "nominal_fat";
+
+      onChange({
+        ...draft,
+        [k]: value,
+        [nominalKey]: nominalValue === undefined
+          ? undefined
+          : k === "calories"
+            ? Math.round(nominalValue)
+            : Math.round(nominalValue * 10) / 10,
+      });
+      return;
+    }
+    onChange({ ...draft, [k]: value });
+  };
   const [lookingUp, setLookingUp] = useState(false);
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const qc = useQueryClient();
