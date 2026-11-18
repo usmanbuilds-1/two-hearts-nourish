@@ -33,6 +33,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const editedRef = useRef(false);
   const [stage, setStage] = useState<Stage>("pick");
   const [image, setImage] = useState<string | null>(null);
+  const [contextText, setContextText] = useState("");
+  const [appliedContext, setAppliedContext] = useState("");
   const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [editing, setEditing] = useState(false);
   const [errMsg, setErrMsg] = useState("");
@@ -49,6 +51,9 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const save = useSaveMeal();
   const { room, me } = useSpace();
   const queryClient = useQueryClient();
+  // An edit made after a scan must be applied to the image before its old
+  // nutrition estimate can be saved under a newly described food.
+  const contextNeedsRescan = stage === "confirm" && contextText.trim() !== appliedContext;
 
   useEffect(() => {
     if (!open) {
@@ -56,6 +61,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       requestRef.current += 1;
       setStage("pick");
       setImage(null);
+      setContextText("");
+      setAppliedContext("");
       setDetectedPackage(null);
       setCandidates([]);
       setCheckingLabel(false);
@@ -118,6 +125,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   async function analyze() {
     if (!image) return;
     const id = ++requestRef.current;
+    const foodContext = contextText.trim();
     editedRef.current = false;
     setStage("analyzing");
     setLabelSource(null);
@@ -127,7 +135,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setCheckingLabel(false);
     try {
       // One normal Gemini photo request. Product search below uses NO Gemini tokens.
-      const r = await analyzeFood({ data: { image } });
+      const r = await analyzeFood({ data: { image, ...(foodContext ? { context: foodContext } : {}) } });
       if (requestRef.current !== id) return;
       if (!r.ok) {
         setErrMsg(ERRORS[r.error] ?? "Couldn't figure that one out. Try another photo?");
@@ -135,6 +143,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
         return;
       }
       const estimate = r.estimate;
+      setAppliedContext(foodContext);
       setDraft({
         ...emptyDraft(),
         food_name: estimate.food_name,
@@ -174,6 +183,10 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   }
 
   async function confirm() {
+    if (contextText.trim() !== appliedContext) {
+      toast.error("Update the estimate with your new context before saving.");
+      return;
+    }
     if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
     setBusy(true);
     editedRef.current = true;
@@ -255,9 +268,35 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
             </div>
           )}
 
+          {image && (stage === "preview" || stage === "confirm") && (
+            <div className="mt-4">
+              <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
+                Tell the scanner more <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <textarea id="scan-food-context" rows={2} maxLength={400}
+                value={contextText} onChange={(event) => setContextText(event.target.value)}
+                placeholder="e.g. This is a chicken patty, not fish. The bun was toasted in butter."
+                className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Add food identity, cooking method, or portion details the photo cannot show. Your notes are included in the scan.
+              </p>
+              {contextNeedsRescan && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Your updated details have not been used in the numbers below yet.
+                  </p>
+                  <Btn size="lg" variant="outline" className="w-full" onClick={() => void analyze()}>
+                    Reanalyze with updated details
+                  </Btn>
+                </div>
+              )}
+            </div>
+          )}
+
           {stage === "preview" && (
             <div className="mt-5 flex gap-2">
-              <Btn size="lg" className="flex-1" onClick={analyze}>Analyze</Btn>
+              <Btn size="lg" className="flex-1" onClick={analyze}>{contextText.trim() ? "Analyze with details" : "Analyze"}</Btn>
               <Btn size="lg" variant="outline" onClick={retake}>Retake photo</Btn>
             </div>
           )}
@@ -370,7 +409,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                 Save this portion to my favourites for next time
               </label>
               <div className="mt-5 flex flex-col gap-2">
-                <Btn size="lg" onClick={confirm} disabled={busy}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
+                <Btn size="lg" onClick={confirm} disabled={busy || contextNeedsRescan}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
                 <div className="flex gap-2">
                   {!editing && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
                   <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy}>Retake photo</Btn>
