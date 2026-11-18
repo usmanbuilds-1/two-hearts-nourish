@@ -373,8 +373,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                    <div className="mt-4 text-xs text-muted-foreground">{labelSource ? "Source: Open Food Facts community label (check packet)" : <>AI estimate · Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></>}</div>
                 </div>
               )}
-{image && (stage === "preview" || stage === "confirm") && (
-                <div className="mt-4">
+<div className="mt-4">
                   <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
                     Was anything wrong? <span className="font-normal text-muted-foreground">(optional)</span>
                   </label>
@@ -396,8 +395,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                       </Btn>
                     </div>
                   )}
-                </div>
-              )}
+              </div>
 
               <label className="mt-4 flex min-h-12 items-start gap-3 rounded-xl border border-border p-3 text-sm text-foreground">
                 <input type="checkbox" checked={keepPhoto} onChange={event => setKeepPhoto(event.target.checked)}
