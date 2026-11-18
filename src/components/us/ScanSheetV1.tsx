@@ -145,11 +145,21 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       const r = await analyzeFood({ data: { image, ...(foodContext ? { context: foodContext } : {}) } });
       if (requestRef.current !== id) return;
       if (!r.ok) {
-        setErrMsg(ERRORS[r.error] ?? "Couldn't figure that one out. Try another photo?");
-        setStage("error");
+        const message = ERRORS[r.error] ?? "Couldn't analyze that correction. Please try again.";
+        if (isCorrection) setCorrectionError(message);
+        else {
+          setErrMsg(message);
+          setStage("error");
+        }
         return;
       }
       const estimate = r.estimate;
+      editedRef.current = false;
+      setLabelSource(null);
+      setLabelAdjusted(false);
+      setCandidates([]);
+      setDetectedPackage(null);
+      setCheckingLabel(false);
       setAppliedContext(foodContext);
       setDraft({
         ...emptyDraft(),
@@ -184,13 +194,21 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       }
     } catch {
       if (requestRef.current !== id) return;
-      setErrMsg(navigator.onLine ? "Couldn't figure that one out. Try another photo?" : "You're offline. We'll reconnect when you're back.");
-      setStage("error");
+      const message = navigator.onLine
+        ? "Couldn't recalculate. Retry or discard the correction to keep the previous estimate."
+        : "You're offline. Your previous estimate is still available.";
+      if (isCorrection) setCorrectionError(message);
+      else {
+        setErrMsg(message);
+        setStage("error");
+      }
+    } finally {
+      if (requestRef.current === id) setRechecking(false);
     }
   }
 
   async function confirm() {
-    if (contextText.trim() !== appliedContext) {
+    if (rechecking || contextText.trim() !== appliedContext) {
       toast.error("Update the estimate with your new context before saving.");
       return;
     }
@@ -244,6 +262,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setAmountGrams("");
     setContextText("");
     setAppliedContext("");
+    setCorrectionError("");
+    setRechecking(false);
     setImage(null);
     setStage("pick");
     cameraRef.current?.click();
