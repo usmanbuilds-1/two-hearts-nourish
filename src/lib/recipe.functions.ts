@@ -275,6 +275,28 @@ export const saveRecipe = createServerFn({ method: "POST" })
     return { ok: true as const, recipeId: saved.id };
   });
 
+/** Update only the signed-in member's existing recipe; no delete/recreate. */
+export const updateRecipe = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { recipeId: string; name: string; servings: number; ingredients: RecipeIngredient[] }) => ({
+    recipeId: z.string().uuid().parse(input.recipeId),
+    ...recipeInputSchema.parse(input),
+  }))
+  .handler(async ({ data, context }) => {
+    const db = await admin();
+    const memberId = await memberIdFor(db, context.userId);
+    if (!memberId) throw new Error("NOT_MEMBER");
+    const { data: updated, error } = await db.from("recipes").update({
+      name: data.name,
+      servings: data.servings,
+      ingredients: data.ingredients,
+      updated_at: new Date().toISOString(),
+    }).eq("id", data.recipeId).eq("member_id", memberId)
+      .select("id").maybeSingle();
+    if (error || !updated) throw new Error("UPDATE_RECIPE_FAILED");
+    return { ok: true as const, recipeId: updated.id };
+  });
+
 export const deleteRecipe = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { recipeId: string }) => ({
