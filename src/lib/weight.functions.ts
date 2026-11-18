@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { calendarDaysAgo, calendarRollingAverage, dayNumber, weightTrendKgPerWeek } from "./weight-math";
+import { calendarDaysAgo, calendarRollingAverage, dayNumber, weightPlateauSpan, weightTrendKgPerWeek } from "./weight-math";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -59,6 +59,14 @@ export const logWeight = createServerFn({ method: "POST" })
         { onConflict: "member_id,logged_date" },
       );
     if (error) throw new Error("SERVER_ERROR");
+
+    // Keep the member profile in sync with the latest weight used by target calculations.
+    const { error: memberError } = await db
+      .from("members")
+      .update({ weight_kg: data.weightKg })
+      .eq("id", memberId);
+    if (memberError) throw new Error("SERVER_ERROR");
+
     return { ok: true, logged_date: today, weight_kg: data.weightKg };
   });
 
@@ -116,20 +124,18 @@ export const getWeightAnalytics = createServerFn({ method: "POST" })
     const rollingAvg = calendarRollingAverage(entries);
     const trendKgPerWeek = weightTrendKgPerWeek(entries);
 
-    // Plateau: last 14 days, ≥3 entries, range < 0.5 kg
+    // Plateau: last 14 calendar days, at least 3 entries, and the
+    // observations must actually span most of that window. Three weigh-ins over
+    // two days are not a two-week plateau.
     const p14str = calendarDaysAgo(data.clientDate, 14);
     const recent = entries.filter((e) => e.logged_date >= p14str);
-    let plateauDetected = false;
-    let plateauDays = 0;
-    if (recent.length >= 3) {
-      const rw = recent.map((e) => e.weight_kg);
-      if (Math.max(...rw) - Math.min(...rw) < 0.5) {
-        plateauDetected = true;
-        const firstD = new Date(recent[0]!.logged_date).getTime();
-        const lastD  = new Date(recent[recent.length - 1]!.logged_date).getTime();
-        plateauDays = Math.round((lastD - firstD) / 86_400_000);
-      }
-    }
+    const plateau = weightPlateauSpan(recent, {
+      minEntries: 3,
+      minSpanDays: 10,
+      maxRangeKg: 0.5,
+    });
+    const plateauDetected = plateau.detected;
+    const plateauDays = plateau.detected ? plateau.spanDays : 0;
 
     return {
       entries, rollingAvg,
