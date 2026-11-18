@@ -144,13 +144,23 @@ export function safeMealForExport(row: {
 }
 
 export function assertNoSecretFields(value: unknown): void {
-  const serialized = JSON.stringify(value);
-  const lower = serialized.toLowerCase();
-  for (const forbidden of FORBIDDEN_SERIALIZED_KEYS) {
-    if (lower.includes(forbidden)) {
-      throw new Error("EXPORT_SECRET_FIELD");
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
     }
-  }
+    if (!node || typeof node !== "object") return;
+
+    for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
+      const normalized = key.toLowerCase();
+      if (FORBIDDEN_SERIALIZED_KEYS.includes(normalized as (typeof FORBIDDEN_SERIALIZED_KEYS)[number])) {
+        throw new Error("EXPORT_SECRET_FIELD");
+      }
+      visit(child);
+    }
+  };
+
+  visit(value);
 }
 
 export function assertExportSize(json: string, maxBytes: number): void {
