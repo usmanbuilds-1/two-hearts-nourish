@@ -7,6 +7,7 @@ import {
   hallTargetCalories,
   isEvidenceSupportedRate,
   simulateHallWeightPath,
+  sufficientAdaptiveEvidence,
 } from "./adaptive-target";
 
 const params = hallLongTermParameters({
@@ -19,6 +20,14 @@ const params = hallLongTermParameters({
 });
 
 describe("Hall adaptive target model", () => {
+  it("rejects early or clustered weigh-ins as insufficient for automatic changes", () => {
+    const everyWeek = ["2026-10-01", "2026-10-08", "2026-10-15", "2026-10-22"];
+    expect(sufficientAdaptiveEvidence(21, everyWeek)).toBe(true);
+    expect(sufficientAdaptiveEvidence(20, everyWeek)).toBe(false);
+    expect(sufficientAdaptiveEvidence(28, everyWeek.slice(0, 3))).toBe(false);
+    expect(sufficientAdaptiveEvidence(28, ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"])).toBe(false);
+    expect(sufficientAdaptiveEvidence(28, ["2026-10-01", "2026-10-01", "2026-10-15", "2026-10-22"])).toBe(false);
+  });
   it("reproduces a valid positive body-fat estimate from Hall/Jackson equation 4", () => {
     const fat = hallInitialFatKg({ weightKg: 70, heightM: 1.75, age: 30, sex: "male" });
     expect(fat).not.toBeNull();
