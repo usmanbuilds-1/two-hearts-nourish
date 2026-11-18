@@ -62,7 +62,19 @@ export function AdaptiveTargetCard() {
     }
   }
 
-  if (status.isPending || status.isError || !status.data) return null;
+  if (status.isPending) return null;
+  if (status.isError || !status.data) {
+    return (
+      <div className="mt-4 rounded-xl border border-border p-4">
+        <p className="text-sm text-muted-foreground">
+          Adaptive target status could not be checked. Your saved calorie target has not been changed here.
+        </p>
+        <Btn variant="outline" className="mt-2" onClick={() => void status.refetch()}>
+          Try again
+        </Btn>
+      </div>
+    );
+  }
   const data = status.data;
   const change = data.latestUnseenChange;
 
@@ -84,6 +96,8 @@ export function AdaptiveTargetCard() {
             <span className="text-sm text-muted-foreground">kcal/day</span>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Only your calorie target changes automatically; existing protein, carb and fat targets
+            remain your preferences and may need review in Settings.
             Your previous target fell outside the Hall-model statistical interval
             from your confirmed intake and weight data. It is not a clinical
             confidence interval and cannot account for unlogged or inaccurately estimated food.
