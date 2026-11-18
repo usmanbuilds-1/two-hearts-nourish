@@ -1,6 +1,6 @@
 import { createPartnerInvite } from "@/lib/room.functions";
 import { buildInviteUrl } from "@/lib/rejoin-links";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
 import { FavoriteMeals } from "@/components/us/FavoriteMeals";
@@ -200,6 +200,10 @@ function Today() {
           setBudget(true);
         }}><Wallet className="size-4" /> Plan</Btn>
       </div>
+
+      <Link to="/recipes" className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
+        My recipes · Create, edit or log a recipe
+      </Link>
 
       <FavoriteMeals
         favorites={favsData}

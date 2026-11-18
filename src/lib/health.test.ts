@@ -6,6 +6,8 @@ describe("health formulas", () => {
   it("Mifflin male 70kg 175cm 30y = 1648.75", () => expect(bmr({ heightCm: 175, weightKg: 70, age: 30, sex: "male" })).toBeCloseTo(1648.75));
   it("Mifflin female 60kg 165cm 30y = 1320.25", () => expect(bmr({ heightCm: 165, weightKg: 60, age: 30, sex: "female" })).toBeCloseTo(1320.25));
   it("maintain moderate male = TDEE", () => expect(suggest({ heightCm: 175, weightKg: 70, age: 30, sex: "male", activity: "moderate", goal: "maintain" }).calories).toBe(2560));
+  it("uses the conservative 10% surplus described in off-season bodybuilding reviews", () =>
+    expect(suggest({ heightCm: 175, weightKg: 70, age: 30, sex: "male", activity: "moderate", goal: "gain" }).calories).toBe(2810));
   it("deficit is at most 500 kcal", () => expect(suggest({ heightCm: 175, weightKg: 70, age: 30, sex: "male", activity: "moderate", goal: "lose" }).calories).toBe(2060));
   it("never below BMR / female floor", () => {
     const s = suggest({ heightCm: 150, weightKg: 45, age: 60, sex: "female", activity: "sedentary", goal: "lose" });

@@ -72,7 +72,7 @@ export function suggest(i: HealthInput): Suggestion {
   }
   let kcal = tdee;
   if (goal === "lose") kcal = tdee - Math.min(500, tdee * 0.2); // ~0.5 kg/week max
-  if (goal === "gain") kcal = tdee + 400; // fixed starting surplus; adaptive calibration should refine this
+  if (goal === "gain") kcal = tdee * 1.10; // low end of Iraki et al. 2019 10–20% off-season surplus; starting estimate only
   const floor = Math.max(i.sex === "male" ? 1500 : 1200, base);
   if (kcal < floor) {
     kcal = floor;
@@ -85,6 +85,6 @@ export function suggest(i: HealthInput): Suggestion {
   const fat = Math.round(Math.max((kcal * 0.28) / 9, refW * 0.6));
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
   if (i.age >= 65) notes.push("Over 65, protein needs can be higher — a dietitian can fine-tune this.");
-  notes.push("These are estimates (±10%). If you're pregnant, breastfeeding or have a medical condition, check with a doctor.");
+  notes.push("These are starting estimates, not measured energy expenditure or guaranteed targets. Pregnancy, breastfeeding and medical conditions require individualized advice.");
   return { bmi: b, category: bmiCategory(b), bmr: Math.round(base), tdee: r10(tdee), calories: kcal, protein, carbs, fat, notes };
 }

@@ -1,15 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
+import { Pencil, Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { Btn, Screen, Eyebrow, TextInput } from "@/components/us/primitives";
 import { Textarea } from "@/components/ui/textarea";
-import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe } from "@/lib/recipe.functions";
+import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe, updateRecipe } from "@/lib/recipe.functions";
 import { perServing, recipeTotals, scaleIngredientGrams, type RecipeIngredient, type RecipeRecord } from "@/lib/recipe";
 import { defaultMealType } from "@/lib/nutrition";
-import { ScienceNote } from "@/components/us/ScienceNote";
+
 
 export const Route = createFileRoute("/_space/recipes")({
   component: RecipesView,
@@ -25,11 +25,42 @@ const ERRORS: Record<string, string> = {
   AI_FAILED: "Couldn't analyze that recipe. Try again.",
 };
 
+function manualIngredient(): RecipeIngredient {
+  return {
+    name: "", amountLabel: "1 serving", grams: null,
+    calories: 0, protein: 0, carbs: 0, fat: 0,
+    caloriesPer100g: null, proteinPer100g: null,
+    carbsPer100g: null, fatPer100g: null,
+    source: "manual", sourceRef: null, confidence: "low",
+  };
+}
+
+function editIngredientNutrition(
+  ingredient: RecipeIngredient,
+  key: "calories" | "protein" | "carbs" | "fat",
+  text: string,
+): RecipeIngredient {
+  const value = Number(text);
+  if (text.trim() === "" || !Number.isFinite(value) || value < 0) return ingredient;
+  const per100Key = ({
+    calories: "caloriesPer100g", protein: "proteinPer100g",
+    carbs: "carbsPer100g", fat: "fatPer100g",
+  } as const)[key];
+  const per100 = ingredient.grams
+    ? Math.round(value / ingredient.grams * 1000) / 10
+    : null;
+  return {
+    ...ingredient, [key]: value, [per100Key]: per100,
+    source: "manual", sourceRef: null, confidence: "low",
+  };
+}
+
 function RecipesView() {
   const { me, today, upsertLocal } = useSpace();
   const queryClient = useQueryClient();
 
   const [createMode, setCreateMode] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [name, setName] = useState("");
   const [servings, setServings] = useState("1");
@@ -45,10 +76,21 @@ function RecipesView() {
   const totals = useMemo(() => perServing(recipeTotals(ingredients), Number(servings) || 1), [ingredients, servings]);
 
   function reset() {
+    setEditingId(null);
     setDescription("");
     setName("");
     setServings("1");
     setIngredients([]);
+  }
+
+  function startEdit(recipe: RecipeRecord) {
+    setEditingId(recipe.id);
+    setName(recipe.name);
+    setDescription("");
+    setServings(String(recipe.servings));
+    setIngredients(recipe.ingredients);
+    setCreateMode(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function analyze() {
@@ -73,12 +115,23 @@ function RecipesView() {
 
   async function save() {
     const count = Number(servings);
-    if (!name.trim() || !Number.isFinite(count) || count <= 0 || ingredients.length === 0 || busy) return;
+    if (busy) return;
+    if (!name.trim()) return void toast.error("Give your recipe a name.");
+    if (!Number.isFinite(count) || count < 0.25 || count > 100) {
+      return void toast.error("Servings must be between 0.25 and 100.");
+    }
+    if (ingredients.length === 0 || ingredients.some((ingredient) => !ingredient.name.trim() || !ingredient.amountLabel.trim())) {
+      return void toast.error("Add at least one named ingredient and its amount.");
+    }
     setBusy(true);
     try {
-      await saveRecipe({ data: { name: name.trim(), servings: count, ingredients } });
+      if (editingId) {
+        await updateRecipe({ data: { recipeId: editingId, name: name.trim(), servings: count, ingredients } });
+      } else {
+        await saveRecipe({ data: { name: name.trim(), servings: count, ingredients } });
+      }
       await queryClient.invalidateQueries({ queryKey: ["recipes", me.id] });
-      toast.success("Recipe saved");
+      toast.success(editingId ? "Recipe updated" : "Recipe saved");
       reset();
       setCreateMode(false);
     } catch {
@@ -119,8 +172,8 @@ function RecipesView() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Eyebrow>My Recipes</Eyebrow>
-          <Btn onClick={() => { setCreateMode((v) => !v); if (createMode) reset(); }}>
-            <Plus className="mr-1 size-4" /> New Recipe
+          <Btn onClick={() => { if (createMode) { reset(); setCreateMode(false); } else { reset(); setCreateMode(true); } }}>
+            <Plus className="mr-1 size-4" /> {createMode ? "Close" : "New Recipe"}
           </Btn>
         </div>
 
@@ -128,7 +181,7 @@ function RecipesView() {
           <div className="space-y-3 rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <WandSparkles className="size-4 text-primary" />
-              Smart recipe adder
+              {editingId ? "Edit saved recipe" : "Create a recipe"}
             </div>
             <Textarea
               value={description}
@@ -136,9 +189,18 @@ function RecipesView() {
               placeholder="Bulking shake: 2 bananas, 50g oats, 2 tbsp peanut butter, 250ml whole milk, 5 dates"
               className="min-h-24"
             />
-            <Btn className="w-full" disabled={busy || description.trim().length < 3} onClick={() => void analyze()}>
-              {busy && ingredients.length === 0 ? "Analyzing…" : "Analyze recipe"}
-            </Btn>
+            <div className="grid grid-cols-2 gap-2">
+              <Btn variant="outline" disabled={busy || description.trim().length < 3} onClick={() => void analyze()}>
+                {busy ? "Analyzing…" : "Analyze with AI"}
+              </Btn>
+              <Btn variant="outline" disabled={busy || ingredients.length >= 30}
+                onClick={() => setIngredients((items) => [...items, manualIngredient()])}>
+                <Plus className="size-4" /> Add manually
+              </Btn>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              AI is optional. You can add ingredients and their label values manually, review totals, then save.
+            </p>
 
             {ingredients.length > 0 && (
               <div className="space-y-3 border-t border-border pt-3">
@@ -158,10 +220,18 @@ function RecipesView() {
                   {ingredients.map((item, index) => (
                     <div key={`${item.name}-${index}`} className="rounded-lg bg-secondary/70 p-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-medium">{item.name}</div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <TextInput aria-label={`Ingredient ${index + 1} name`}
+                            value={item.name} placeholder="Ingredient name"
+                            onChange={(e) => setIngredients((all) => all.map((v, i) =>
+                              i === index ? { ...v, name: e.target.value } : v))} />
+                          <TextInput aria-label={`Ingredient ${index + 1} amount`}
+                            value={item.amountLabel} placeholder="e.g. 50 g or 1 cup"
+                            onChange={(e) => setIngredients((all) => all.map((v, i) =>
+                              i === index ? { ...v, amountLabel: e.target.value } : v))} />
                           <div className="text-xs text-muted-foreground">
-                            {item.amountLabel} · {item.source === "USDA" ? "USDA" : "estimate"}
+                            {item.source === "USDA" ? "USDA database estimate" :
+                             item.source === "manual" ? "Manually entered" : "AI estimate — verify nutrition"}
                           </div>
                         </div>
                         <button type="button" onClick={() => setIngredients((all) => all.filter((_, i) => i !== index))}
@@ -187,6 +257,19 @@ function RecipesView() {
                           {Math.round(item.calories)} kcal · P {Math.round(item.protein)}g
                         </div>
                       </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {(["calories", "protein", "carbs", "fat"] as const).map((key) => (
+                          <label key={key} className="block">
+                            <span className="mb-1 block text-xs text-muted-foreground">
+                              {key === "calories" ? "Calories" : `${key[0]!.toUpperCase() + key.slice(1)} (g)`}
+                            </span>
+                            <TextInput inputMode="decimal" aria-label={`Ingredient ${index + 1} ${key}`}
+                              value={String(item[key])}
+                              onChange={(e) => setIngredients((all) => all.map((v, i) =>
+                                i === index ? editIngredientNutrition(v, key, e.target.value) : v))} />
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -194,7 +277,7 @@ function RecipesView() {
                 <div className="flex gap-2">
                   <Btn variant="ghost" className="flex-1" onClick={() => { setCreateMode(false); reset(); }}>Cancel</Btn>
                   <Btn className="flex-1" disabled={busy || !name.trim() || ingredients.length === 0} onClick={() => void save()}>
-                    {busy ? "Saving…" : "Save Recipe"}
+                    {busy ? "Saving…" : editingId ? "Save Changes" : "Save Recipe"}
                   </Btn>
                 </div>
               </div>
@@ -203,7 +286,14 @@ function RecipesView() {
         )}
 
         <div className="space-y-3">
-          {(recipes.data ?? []).length === 0 ? (
+          {recipes.isPending ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">Loading your recipes…</p>
+          ) : recipes.isError ? (
+            <div className="rounded-xl border border-border p-5 text-center">
+              <p className="text-sm text-destructive">Could not load recipes. Your saved recipes haven't been erased.</p>
+              <Btn variant="outline" className="mt-3" onClick={() => void recipes.refetch()}>Try again</Btn>
+            </div>
+          ) : (recipes.data ?? []).length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
               <p>No recipes saved yet. Add one for meals or shakes you repeat.</p>
             </div>
@@ -220,6 +310,9 @@ function RecipesView() {
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <Btn size="md" variant="outline" aria-label={`Edit ${recipe.name}`} onClick={() => startEdit(recipe)}>
+                        <Pencil className="size-4" />
+                      </Btn>
                       <Btn size="md" onClick={() => void log(recipe)} disabled={Boolean(loggingId)}>
                         <Utensils className="mr-1 size-3.5" /> {loggingId === recipe.id ? "…" : "Log Today"}
                       </Btn>
@@ -242,7 +335,7 @@ function RecipesView() {
           )}
         </div>
 
-        <ScienceNote goal={me.body_goal} day={today} />
+
       </div>
     </Screen>
   );

@@ -62,7 +62,19 @@ export function AdaptiveTargetCard() {
     }
   }
 
-  if (status.isPending || status.isError || !status.data) return null;
+  if (status.isPending) return null;
+  if (status.isError || !status.data) {
+    return (
+      <div className="mt-4 rounded-xl border border-border p-4">
+        <p className="text-sm text-muted-foreground">
+          Adaptive target status could not be checked. Your saved calorie target has not been changed here.
+        </p>
+        <Btn variant="outline" className="mt-2" onClick={() => void status.refetch()}>
+          Try again
+        </Btn>
+      </div>
+    );
+  }
   const data = status.data;
   const change = data.latestUnseenChange;
 
@@ -84,12 +96,15 @@ export function AdaptiveTargetCard() {
             <span className="text-sm text-muted-foreground">kcal/day</span>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Your previous target fell outside the Hall-model 95% confidence interval
-            from your confirmed intake and weight data.
+            Only your calorie target changes automatically; existing protein, carb and fat targets
+            remain your preferences and may need review in Settings.
+            Your previous target fell outside the Hall-model statistical interval
+            from your confirmed intake and weight data. It is not a clinical
+            confidence interval and cannot account for unlogged or inaccurately estimated food.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl bg-secondary p-3">
-              <div className="text-muted-foreground">Model target range</div>
+              <div className="text-muted-foreground">Model-only target range</div>
               <div className="num mt-1 font-medium text-foreground">
                 {fmt(change.targetCi95Low)}–{fmt(change.targetCi95High)} kcal
               </div>
@@ -108,7 +123,7 @@ export function AdaptiveTargetCard() {
             <div className="space-y-2 pb-2 leading-relaxed">
               <p>
                 Estimated maintenance: {fmt(change.estimatedMaintenance)} kcal/day
-                {" "}({fmt(change.maintenanceCi95Low)}–{fmt(change.maintenanceCi95High)} at 95% confidence).
+                {" "}({fmt(change.maintenanceCi95Low)}–{fmt(change.maintenanceCi95High)} model-only interval; food logging error is excluded).
               </p>
               <p>
                 Goal pace: {change.targetRatePctPerWeek}% body weight/week
@@ -148,7 +163,8 @@ export function AdaptiveTargetCard() {
           ) : (
             <>
               <p className="mt-2 text-sm text-muted-foreground">
-                Only days you confirm as fully logged are allowed into the calorie model.
+                The model uses your dated weight logs and consecutive days you confirm as fully logged.
+                A weight entry alone does not trigger a calorie change.
               </p>
               <div className="mt-3 flex items-center justify-between gap-3">
                 <div>
@@ -164,6 +180,9 @@ export function AdaptiveTargetCard() {
               </div>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                 Only confirm this if all food and calorie-containing drinks from yesterday are in the diary.
+                For safety, an adjustment requires at least 21 consecutive complete intake days
+                and four weight readings spanning at least 14 days. These are conservative
+                app safeguards, not research-validated minimums.
               </p>
             </>
           )}

@@ -23,6 +23,13 @@ export const Route = createFileRoute("/_space/settings")({
 
 const n = (s: string) => (s.trim() === "" ? null : Math.max(0, Number(s)) || null);
 
+const PAL_OPTIONS = [
+  { value: "1.4", label: "Mostly seated", description: "Little walking or exercise most days" },
+  { value: "1.6", label: "Some activity", description: "Mostly seated, with walking or exercise during the week" },
+  { value: "1.75", label: "Active", description: "Regular movement, on your feet often or frequent training" },
+  { value: "2.05", label: "Very active", description: "Physical work or considerable daily activity" },
+] as const;
+
 function SettingsPage() {
   const { me, partner, room, setMember, setRoom } = useSpace();
   const navigate = useNavigate();
@@ -52,7 +59,12 @@ function SettingsPage() {
     activity: (me.activity_level ?? "") as Activity | "",
     goal: (me.body_goal ?? "") as BodyGoal | "",
   });
-  const [adaptiveEnabled, setAdaptiveEnabled] = useState(Boolean(me.adaptive_targets_enabled));
+  // New/unconfigured profiles show the feature checked by default, but no
+  // adaptive changes run until the member has chosen a goal and pace.
+  // An explicit prior opt-out has configured_at set and is preserved.
+  const [adaptiveEnabled, setAdaptiveEnabled] = useState(
+    Boolean(me.adaptive_targets_enabled || !me.adaptive_target_configured_at),
+  );
   const [adaptivePal, setAdaptivePal] = useState(String(me.physical_activity_level ?? "1.6"));
   const [adaptiveRate, setAdaptiveRate] = useState(String(
     me.target_rate_pct_per_week ?? (me.body_goal === "maintain" ? 0 : ""),
@@ -78,23 +90,21 @@ function SettingsPage() {
   const calcError = validate(calcInput);
   const adaptivePalNumber = Number(adaptivePal);
   const adaptiveGoal = calc.goal as BodyGoal | "";
-  const adaptiveRateNumber = adaptiveGoal === "maintain" ? 0 : Number(adaptiveRate);
+  const adaptiveRateNumber = adaptiveGoal === "maintain" ? 0 :
+    adaptiveRate.trim() === "" ? NaN : Number(adaptiveRate);
   const adaptiveRateBounds = adaptiveGoal
     ? evidenceRateBounds(adaptiveGoal)
     : null;
   const adaptiveConfigError = adaptiveEnabled
     ? !adaptiveGoal
-      ? "Choose a body goal before enabling adaptive targets."
+      ? "Choose your goal to finish adaptive setup."
       : !Number.isFinite(adaptivePalNumber) || adaptivePalNumber < 1.4 || adaptivePalNumber > 2.5
-        ? "Physical activity level must be between 1.4 and 2.5."
+        ? "Choose an activity level."
         : !Number.isFinite(adaptiveRateNumber) || !isEvidenceSupportedRate(adaptiveGoal, adaptiveRateNumber)
-          ? adaptiveGoal === "gain"
-            ? "For gain, choose 0.25–0.50% body weight per week."
-            : adaptiveGoal === "lose"
-              ? "For loss, choose −1.00 to −0.50% body weight per week."
-              : "Maintenance uses 0% body weight change per week."
+          ? "Choose a gain/loss pace to finish setup."
           : null
     : null;
+  const adaptiveReadyToSave = adaptiveEnabled && adaptiveConfigError === null;
 
   function applyTargets() {
     const input = {
@@ -128,6 +138,8 @@ function SettingsPage() {
       setWeightInput("");
       const r = await getWeightLog();
       setWeightLog(r.entries);
+      setCalc((previous) => ({ ...previous, weightKg: String(kg) }));
+      setMember({ ...me, weight_kg: kg });
       toast.success("Weight logged ✓");
     } catch { toast.error("Couldn't save. Try again."); }
     finally { setWeightBusy(false); }
@@ -143,13 +155,11 @@ function SettingsPage() {
   async function save() {
     if (!f.name.trim()) return void toast.error("Your name can't be empty.");
     setBusy(true);
-    if (adaptiveConfigError) {
-      setBusy(false);
-      return void toast.error(adaptiveConfigError);
-    }
+    // Incomplete optional adaptive setup must never block editing other
+    // profile fields. No model adjustment is allowed until setup is complete.
     const nextGoal = (calc.goal || null) as "lose" | "maintain" | "gain" | null;
-    const nextPal = adaptiveEnabled ? adaptivePalNumber : me.physical_activity_level;
-    const nextRate = adaptiveEnabled
+    const nextPal = adaptiveReadyToSave ? adaptivePalNumber : me.physical_activity_level;
+    const nextRate = adaptiveReadyToSave
       ? (nextGoal === "maintain" ? 0 : adaptiveRateNumber)
       : me.target_rate_pct_per_week;
     const adaptiveConfigChanged =
@@ -166,13 +176,17 @@ function SettingsPage() {
       activity_level: calc.activity || null,
       body_goal: nextGoal,
       adaptive_targets_enabled: adaptiveEnabled,
-      physical_activity_level: adaptiveEnabled ? adaptivePalNumber : me.physical_activity_level,
-      target_rate_pct_per_week: adaptiveEnabled
-        ? (nextGoal === "maintain" ? 0 : adaptiveRateNumber)
-        : me.target_rate_pct_per_week,
-      adaptive_target_configured_at: adaptiveConfigChanged
-        ? new Date().toISOString()
-        : me.adaptive_target_configured_at,
+      physical_activity_level: nextPal,
+      target_rate_pct_per_week: nextRate,
+      // Enabling the feature is not consent to an unconfigured calorie change.
+      // Also record explicit opt-outs so future defaults never override them.
+      adaptive_target_configured_at: !adaptiveEnabled
+        ? (adaptiveConfigChanged ? new Date().toISOString() : me.adaptive_target_configured_at)
+        : adaptiveReadyToSave
+          ? (adaptiveConfigChanged || !me.adaptive_target_configured_at
+            ? new Date().toISOString()
+            : me.adaptive_target_configured_at)
+          : null,
     };
     const [a, b] = await Promise.all([
       supabase.from("members").update({
@@ -326,40 +340,87 @@ function SettingsPage() {
           </span>
         </label>
         {adaptiveEnabled && (
-          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
-            <Field label="Physical activity level (PAL)" hint="NIDDK Body Weight Planner typical adult range: 1.4–2.5; its default is 1.6.">
-              <TextInput
-                inputMode="decimal"
-                value={adaptivePal}
-                onChange={(e) => setAdaptivePal(e.target.value)}
-                placeholder="1.6"
-              />
+          <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              First choose your goal, activity and preferred pace. These are estimates, not measurements.
+              Your calorie target stays the same until enough reliable food and weight history is available.
+            </p>
+            <Field label="Your goal">
+              <div className="grid grid-cols-3 gap-2">
+                {(["lose", "maintain", "gain"] as const).map((goal) => (
+                  <button key={goal} type="button" onClick={() => {
+                    setCalc((prev) => ({ ...prev, goal }));
+                    setAdaptiveRate("");
+                  }}
+                    className={`min-h-11 rounded-xl border px-2 py-2 text-sm capitalize ${
+                      adaptiveGoal === goal ? "border-primary bg-primary/10 text-primary" : "border-border"
+                    }`}>{goal}</button>
+                ))}
+              </div>
             </Field>
+            <Field label="How active is a typical week?" hint="Choose the closest description, not just how often you exercise. The PAL multiplier is an estimate.">
+              <div className="space-y-2">
+                {PAL_OPTIONS.map((option) => (
+                  <button key={option.value} type="button" onClick={() => setAdaptivePal(option.value)}
+                    aria-pressed={adaptivePal === option.value}
+                    className={`w-full min-h-12 rounded-xl border p-3 text-left ${
+                      adaptivePal === option.value ? "border-primary bg-primary/10" : "border-border"
+                    }`}>
+                    <span className="block text-sm font-medium">{option.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{option.description}</span>
+                  </button>
+                ))}
+                {!PAL_OPTIONS.some((item) => item.value === adaptivePal) && (
+                  <div className="text-xs text-muted-foreground">
+                    Saved custom PAL: {adaptivePal}. Choose a description to change it.
+                  </div>
+                )}
+              </div>
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              PAL currently {adaptivePal}. NIDDK's 1.6 default describes mostly seated work with
+              some weekly walking or exercise; it's a starting estimate, not a measured expenditure.
+            </p>
             {adaptiveGoal && adaptiveGoal !== "maintain" ? (
-              <Field
-                label="Goal pace (% body weight / week)"
-                hint={adaptiveGoal === "gain"
-                  ? "Published natural-bodybuilding review: 0.25–0.50%/week."
-                  : "Published contest-prep review: −1.00 to −0.50%/week."}
-              >
-                <TextInput
-                  inputMode="decimal"
-                  value={adaptiveRate}
-                  onChange={(e) => setAdaptiveRate(e.target.value)}
-                  placeholder={adaptiveGoal === "gain" ? "0.25" : "-0.5"}
-                />
+              <Field label={adaptiveGoal === "gain" ? "How quickly would you like to gain?" : "How quickly would you like to lose?"}
+                hint="Choose a preference; the rate is a planning target, not a guarantee.">
+                <div className="grid grid-cols-2 gap-2">
+                  {(adaptiveGoal === "gain"
+                    ? [{ value: "0.25", label: "Gradual", rate: "+0.25%" },
+                       { value: "0.5", label: "Faster", rate: "+0.50%" }]
+                    : [{ value: "-0.5", label: "Gradual", rate: "−0.50%" },
+                       { value: "-1", label: "Faster", rate: "−1.00%" }]
+                  ).map((option) => (
+                    <button key={option.value} type="button" onClick={() => setAdaptiveRate(option.value)}
+                      aria-pressed={adaptiveRate === option.value}
+                      className={`min-h-16 rounded-xl border p-3 text-left ${
+                        adaptiveRate === option.value ? "border-primary bg-primary/10" : "border-border"
+                      }`}>
+                      <span className="block text-sm font-medium">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.rate} body weight / week</span>
+                      {Number(calc.weightKg) > 0 && (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          ~{(Number(calc.weightKg) * Math.abs(Number(option.value)) / 100).toFixed(2)} kg/week
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </Field>
             ) : adaptiveGoal === "maintain" ? (
-              <p className="text-sm text-muted-foreground">
-                Maintenance is defined as 0% intended body-weight change per week.
-              </p>
+              <p className="text-sm text-muted-foreground">Maintain weight: no intended weekly weight change.</p>
             ) : null}
             {adaptiveRateBounds && (
               <p className="text-xs leading-relaxed text-muted-foreground">
-                The app will not choose a pace for you. It only accepts the published range for the selected goal, then solves the calorie target from the Hall model.
+                The displayed rates come from published natural-bodybuilding reviews and
+                are not individual prescriptions. Activity comes from NIDDK/NASEM estimates.
               </p>
             )}
-            {adaptiveConfigError && <p className="text-sm text-destructive">{adaptiveConfigError}</p>}
+            {adaptiveConfigError ? (
+              <p className="text-sm text-muted-foreground">{adaptiveConfigError} You can still save your other settings.</p>
+            ) : (
+              <p className="text-sm text-primary">Ready. Save settings to start collecting evidence.</p>
+            )}
           </div>
         )}
 

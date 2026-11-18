@@ -8,6 +8,26 @@
  * Lancet. 2011;378:826-837. doi:10.1016/S0140-6736(11)60812-X
  */
 
+// Conservative PRODUCT safety gates, not thresholds validated in Hall 2011.
+// A mathematically narrow residual-only CI from 2-3 weight observations must
+// never be presented as a reliable basis for automatic calorie changes.
+export const MIN_COMPLETE_INTAKE_DAYS = 21;
+export const MIN_WEIGHT_READINGS = 4;
+export const MIN_WEIGHT_SPAN_DAYS = 14;
+
+export function sufficientAdaptiveEvidence(
+  completeDays: number,
+  weightDates: string[],
+): boolean {
+  if (completeDays < MIN_COMPLETE_INTAKE_DAYS || weightDates.length < MIN_WEIGHT_READINGS) return false;
+  const dates = [...new Set(weightDates)].sort();
+  if (dates.length < MIN_WEIGHT_READINGS) return false;
+  const first = Date.parse(dates[0]! + "T00:00:00Z");
+  const last = Date.parse(dates[dates.length - 1]! + "T00:00:00Z");
+  return Number.isFinite(first) && Number.isFinite(last) &&
+    last - first >= MIN_WEIGHT_SPAN_DAYS * 86_400_000;
+}
+
 export type HallSex = "male" | "female";
 
 export type HallParameters = {

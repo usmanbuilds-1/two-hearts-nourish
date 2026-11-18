@@ -85,6 +85,14 @@ BEGIN
     OR has_table_privilege('authenticated','public.calorie_target_history','SELECT')
     THEN RAISE EXCEPTION 'Adaptive target evidence tables exposed'; END IF;
 
+  -- Default selection is not permission to change calories: app-side
+  -- configurationReady() also requires an explicit setup timestamp.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='members'
+      AND column_name='adaptive_targets_enabled' AND column_default='true'
+  ) THEN RAISE EXCEPTION 'Adaptive default should be enabled'; END IF;
+
   -- The app's MEMBER_COLS query reads these four fields on every entry.
   -- Missing column grants block all sign-ins with a permission error despite
   -- a healthy Supabase auth session.

@@ -6,6 +6,7 @@ import { Btn } from "@/components/us/primitives";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { localDate } from "@/lib/nutrition";
+import { useSpace } from "@/lib/space";
 
 function todayStr() {
   const d = new Date();
@@ -13,6 +14,7 @@ function todayStr() {
 }
 
 export function WeightCard() {
+  const { me, setMember } = useSpace();
   const [logged, setLogged]   = useState<number | null>(null);
   const [input, setInput]     = useState("");
   const [editing, setEditing] = useState(false);
@@ -48,6 +50,7 @@ export function WeightCard() {
     try {
       await logWeight({ data: { weightKg: val, clientDate: localDate() } });
       setLogged(val);
+      setMember({ ...me, weight_kg: val });
       setEditing(false);
       toast.success("Weight logged ✓");
     } catch {

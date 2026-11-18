@@ -253,16 +253,19 @@ export function weekWindow(clientDate: string, weekOffset = 0) {
   return { startDate, endDate, label: `${fmt(startDate)} – ${fmt(endDate)}` };
 }
 
-/** % of completed logged days whose calorie total landed within ±10% (or ±150 kcal) of target.
- *  Today is excluded (still in progress). Returns 100 if no completed days yet. */
+/** Approximate logged-day adherence; not a medical or behavior science score.
+ *  Today is excluded (still in progress). No history is not perfect adherence. */
 export function adherencePct(
   byDate: Map<string, { calories: number }>,
   target: number,
   today: string,
+  confirmedCompleteDays: ReadonlySet<string>,
 ): number {
   if (target <= 0 || byDate.size === 0) return 0;
-  const completed = [...byDate.entries()].filter(([d]) => d < today);
-  if (completed.length === 0) return 100;
+  const completed = [...byDate.entries()].filter(
+    ([d]) => d < today && confirmedCompleteDays.has(d),
+  );
+  if (completed.length === 0) return 0;
   const threshold = Math.max(target * 0.1, 150);
   const hits = completed.filter(([, v]) => Math.abs(v.calories - target) <= threshold).length;
   return Math.round((hits / completed.length) * 100);
