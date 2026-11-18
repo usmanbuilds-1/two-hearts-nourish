@@ -148,8 +148,8 @@ function DiaryView() {
 
         {/* Remaining / over */}
         {remaining !== null && (
-          <p className={cn("text-center text-sm font-medium", remaining >= 0 ? "text-primary" : "text-destructive")}>
-            {remaining >= 0 ? `${fmt(remaining)} kcal remaining` : `${fmt(Math.abs(remaining))} kcal over target`}
+          <p className={cn("text-center text-sm font-medium", remaining >= 0 ? "text-primary" : "text-foreground")}>
+            {remaining >= 0 ? `${fmt(remaining)} kcal remaining` : `${fmt(Math.abs(remaining))} kcal above target`}
           </p>
         )}
 
@@ -199,7 +199,7 @@ function DiaryView() {
           </Btn>
           {mine.length > 0 && (
             <Btn variant="outline" className="w-full text-sm" onClick={() => { setPickedDate(localToday()); setAction("copyDay"); }}>
-              <Copy className="size-4 mr-2" /> Copy entire day to another day
+              <Copy className="size-4 mr-2" /> Copy this day
             </Btn>
           )}
         </div>

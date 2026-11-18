@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpace } from "@/lib/space";
@@ -21,6 +22,62 @@ export const Route = createFileRoute("/_space/settings")({
 });
 
 const n = (s: string) => (s.trim() === "" ? null : Math.max(0, Number(s)) || null);
+
+
+function NumberStepper({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  fallback,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  min: number;
+  max: number;
+  step: number;
+  fallback: number;
+  suffix: string;
+}) {
+  const current = Number(value);
+  const shown = Number.isFinite(current) && current > 0 ? current : null;
+  const setNext = (direction: -1 | 1) => {
+    const base = shown ?? fallback;
+    const next = Math.min(max, Math.max(min, Math.round((base + step * direction) * 10) / 10));
+    onChange(String(next));
+  };
+  return (
+    <div>
+      <span className="mb-1.5 block text-sm text-muted-foreground">{label}</span>
+      <div className="flex h-12 items-center justify-between rounded-xl border border-input bg-card px-1">
+        <button
+          type="button"
+          className="flex size-10 items-center justify-center rounded-full hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setNext(-1)}
+          aria-label={`Decrease ${label.toLowerCase()}`}
+        >
+          <Minus className="size-4" />
+        </button>
+        <div className="min-w-20 text-center">
+          <span className="num font-semibold">{shown ?? "—"}</span>
+          <span className="ml-1 text-xs text-muted-foreground">{suffix}</span>
+        </div>
+        <button
+          type="button"
+          className="flex size-10 items-center justify-center rounded-full hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setNext(1)}
+          aria-label={`Increase ${label.toLowerCase()}`}
+        >
+          <Plus className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function SettingsPage() {
   const { me, partner, room, setMember, setRoom } = useSpace();
@@ -82,7 +139,7 @@ function SettingsPage() {
     };
     const s = suggest(input);
     setF((prev) => ({ ...prev, kcal: String(s.calories), p: String(s.protein), c: String(s.carbs), fat: String(s.fat) }));
-    toast.success("Targets updated ✓ — hit Save to keep them.");
+    toast.success("Targets updated. Save changes to keep them.");
   }
 
   // Weight log
@@ -103,7 +160,7 @@ function SettingsPage() {
       setWeightInput("");
       const r = await getWeightLog();
       setWeightLog(r.entries);
-      toast.success("Weight logged ✓");
+      toast.success("Weight logged");
     } catch { toast.error("Couldn't save. Try again."); }
     finally { setWeightBusy(false); }
   }
@@ -139,7 +196,7 @@ function SettingsPage() {
     if (a.error || b.error) return void toast.error("Couldn't save your settings. Please try again.");
     setMember(a.data as Member);
     setRoom(b.data as Room);
-    toast.success("Saved ❤️");
+    toast.success("Settings saved");
   }
 
   async function exportMeals() {
@@ -186,6 +243,32 @@ function SettingsPage() {
         <Field label="My name"><TextInput value={f.name} onChange={set("name")} maxLength={40} /></Field>
         <Field label="Partner name" hint="Your partner sets their own name."><TextInput value={partner?.display_name ?? "Not joined yet"} disabled /></Field>
 
+        <Eyebrow className="pt-2">My goal</Eyebrow>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ["lose", "Lose"],
+            ["maintain", "Maintain"],
+            ["gain", "Gain"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setCalc({ ...calc, goal: value })}
+              className={`min-h-12 rounded-xl border px-2 text-sm font-medium transition-colors ${
+                calc.goal === value
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+              aria-pressed={calc.goal === value}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Used for target estimates, recipe fit and evidence notes. You can still edit your daily targets manually.
+        </p>
+
         <Eyebrow className="pt-2">My daily targets</Eyebrow>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Calories"><TextInput inputMode="numeric" value={f.kcal} onChange={set("kcal")} placeholder="—" /></Field>
@@ -196,20 +279,41 @@ function SettingsPage() {
 
         {/* Health calculator collapsible */}
         <Btn variant="outline" className="w-full" onClick={() => setShowCalc((v) => !v)}>
-          {showCalc ? "Hide" : "Calculate my targets"} 🧮
+          {showCalc ? "Hide target calculator" : "Tune targets from my details"}
         </Btn>
         {showCalc && (
           <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Height (cm)">
-                <TextInput inputMode="decimal" value={calc.heightCm} onChange={(e) => setCalc({ ...calc, heightCm: e.target.value })} placeholder="170" />
-              </Field>
-              <Field label="Weight (kg)">
-                <TextInput inputMode="decimal" value={calc.weightKg} onChange={(e) => setCalc({ ...calc, weightKg: e.target.value })} placeholder="70" />
-              </Field>
-              <Field label="Age">
-                <TextInput inputMode="numeric" value={calc.age} onChange={(e) => setCalc({ ...calc, age: e.target.value })} placeholder="25" />
-              </Field>
+            <div className="grid gap-3 min-[390px]:grid-cols-2">
+              <NumberStepper
+                label="Height"
+                value={calc.heightCm}
+                onChange={(value) => setCalc({ ...calc, heightCm: value })}
+                min={120}
+                max={230}
+                step={1}
+                fallback={170}
+                suffix="cm"
+              />
+              <NumberStepper
+                label="Weight"
+                value={calc.weightKg}
+                onChange={(value) => setCalc({ ...calc, weightKg: value })}
+                min={30}
+                max={300}
+                step={0.5}
+                fallback={70}
+                suffix="kg"
+              />
+              <NumberStepper
+                label="Age"
+                value={calc.age}
+                onChange={(value) => setCalc({ ...calc, age: value })}
+                min={18}
+                max={100}
+                step={1}
+                fallback={25}
+                suffix="years"
+              />
             </div>
 
             <Field label="Sex">
@@ -218,17 +322,6 @@ function SettingsPage() {
                   <button key={s} type="button" onClick={() => setCalc({ ...calc, sex: s })}
                     className={`rounded-xl border px-3 py-2 text-sm capitalize transition-colors ${calc.sex === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
                     {s}
-                  </button>
-                ))}
-              </div>
-            </Field>
-
-            <Field label="Goal">
-              <div className="grid grid-cols-3 gap-2">
-                {(["lose", "maintain", "gain"] as const).map((g) => (
-                  <button key={g} type="button" onClick={() => setCalc({ ...calc, goal: g })}
-                    className={`rounded-xl border px-2 py-2 text-sm capitalize transition-colors ${calc.goal === g ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
-                    {g}
                   </button>
                 ))}
               </div>
@@ -299,7 +392,7 @@ function SettingsPage() {
         <Field label="Shared goal"><TextInput value={f.goal} onChange={set("goal")} placeholder="Eat better together" maxLength={120} /></Field>
         <Field label="Custom couple message"><TextInput value={f.msg} onChange={set("msg")} placeholder="Getting healthier together, one meal at a time ❤️" maxLength={160} /></Field>
         <Field label="Together since (optional)"><TextInput type="date" value={f.since} onChange={set("since")} /></Field>
-        <Btn size="lg" className="w-full" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Btn>
+        <Btn size="lg" className="w-full" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save changes"}</Btn>
       </div>
 
       <div className="mt-10 space-y-3">
