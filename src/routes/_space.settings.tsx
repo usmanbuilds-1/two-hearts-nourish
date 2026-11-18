@@ -138,6 +138,8 @@ function SettingsPage() {
       setWeightInput("");
       const r = await getWeightLog();
       setWeightLog(r.entries);
+      setCalc((previous) => ({ ...previous, weightKg: String(kg) }));
+      setMember({ ...me, weight_kg: kg });
       toast.success("Weight logged ✓");
     } catch { toast.error("Couldn't save. Try again."); }
     finally { setWeightBusy(false); }
