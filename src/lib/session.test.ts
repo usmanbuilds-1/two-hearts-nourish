@@ -57,6 +57,7 @@ describe("ensureIdentity", () => {
     });
 
     await expect(ensureIdentity()).resolves.toBe("replacement-user");
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(auth.signInAnonymously).toHaveBeenCalledTimes(1);
   });
 
@@ -71,6 +72,7 @@ describe("ensureIdentity", () => {
     });
 
     await expect(ensureIdentity()).resolves.toBe("replacement-user");
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
   it("does not replace identity on a transient network failure", async () => {
