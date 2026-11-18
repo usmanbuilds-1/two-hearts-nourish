@@ -49,20 +49,32 @@ export async function clearSession() {
  * A definitively dead Supabase session may be replaced with a fresh anonymous
  * identity; membership is then restored separately with the saved recovery key.
  */
+async function createAnonymousIdentity() {
+  const { data: anon, error } = await supabase.auth.signInAnonymously();
+  if (error || !anon.user) throw new Error("OFFLINE_OR_UNAVAILABLE");
+  return anon.user.id;
+}
+
+/**
+ * Replace only a definitively dead Supabase browser session. The app's own
+ * room/member recovery record is deliberately left intact so the new anonymous
+ * identity can immediately rebind to the same member.
+ */
+export async function replaceDeadIdentity() {
+  // local scope clears this browser first and never revokes another device.
+  await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+  return createAnonymousIdentity();
+}
+
 export async function ensureIdentity() {
-  const createAnonymous = async () => {
-    const { data: anon, error } = await supabase.auth.signInAnonymously();
-    if (error || !anon.user) throw new Error("OFFLINE_OR_UNAVAILABLE");
-    return anon.user.id;
-  };
 
   const { data, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
-    if (isDefinitiveAuthSessionFailure(sessionError)) return createAnonymous();
+    if (isDefinitiveAuthSessionFailure(sessionError)) return replaceDeadIdentity();
     throw new Error("OFFLINE_OR_UNAVAILABLE");
   }
 
-  if (!data.session) return createAnonymous();
+  if (!data.session) return createAnonymousIdentity();
 
   // getSession() reads local state; validate the token with Supabase before
   // trusting it as the current browser identity.
@@ -70,7 +82,7 @@ export async function ensureIdentity() {
   if (!userError && userData.user) return userData.user.id;
 
   if (userError && isDefinitiveAuthSessionFailure(userError)) {
-    return createAnonymous();
+    return replaceDeadIdentity();
   }
 
   throw new Error("OFFLINE_OR_UNAVAILABLE");
