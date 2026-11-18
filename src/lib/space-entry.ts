@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { rejoinRoom } from "@/lib/room.functions";
-import { ensureIdentity, readSession, writeSession } from "@/lib/session";
+import { ensureIdentity, readSession, replaceDeadIdentity, writeSession } from "@/lib/session";
 import { loadSpace } from "@/lib/space";
 import { resolveSpaceEntry, type SpaceEntry, type StoredSpaceSession } from "./space-entry-policy";
 import { isDefinitiveAuthSessionFailure } from "./auth-session-health";
@@ -76,8 +76,7 @@ export function loadSpaceEntry(): Promise<SpaceEntry<Space>> {
     restoreMember,
     isDefinitiveAuthFailure: isDefinitiveAuthSessionFailure,
     replaceInvalidAuthSession: async () => {
-      const { data, error } = await supabase.auth.signInAnonymously();
-      if (error || !data.user) throw error ?? new Error("AUTH_REPLACEMENT_FAILED");
+      await replaceDeadIdentity();
     },
   });
 }
