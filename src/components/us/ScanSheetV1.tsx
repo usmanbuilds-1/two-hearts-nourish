@@ -35,6 +35,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const [image, setImage] = useState<string | null>(null);
   const [contextText, setContextText] = useState("");
   const [appliedContext, setAppliedContext] = useState("");
+  const [rechecking, setRechecking] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
   const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [editing, setEditing] = useState(false);
   const [errMsg, setErrMsg] = useState("");
@@ -63,6 +65,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setImage(null);
       setContextText("");
       setAppliedContext("");
+      setRechecking(false);
+      setCorrectionError("");
       setDetectedPackage(null);
       setCandidates([]);
       setCheckingLabel(false);
@@ -87,6 +91,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setCheckingLabel(false);
     setContextText("");
     setAppliedContext("");
+    setCorrectionError("");
     try {
       const compressed = await compressImage(file);
       if (id !== requestRef.current) return;
@@ -125,16 +130,16 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   }
 
   async function analyze() {
-    if (!image) return;
+    if (!image || rechecking) return;
+    const isCorrection = stage === "confirm";
     const id = ++requestRef.current;
     const foodContext = contextText.trim();
-    editedRef.current = false;
-    setStage("analyzing");
-    setLabelSource(null);
-    setLabelAdjusted(false);
-    setCandidates([]);
-    setDetectedPackage(null);
-    setCheckingLabel(false);
+    setCorrectionError("");
+    if (isCorrection) {
+      setRechecking(true);
+    } else {
+      setStage("analyzing");
+    }
     try {
       // One normal Gemini photo request. Product search below uses NO Gemini tokens.
       const r = await analyzeFood({ data: { image, ...(foodContext ? { context: foodContext } : {}) } });
