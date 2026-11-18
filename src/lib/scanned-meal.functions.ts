@@ -220,7 +220,9 @@ async function cleanQueuedPhoto(
     .select("id").eq("photo_url", path).limit(1);
   if (referenceError || (referenced?.length ?? 0) > 0) {
     await db.from("storage_cleanup_queue").update({
-      attempts: row.attempts + 1,
+      // A still-referenced image is not a failed deletion attempt. Don't
+      // exhaust its retry allowance before the final reference disappears.
+      attempts: row.attempts + (referenceError ? 1 : 0),
       last_error: referenceError ? "REFERENCE_CHECK_FAILED" : "PHOTO_STILL_REFERENCED",
     }).eq("id", row.id);
     return false;
