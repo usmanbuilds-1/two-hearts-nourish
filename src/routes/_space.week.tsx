@@ -171,11 +171,9 @@ function WeekView() {
     const theirs = partner ? meals.filter((m) => m.meal_date === d && m.member_id === partner.id) : [];
     const myT    = totals(mine);
     const theirT = totals(theirs);
-    const myHit    = me.daily_calorie_target ? myT.calories >= me.daily_calorie_target * 0.85 : mine.length > 0;
-    const theirHit = partner?.daily_calorie_target ? theirT.calories >= partner.daily_calorie_target * 0.85 : theirs.length > 0;
     const status: "both" | "one" | "empty" =
-      mine.length && theirs.length && myHit && theirHit ? "both"
-      : mine.length || theirs.length ? "one"
+      mine.length > 0 && theirs.length > 0 ? "both"
+      : mine.length > 0 || theirs.length > 0 ? "one"
       : "empty";
     return { d, mine, theirs, myT, theirT, status };
   }), [last30, meals, me, partner]);
@@ -450,8 +448,8 @@ function WeekView() {
       {tab === "history" && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-2xl font-bold">Our Journey Together 💕</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Tap any day to revisit what you shared.</p>
+            <h2 className="font-display text-2xl font-normal">30-day history</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Tap a date to see what each of you logged.</p>
           </div>
           <div className="grid grid-cols-6 gap-1.5">
             {dayData.map(({ d, status }) => {
@@ -467,15 +465,15 @@ function WeekView() {
             })}
           </div>
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" />Both on track 💕</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" />Both logged</span>
             <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-partner" />One of you</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-border" />Rest day 🌙</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-border" />No meals logged</span>
           </div>
           {selectedDay && (
             <div className="rounded-2xl border border-border bg-card p-4">
               <Eyebrow>{parseLocalDate(selectedDay.d).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</Eyebrow>
               {selectedDay.mine.length === 0 && selectedDay.theirs.length === 0 ? (
-                <p className="mt-3 text-sm text-muted-foreground">A quiet day together 🌙</p>
+                <p className="mt-3 text-sm text-muted-foreground">No meals were logged on this date.</p>
               ) : (
                 <div className="mt-3 space-y-4">
                   {selectedDay.mine.length > 0 && (
