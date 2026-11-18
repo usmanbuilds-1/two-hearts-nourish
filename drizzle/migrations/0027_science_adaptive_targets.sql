@@ -5,6 +5,7 @@ BEGIN;
 
 ALTER TABLE public.members
   ADD COLUMN IF NOT EXISTS adaptive_targets_enabled boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS adaptive_target_configured_at timestamptz,
   ADD COLUMN IF NOT EXISTS physical_activity_level numeric
     CHECK (physical_activity_level IS NULL OR (physical_activity_level >= 1.4 AND physical_activity_level <= 2.5)),
   ADD COLUMN IF NOT EXISTS target_rate_pct_per_week numeric
