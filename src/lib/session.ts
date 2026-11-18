@@ -100,6 +100,7 @@ const MESSAGES: Record<string, string> = {
   ALREADY_IN_SPACE: "This browser is already connected to a space. Open Today instead; we never erase your existing space to create a new one.",
   OFFLINE_OR_UNAVAILABLE: "We can't reach the server right now. Check your connection and try again.",
   INVALID_LINK: "That recovery link is invalid or already used. Ask for a fresh link in Settings.",
+  INVALID_INVITE: "That invitation is invalid or has expired. Ask for a fresh invite.",
   NO_PARTNER: "Your partner has not joined this space yet.",
   RECOVERY_STORAGE_UNAVAILABLE: "Recovery needs a database update. Please contact the app owner.",
   NOT_MEMBER: "Your session has expired. Please rejoin with your invite link.",
