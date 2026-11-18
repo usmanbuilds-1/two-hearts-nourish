@@ -30,23 +30,60 @@ function ReconnectScreen({ entry }: { entry: FailedEntry }) {
 
   useEffect(() => {
     if (!needsReconnect) return;
-    const retry = () => { void router.invalidate(); };
-    const whenVisible = () => {
-      if (document.visibilityState === "visible") retry();
+
+    let cancelled = false;
+    let inFlight = false;
+    let timer: number | undefined;
+    let attempt = 0;
+    const delays = [800, 2_000, 5_000, 10_000, 20_000, 30_000] as const;
+
+    const schedule = () => {
+      if (cancelled) return;
+      window.clearTimeout(timer);
+      const delay = delays[Math.min(attempt, delays.length - 1)] ?? 30_000;
+      timer = window.setTimeout(() => { void retry(); }, delay);
     };
-    window.addEventListener("online", retry);
+
+    const retry = async () => {
+      if (cancelled || inFlight) return;
+      if (document.visibilityState !== "visible" || !navigator.onLine) {
+        schedule();
+        return;
+      }
+      inFlight = true;
+      try {
+        await router.invalidate();
+      } finally {
+        inFlight = false;
+        attempt += 1;
+        schedule();
+      }
+    };
+
+    const retryNow = () => {
+      attempt = 0;
+      void retry();
+    };
+    const whenVisible = () => {
+      if (document.visibilityState === "visible") retryNow();
+    };
+
+    schedule();
+    window.addEventListener("online", retryNow);
     document.addEventListener("visibilitychange", whenVisible);
     return () => {
-      window.removeEventListener("online", retry);
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("online", retryNow);
       document.removeEventListener("visibilitychange", whenVisible);
     };
   }, [needsReconnect, router]);
 
   const heading = needsReconnect
-    ? "Reconnecting to our space"
+    ? "Opening our space…"
     : entry.kind === "recover" ? "Let's get you back in" : "Welcome to your space";
   const description = needsReconnect
-    ? "Your connection isn't ready yet. Nothing has been signed out or erased. Please try again."
+    ? "We're reconnecting automatically. You don't need to sign in again, and nothing has been signed out or erased."
     : entry.kind === "recover"
       ? "This phone needs to reconnect securely. Your shared meals are still on the server. Use your personal key or ask your partner to open Settings → Come back to us and send you a private link."
       : "This browser doesn't have a saved connection yet. Use your invitation to join or create a space.";
@@ -57,16 +94,20 @@ function ReconnectScreen({ entry }: { entry: FailedEntry }) {
         <div className="mb-4 text-sm tracking-wide text-muted-foreground">us.</div>
         <h1 className="font-display text-3xl leading-tight">{heading}</h1>
         <p className="mt-3 leading-relaxed text-muted-foreground">{description}</p>
-        {needsReconnect && (
-          <button type="button" onClick={() => void router.invalidate()}
-            className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-6 font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            Try again
-          </button>
-        )}
-        {savedCode ? (
+        {needsReconnect ? (
+          <>
+            <button type="button" onClick={() => void router.invalidate()}
+              className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-6 font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              Retry now
+            </button>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              We'll keep trying in the background while this screen is open.
+            </p>
+          </>
+        ) : savedCode ? (
           <Link to="/r/$code" params={{ code: savedCode }}
-            className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-input px-5 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            Rejoin with a personal key or device link
+            className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-input px-5 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            Reconnect this phone securely
           </Link>
         ) : (
           <Link to="/" className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-5 text-primary-foreground">
