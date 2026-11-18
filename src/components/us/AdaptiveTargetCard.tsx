@@ -156,7 +156,7 @@ export function AdaptiveTargetCard() {
                   <div className="text-xs text-muted-foreground">{yesterday}</div>
                 </div>
                 <Btn
-                  variant={data.yesterdayComplete ? "outline" : "default"}
+                  variant={data.yesterdayComplete ? "outline" : "primary"}
                   onClick={() => void setComplete(!data.yesterdayComplete)}
                 >
                   {data.yesterdayComplete ? "Undo" : "Yes, complete"}
