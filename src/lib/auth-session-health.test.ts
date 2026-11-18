@@ -22,6 +22,20 @@ describe("auth session health", () => {
     expect(isDefinitiveAuthSessionFailure({ code, status: 503 })).toBe(false);
   });
 
+  it.each([
+    { code: "PGRST301", message: "Invalid JWT" },
+    { code: "PGRST303", message: "JWT expired" },
+  ])("treats terminal Data API auth failure $code as terminal", (error) => {
+    expect(isDefinitiveAuthSessionFailure(error)).toBe(true);
+  });
+
+  it("keeps non-expiry PGRST303 failures retry-only", () => {
+    expect(isDefinitiveAuthSessionFailure({
+      code: "PGRST303",
+      message: "JWT issued at future",
+    })).toBe(false);
+  });
+
   it("recognizes the canonical invalid-refresh-token message when code is missing", () => {
     expect(isDefinitiveAuthSessionFailure({
       message: "Invalid Refresh Token: Refresh Token Not Found",

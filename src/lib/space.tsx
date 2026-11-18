@@ -38,14 +38,14 @@ export async function loadSpace(userId: string) {
     .select("member_id")
     .eq("auth_user_id", userId)
     .maybeSingle();
-  if (devErr) throw new Error("OFFLINE_OR_UNAVAILABLE");
+  if (devErr) throw devErr;
   if (!dev) return null;
   const { data: meRow, error } = await supabase
     .from("members")
     .select(MEMBER_COLS)
     .eq("id", dev.member_id)
     .maybeSingle();
-  if (error) throw new Error("OFFLINE_OR_UNAVAILABLE");
+  if (error) throw error;
   if (!meRow) return null;
   const [roomRes, membersRes, mealsRes] = await Promise.all([
     supabase.from("rooms").select("*").eq("id", meRow.room_id).single(),
@@ -58,7 +58,9 @@ export async function loadSpace(userId: string) {
       .order("created_at", { ascending: false })
       .limit(2000),
   ]);
-  if (roomRes.error || membersRes.error || mealsRes.error) throw new Error("OFFLINE_OR_UNAVAILABLE");
+  if (roomRes.error || membersRes.error || mealsRes.error) {
+    throw roomRes.error ?? membersRes.error ?? mealsRes.error;
+  }
   return {
     room: roomRes.data as Room,
     me: meRow as Member,

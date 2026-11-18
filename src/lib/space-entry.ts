@@ -10,6 +10,37 @@ type Space = NonNullable<Awaited<ReturnType<typeof loadSpace>>>;
 // Deduplicate overlapping loader invalidations while a guest is being rebound.
 let recoveryInFlight: Promise<Space> | null = null;
 
+const TRANSIENT_READ_RETRY_MS = [150, 500] as const;
+
+function browserIsOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/**
+ * Entry reads are safe to retry. This absorbs short Safari/network/deploy
+ * blips without turning them into a login-like screen. Terminal auth errors
+ * escape immediately so the secure recovery-key rebind can run instead.
+ */
+async function retryTransientRead<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= TRANSIENT_READ_RETRY_MS.length; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (
+        isDefinitiveAuthSessionFailure(error) ||
+        browserIsOffline() ||
+        attempt === TRANSIENT_READ_RETRY_MS.length
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, TRANSIENT_READ_RETRY_MS[attempt] ?? 500));
+    }
+  }
+  throw lastError;
+}
+
 async function restoreMember(saved: StoredSpaceSession): Promise<Space> {
   if (recoveryInFlight) return recoveryInFlight;
   recoveryInFlight = (async () => {
@@ -31,17 +62,17 @@ async function restoreMember(saved: StoredSpaceSession): Promise<Space> {
 export function loadSpaceEntry(): Promise<SpaceEntry<Space>> {
   return resolveSpaceEntry<Space>({
     readSavedSession: readSession,
-    hasAuthSession: async () => {
+    hasAuthSession: () => retryTransientRead(async () => {
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
       return Boolean(data.session);
-    },
-    getUserId: async () => {
+    }),
+    getUserId: () => retryTransientRead(async () => {
       const { data, error } = await supabase.auth.getUser();
       if (error) throw error;
       return data.user?.id ?? null;
-    },
-    loadSpace,
+    }),
+    loadSpace: (userId) => retryTransientRead(() => loadSpace(userId)),
     restoreMember,
     isDefinitiveAuthFailure: isDefinitiveAuthSessionFailure,
     replaceInvalidAuthSession: async () => {

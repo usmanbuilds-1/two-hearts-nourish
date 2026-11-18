@@ -39,7 +39,9 @@ export function writeSession(s: LocalSession) {
 /** Only call from explicit Leave or Forget actions. */
 export async function clearSession() {
   localStorage.removeItem(KEY);
-  await supabase.auth.signOut().catch(() => {});
+  // This app treats each browser/device as an independent sign-in. Supabase's
+  // default signOut scope is global, which can revoke refresh tokens elsewhere.
+  await supabase.auth.signOut({ scope: "local" }).catch(() => {});
 }
 
 /** Ensures this browser has its own invisible guest identity.

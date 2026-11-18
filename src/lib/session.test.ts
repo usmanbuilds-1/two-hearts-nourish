@@ -11,7 +11,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { auth },
 }));
 
-import { ensureIdentity, sessionCanRecoverRoom } from "./session";
+import { clearSession, ensureIdentity, sessionCanRecoverRoom } from "./session";
 
 describe("ensureIdentity", () => {
   beforeEach(() => {
@@ -84,6 +84,22 @@ describe("ensureIdentity", () => {
   });
 });
 
+
+describe("clearSession", () => {
+  it("signs out only this browser/device", async () => {
+    localStorage.setItem("us.session.v1", JSON.stringify({
+      roomCode: "ABCD-2345",
+      memberId: "member-1",
+      key: "a".repeat(64),
+    }));
+    auth.signOut.mockResolvedValue({ error: null });
+
+    await clearSession();
+
+    expect(localStorage.getItem("us.session.v1")).toBeNull();
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+});
 
 describe("sessionCanRecoverRoom", () => {
   const key = "a".repeat(64);
