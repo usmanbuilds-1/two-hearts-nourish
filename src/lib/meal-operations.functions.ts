@@ -434,9 +434,27 @@ export const getWeeklySummary = createServerFn({ method: "POST" })
       fat:      safeDivD(totFat,  7),
     };
 
-    // Adherence — uses client today (not server now) so today is correctly excluded
-    const tadPct = adherencePct(byDate, calorieTarget, data.clientDate);
-    const tadLabel = adherenceLabel(tadPct, calorieTarget, dailyAverageLogged.calories);
+    // Only the caller's confirmed FULL diary days are eligible. A partial
+    // meal log is not evidence that the day's total intake hit/missed a goal.
+    // Do not reveal a partner's private completeness records through analytics.
+    let completeDates = new Set<string>();
+    if (targetMemberId === memberId) {
+      const { data: confirmations, error: completionError } = await db
+        .from("nutrition_day_completeness")
+        .select("log_date")
+        .eq("member_id", memberId)
+        .gte("log_date", startDate)
+        .lt("log_date", data.clientDate);
+      if (completionError) throw new Error("SERVER_ERROR");
+      completeDates = new Set((confirmations ?? []).map((row) => row.log_date));
+    }
+    const verifiedDays = [...byDate.keys()].filter((day) => completeDates.has(day)).length;
+    const tadPct = adherencePct(byDate, calorieTarget, data.clientDate, completeDates);
+    const tadLabel = targetMemberId !== memberId
+      ? "Private to each member"
+      : verifiedDays === 0
+        ? "No confirmed complete days"
+        : adherenceLabel(tadPct, calorieTarget, dailyAverageLogged.calories);
 
     // Previous-week delta (avg on logged days only)
     let previousWeekDelta: WeeklySummary["previousWeekDelta"] = null;
