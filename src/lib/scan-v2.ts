@@ -115,8 +115,8 @@ export function parseDeterministicContext(raw: string): DeterministicContext {
   // Require a phrase referring to the WHOLE meal. "10 g oil" is not the
   // entire meal's mass and must never overwrite visual portion estimates.
   const explicitTotal = lower.match(
-    /\\b(?:total(?: weight)?|meal(?: weight| weighs)?|portion(?: weight| weighs)?|weighed)\\s*(?:is|of|:|=|about|around|approximately)?\\s*(\\d{1,4}(?:\\.\\d+)?)\\s*g(?:rams?)?\\b/
-  ) ?? lower.match(/\\b(\\d{1,4}(?:\\.\\d+)?)\\s*g(?:rams?)?\\s*(?:total|overall|for the whole meal)\\b/);
+    /\b(?:total(?: weight)?|meal(?: weight| weighs)?|portion(?: weight| weighs)?|weighed)\s*(?:is|of|:|=|about|around|approximately)?\s*(\d{1,4}(?:\.\d+)?)\s*g(?:rams?)?\b/
+  ) ?? lower.match(/\b(\d{1,4}(?:\.\d+)?)\s*g(?:rams?)?\s*(?:total|overall|for the whole meal)\b/);
   if (explicitTotal?.[1] && !gramsEach) {
     const value = finitePositive(Number(explicitTotal[1]), 10000);
     if (value !== undefined) out.totalGrams = value;
