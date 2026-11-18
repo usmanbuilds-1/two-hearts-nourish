@@ -410,14 +410,23 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   <p className="mt-1 text-xs text-muted-foreground">
                     Correct the food, ingredients, cooking method, or portion. We’ll analyze the same photo again using your correction.
                   </p>
-                  {contextNeedsRescan && (
+                  {(contextNeedsRescan || correctionError) && (
                     <div className="mt-3 space-y-2">
-                      <p className="text-sm text-muted-foreground">
+                      {contextNeedsRescan && <p className="text-sm text-muted-foreground">
                         The estimate above still uses the previous information.
-                      </p>
-                      <Btn size="lg" variant="outline" className="w-full" onClick={() => void analyze()}>
-                        Recalculate with correction
-                      </Btn>
+                      </p>}
+                      {correctionError && <p role="alert" className="text-sm text-destructive">{correctionError}</p>}
+                      {contextNeedsRescan && (
+                        <Btn size="lg" variant="outline" className="w-full" disabled={rechecking} onClick={() => void analyze()}>
+                          {rechecking ? "Recalculating…" : "Recalculate with correction"}
+                        </Btn>
+                      )}
+                      {contextNeedsRescan && (
+                        <Btn size="lg" variant="ghost" className="w-full" disabled={rechecking}
+                          onClick={() => { setContextText(appliedContext); setCorrectionError(""); }}>
+                          Discard correction and keep previous estimate
+                        </Btn>
+                      )}
                     </div>
                   )}
               </div>
@@ -436,7 +445,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                 Save this portion to my favourites for next time
               </label>
               <div className="mt-5 flex flex-col gap-2">
-                <Btn size="lg" onClick={confirm} disabled={busy || contextNeedsRescan}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
+                <Btn size="lg" onClick={confirm} disabled={busy || rechecking || contextNeedsRescan}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
                 <div className="flex gap-2">
                   {!editing && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
                   <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy}>Retake photo</Btn>
