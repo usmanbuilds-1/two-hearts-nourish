@@ -5,6 +5,7 @@ import { addDays, daysBetween } from "./nutrition";
 import { bmr } from "./health";
 import {
   fitHallMaintenance,
+  sufficientAdaptiveEvidence,
   hallLongTermParameters,
   hallTargetCalories,
   isEvidenceSupportedRate,
@@ -116,6 +117,7 @@ function configurationReady(member: AdaptiveMember): member is AdaptiveMember & 
 
   if (
     !member.adaptive_targets_enabled ||
+    !member.adaptive_target_configured_at ||
     !member.height_cm ||
     !member.age ||
     (member.sex !== "male" && member.sex !== "female") ||
@@ -202,9 +204,9 @@ async function evaluateAdaptiveTargetForMember(
   const rate =
     goal === "maintain" ? 0 : Number(member.target_rate_pct_per_week);
 
-  const configuredDate =
-    member.adaptive_target_configured_at?.slice(0, 10) ??
-    member.created_at.slice(0, 10);
+  // configurationReady() requires explicit setup; do not import pre-setup
+  // history or silently reinterpret old diet logs after enabling by default.
+  const configuredDate = member.adaptive_target_configured_at!.slice(0, 10);
 
   const { data: lastChange } = await db
     .from("calorie_target_history")
@@ -245,7 +247,7 @@ async function evaluateAdaptiveTargetForMember(
     .order("logged_date", { ascending: true });
   if (weightError) throw new Error("SERVER_ERROR");
 
-  if (!weightRows || weightRows.length < 3) return null;
+  if (!weightRows || weightRows.length < 4) return null;
 
   // Start the model on an actually observed weight date, then use only the
   // consecutive complete-intake days from that date onward.
@@ -257,7 +259,11 @@ async function evaluateAdaptiveTargetForMember(
   const usableWeights = weightRows.filter(
     (row) => row.logged_date >= startDate && row.logged_date <= endDate,
   );
-  if (usableWeights.length < 3) return null;
+  if (!sufficientAdaptiveEvidence(trimmedSegment.length, usableWeights.map((row) => row.logged_date))) {
+    // Require enough dated observations to avoid automatic changes driven by
+    // short-term fluid fluctuations or a spuriously narrow model-only interval.
+    return null;
+  }
 
   const { data: mealRows, error: mealError } = await db
     .from("meals")
