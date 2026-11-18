@@ -1,5 +1,4 @@
 import { ScanSheetV1 } from "./ScanSheetV1";
-import { ScanSheetV2 } from "./ScanSheetV2";
 
 export type ScanSheetProps = {
   open: boolean;
@@ -7,9 +6,9 @@ export type ScanSheetProps = {
   onManual: () => void;
 };
 
-// V2 is the UI default. Setting VITE_SCANNER_V2_ENABLED=false still gives us an instant rollback path.
-const V2_ENABLED = import.meta.env["VITE_SCANNER_V2_ENABLED"] !== "false";
-
+// Restore the original scanner unconditionally. Leaving the V2 implementation
+// in the repository allows a future deliberate relaunch after real-world QA;
+// an older production VITE_SCANNER_V2_ENABLED=true must NOT opt users back in.
 export function ScanSheet(props: ScanSheetProps) {
-  return V2_ENABLED ? <ScanSheetV2 {...props} /> : <ScanSheetV1 {...props} />;
+  return <ScanSheetV1 {...props} />;
 }
