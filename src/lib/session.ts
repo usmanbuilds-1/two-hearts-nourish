@@ -62,7 +62,12 @@ async function createAnonymousIdentity() {
  */
 export async function replaceDeadIdentity() {
   // local scope clears this browser first and never revokes another device.
-  await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    // Local-scope signOut clears browser storage before the best-effort revoke.
+    // A dead server-side refresh token must not prevent local recovery.
+  }
   return createAnonymousIdentity();
 }
 
