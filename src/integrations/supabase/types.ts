@@ -355,6 +355,9 @@ export type Database = {
       members: {
         Row: {
           activity_level: string | null
+          adaptive_targets_enabled: boolean
+          physical_activity_level: number | null
+          target_rate_pct_per_week: number | null
           age: number | null
           auth_user_id: string | null
           body_goal: string | null
@@ -379,6 +382,9 @@ export type Database = {
         }
         Insert: {
           activity_level?: string | null
+          adaptive_targets_enabled?: boolean
+          physical_activity_level?: number | null
+          target_rate_pct_per_week?: number | null
           age?: number | null
           auth_user_id?: string | null
           body_goal?: string | null
@@ -403,6 +409,9 @@ export type Database = {
         }
         Update: {
           activity_level?: string | null
+          adaptive_targets_enabled?: boolean
+          physical_activity_level?: number | null
+          target_rate_pct_per_week?: number | null
           age?: number | null
           auth_user_id?: string | null
           body_goal?: string | null
