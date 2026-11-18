@@ -312,3 +312,38 @@ export function hallTargetCalories(input: {
       currentWeightKg * (targetRatePctPerWeek / 100),
   };
 }
+
+
+export type AdaptiveGoal = "lose" | "maintain" | "gain";
+
+export function evidenceRateBounds(goal: AdaptiveGoal): {
+  minPctPerWeek: number;
+  maxPctPerWeek: number;
+  source: string;
+} {
+  if (goal === "gain") {
+    return {
+      minPctPerWeek: 0.25,
+      maxPctPerWeek: 0.5,
+      source: "Iraki et al. Sports (Basel). 2019;7(7):154. PMID 31247944",
+    };
+  }
+  if (goal === "lose") {
+    return {
+      minPctPerWeek: -1,
+      maxPctPerWeek: -0.5,
+      source: "Helms et al. JISSN. 2014;11:20. PMID 24864135",
+    };
+  }
+  return {
+    minPctPerWeek: 0,
+    maxPctPerWeek: 0,
+    source: "Maintenance target: zero intended body-weight change",
+  };
+}
+
+export function isEvidenceSupportedRate(goal: AdaptiveGoal, ratePctPerWeek: number): boolean {
+  if (!Number.isFinite(ratePctPerWeek)) return false;
+  const bounds = evidenceRateBounds(goal);
+  return ratePctPerWeek >= bounds.minPctPerWeek && ratePctPerWeek <= bounds.maxPctPerWeek;
+}
