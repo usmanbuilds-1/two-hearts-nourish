@@ -173,15 +173,30 @@ export const attachMyMealPhoto = createServerFn({ method: "POST" })
     if (!path) return { ok: false, error: "INVALID_PHOTO_PATH" };
     const db = await admin();
     const { data: meal, error: mealError } = await db.from("meals")
-      .select("id").eq("id", data.mealId).eq("member_id", member.id).maybeSingle();
-    if (mealError || !meal) {
-      await db.storage.from("meal-photos").remove([path]);
-      return { ok: false, error: "MEAL_NOT_FOUND" };
+      .select("id,photo_url").eq("id", data.mealId).eq("member_id", member.id).maybeSingle();
+    // Never delete an object supplied by the caller on an invalid attachment:
+    // a member can know their partner's photo path in the shared room.
+    if (mealError || !meal) return { ok: false, error: "MEAL_NOT_FOUND" };
+    if (meal.photo_url === path) return { ok: true, photoPath: path };
+    if (meal.photo_url) return { ok: false, error: "PHOTO_ALREADY_ATTACHED" };
+
+    // A photo already linked to any meal (including the partner's) must never
+    // be attached to another meal; deleting one could otherwise delete both.
+    const { data: existing, error: reuseError } = await db.from("meals")
+      .select("id").eq("photo_url", path).limit(1);
+    if (reuseError || (existing?.length ?? 0) > 0) {
+      return { ok: false, error: "PHOTO_ALREADY_IN_USE" };
     }
-    const { error: updateError } = await db.from("meals")
-      .update({ photo_url: path }).eq("id", data.mealId).eq("member_id", member.id);
-    if (updateError) {
-      await db.storage.from("meal-photos").remove([path]);
+
+    const { data: attached, error: updateError } = await db.from("meals")
+      .update({ photo_url: path })
+      .eq("id", data.mealId)
+      .eq("member_id", member.id)
+      .is("photo_url", null)
+      .select("id")
+      .maybeSingle();
+    if (updateError || !attached) {
+      // Do not delete by an unverified path, even if the upload failed.
       return { ok: false, error: "PHOTO_ATTACH_FAILED" };
     }
     return { ok: true, photoPath: path };
@@ -196,6 +211,19 @@ async function cleanQueuedPhoto(
     await db.from("storage_cleanup_queue").update({
       attempts: row.attempts + 1,
       last_error: "INVALID_STORED_PATH",
+    }).eq("id", row.id);
+    return false;
+  }
+  // Existing references take precedence over a queued deletion. Older
+  // clients may have attached the same room photo to multiple meals.
+  const { data: referenced, error: referenceError } = await db.from("meals")
+    .select("id").eq("photo_url", path).limit(1);
+  if (referenceError || (referenced?.length ?? 0) > 0) {
+    await db.from("storage_cleanup_queue").update({
+      // A still-referenced image is not a failed deletion attempt. Don't
+      // exhaust its retry allowance before the final reference disappears.
+      attempts: row.attempts + (referenceError ? 1 : 0),
+      last_error: referenceError ? "REFERENCE_CHECK_FAILED" : "PHOTO_STILL_REFERENCED",
     }).eq("id", row.id);
     return false;
   }
