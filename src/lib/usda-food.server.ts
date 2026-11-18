@@ -67,7 +67,7 @@ export function foodEnergyKcal(food: FdcFood): number | null {
   for (const nutrient of food.foodNutrients ?? []) {
     const name = nutrient.nutrientName ?? "";
     const number = String(nutrient.nutrientNumber ?? "");
-    if (!/^Energy(?:\\b|,)/i.test(name)) continue;
+    if (!/^Energy(?:\b|,)/i.test(name)) continue;
     const value = nutrient.value ?? nutrient.amount;
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) continue;
     const unit = (nutrient.unitName ?? "").trim().toLowerCase();
