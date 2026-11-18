@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { claimAiQuota } from "./ai-quota.server";
+import { mapInBatches } from "./bounded-batch";
 import { normalizeFoodAlias } from "./scan-v2";
 import { scaleUsda, searchUsdaFood } from "./usda-food.server";
 import { perServing, recipeTotals, type RecipeIngredient, type RecipeRecord } from "./recipe";
@@ -142,7 +143,9 @@ function roundedPer100(value: number, grams: number | null) {
 
 async function groundIngredient(input: z.infer<typeof modelIngredientSchema>): Promise<RecipeIngredient> {
   const query = normalizeFoodAlias(input.name);
-  const match = await searchUsdaFood(query);
+  // USDA can be temporarily unavailable; retain explicitly labeled model
+  // estimates instead of losing the entire editable recipe.
+  const match = await searchUsdaFood(query).catch(() => null);
   if (match && input.grams) {
     const nutrition = scaleUsda(match, input.grams);
     return {
@@ -213,10 +216,8 @@ export const analyzeRecipe = createServerFn({ method: "POST" })
     const parsed = parseModelRecipe(text);
     if (!parsed) return { ok: false as const, error: "AI_MALFORMED" };
 
-    const ingredients: RecipeIngredient[] = [];
-    for (const ingredient of parsed.ingredients) {
-      ingredients.push(await groundIngredient(ingredient));
-    }
+    // Batch network lookups to reduce latency without flooding USDA.
+    const ingredients = await mapInBatches(parsed.ingredients, 4, groundIngredient);
     const totals = recipeTotals(ingredients);
     return {
       ok: true as const,
