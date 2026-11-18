@@ -127,6 +127,13 @@ function configurationReady(member: AdaptiveMember): member is AdaptiveMember & 
     return false;
   }
 
+  // Do not auto-prescribe weight loss for an underweight adult. This matches
+  // the existing starting-target safety policy in health.ts.
+  if (
+    goal === "lose" && member.weight_kg && member.height_cm &&
+    member.weight_kg / ((member.height_cm / 100) ** 2) < 18.5
+  ) return false;
+
   const rate =
     goal === "maintain" ? 0 : member.target_rate_pct_per_week;
 
