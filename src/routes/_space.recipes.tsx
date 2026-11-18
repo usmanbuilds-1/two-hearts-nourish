@@ -1,467 +1,247 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Minus, Plus, Trash2, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
-import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe } from "@/lib/recipe.functions";
-import { bodyGoalLabel, perServing, recipeGoalFit, recipeTotals, scaleIngredientGrams, type RecipeIngredient, type RecipeRecord } from "@/lib/recipe";
-import { getMealTemplates, type MealTemplate } from "@/lib/meal-operations.functions";
-import { Btn, Eyebrow, Screen, TextInput } from "@/components/us/primitives";
+import { Btn, Screen, Eyebrow, TextInput } from "@/components/us/primitives";
 import { Textarea } from "@/components/ui/textarea";
+import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe } from "@/lib/recipe.functions";
+import { perServing, recipeTotals, scaleIngredientGrams, type RecipeIngredient, type RecipeRecord } from "@/lib/recipe";
 import { defaultMealType } from "@/lib/nutrition";
 import { ScienceNote } from "@/components/us/ScienceNote";
 
 export const Route = createFileRoute("/_space/recipes")({
-  head: () => ({
-    meta: [
-      { title: "Recipes — Us" },
-      { name: "description", content: "Build a recipe once and log a serving in seconds." },
-    ],
-  }),
   component: RecipesView,
 });
 
-const ANALYZE_ERRORS: Record<string, string> = {
-  AI_LIMIT: "Recipe analysis limit reached for today. You can still log food manually.",
-  AI_QUOTA_UNAVAILABLE: "Recipe analysis is temporarily unavailable. Your saved recipes still work.",
+const ERRORS: Record<string, string> = {
+  AI_LIMIT: "Recipe analysis limit reached for today.",
+  AI_QUOTA_UNAVAILABLE: "Recipe analysis is temporarily unavailable.",
   AI_UNAVAILABLE: "Recipe analysis is not configured right now.",
   AI_BUSY: "Recipe analysis is busy. Try again in a moment.",
   AI_CREDITS: "Recipe analysis is unavailable from the provider right now.",
-  AI_MALFORMED: "We couldn't turn that description into a reliable recipe. Add clearer amounts and try again.",
-  AI_FAILED: "Recipe analysis failed. Check your connection and try again.",
+  AI_MALFORMED: "Couldn't parse that recipe reliably. Add clearer amounts and try again.",
+  AI_FAILED: "Couldn't analyze that recipe. Try again.",
 };
-
-function goalTone(tone: "good" | "neutral" | "watch") {
-  if (tone === "good") return "border-primary/30 bg-primary/8 text-primary";
-  if (tone === "watch") return "border-border bg-secondary text-foreground";
-  return "border-border bg-card text-muted-foreground";
-}
-
-function MacroRow({ calories, protein, carbs, fat }: { calories: number; protein: number; carbs: number; fat: number }) {
-  return (
-    <div className="grid grid-cols-4 gap-2">
-      {[
-        ["kcal", Math.round(calories)],
-        ["protein", `${Math.round(protein)}g`],
-        ["carbs", `${Math.round(carbs)}g`],
-        ["fat", `${Math.round(fat)}g`],
-      ].map(([label, value], index) => (
-        <div key={label} className={index === 0 ? "col-span-1" : ""}>
-          <div className="num text-lg font-semibold">{value}</div>
-          <div className="text-[11px] text-muted-foreground">{label}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function RecipesView() {
   const { me, today, upsertLocal } = useSpace();
-  const qc = useQueryClient();
-  const [composerOpen, setComposerOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const [createMode, setCreateMode] = useState(false);
   const [description, setDescription] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [draftName, setDraftName] = useState("");
-  const [servings, setServings] = useState(1);
+  const [name, setName] = useState("");
+  const [servings, setServings] = useState("1");
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
-  const [logBusy, setLogBusy] = useState<string | null>(null);
-  const [logServings, setLogServings] = useState<Record<string, number>>({});
+  const [busy, setBusy] = useState(false);
+  const [loggingId, setLoggingId] = useState<string | null>(null);
 
   const recipes = useQuery<RecipeRecord[]>({
     queryKey: ["recipes", me.id],
     queryFn: () => getRecipes(),
   });
-  const legacy = useQuery<MealTemplate[]>({
-    queryKey: ["meal-templates"],
-    queryFn: () => getMealTemplates(),
-  });
 
-  const draftTotals = useMemo(() => recipeTotals(ingredients), [ingredients]);
-  const draftPerServing = useMemo(() => perServing(draftTotals, servings), [draftTotals, servings]);
-  const draftFit = recipeGoalFit(draftPerServing, me);
+  const totals = useMemo(() => perServing(recipeTotals(ingredients), Number(servings) || 1), [ingredients, servings]);
 
-  function resetDraft() {
+  function reset() {
     setDescription("");
-    setDraftName("");
-    setServings(1);
+    setName("");
+    setServings("1");
     setIngredients([]);
   }
 
   async function analyze() {
-    if (description.trim().length < 3 || analyzing) return;
-    setAnalyzing(true);
+    if (description.trim().length < 3 || busy) return;
+    setBusy(true);
     try {
       const result = await analyzeRecipe({ data: { description: description.trim() } });
       if (!result.ok) {
-        toast.error(ANALYZE_ERRORS[result.error] ?? "Couldn't analyze this recipe. Try clearer amounts.");
+        toast.error(ERRORS[result.error] ?? "Couldn't analyze this recipe.");
         return;
       }
-      setDraftName(result.recipe.name);
-      setServings(result.recipe.servings);
+      setName(result.recipe.name);
+      setServings(String(result.recipe.servings));
       setIngredients(result.recipe.ingredients);
-      toast.success("Recipe analyzed. Review the ingredients before saving.");
+      toast.success("Recipe analyzed. Review before saving.");
     } catch {
       toast.error("Couldn't analyze this recipe. Check your connection and try again.");
     } finally {
-      setAnalyzing(false);
+      setBusy(false);
     }
   }
 
   async function save() {
-    if (!draftName.trim() || ingredients.length === 0 || saving) return;
-    setSaving(true);
+    const count = Number(servings);
+    if (!name.trim() || !Number.isFinite(count) || count <= 0 || ingredients.length === 0 || busy) return;
+    setBusy(true);
     try {
-      await saveRecipe({
-        data: {
-          name: draftName.trim(),
-          servings,
-          ingredients,
-        },
-      });
-      await qc.invalidateQueries({ queryKey: ["recipes", me.id] });
+      await saveRecipe({ data: { name: name.trim(), servings: count, ingredients } });
+      await queryClient.invalidateQueries({ queryKey: ["recipes", me.id] });
       toast.success("Recipe saved");
-      resetDraft();
-      setComposerOpen(false);
+      reset();
+      setCreateMode(false);
     } catch {
-      toast.error("Couldn't save this recipe. Review the ingredients and try again.");
+      toast.error("Couldn't save this recipe.");
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
 
-  async function removeRecipe(recipeId: string) {
+  async function remove(id: string) {
     try {
-      await deleteRecipe({ data: { recipeId } });
-      await qc.invalidateQueries({ queryKey: ["recipes", me.id] });
+      await deleteRecipe({ data: { recipeId: id } });
+      await queryClient.invalidateQueries({ queryKey: ["recipes", me.id] });
       toast.success("Recipe deleted");
     } catch {
-      toast.error("Couldn't delete this recipe.");
+      toast.error("Couldn't delete recipe.");
     }
   }
 
-  async function logSaved(recipe: RecipeRecord) {
-    if (logBusy) return;
-    const amount = Math.max(0.25, Math.min(20, logServings[recipe.id] ?? 1));
-    setLogBusy(recipe.id);
+  async function log(recipe: RecipeRecord) {
+    if (loggingId) return;
+    setLoggingId(recipe.id);
     try {
       const result = await logRecipe({
-        data: {
-          recipeId: recipe.id,
-          servings: amount,
-          mealType: defaultMealType(),
-          mealDate: today,
-        },
+        data: { recipeId: recipe.id, servings: 1, mealType: defaultMealType(), mealDate: today },
       });
       upsertLocal(result.meal);
       toast.success(`${recipe.name} logged`);
     } catch {
-      toast.error("Couldn't log this recipe. Try again.");
+      toast.error("Couldn't log recipe.");
     } finally {
-      setLogBusy(null);
+      setLoggingId(null);
     }
   }
 
-  const savedRecipes = recipes.data ?? [];
-  const showComposer = composerOpen || savedRecipes.length === 0;
-
   return (
     <Screen>
-      <header>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Eyebrow>Recipes</Eyebrow>
-            <h1 className="mt-2 font-display text-4xl font-normal tracking-tight">Build once. Log fast.</h1>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-              Describe the whole recipe. We split the ingredients, ground nutrition where possible, and let you review every number.
-            </p>
-          </div>
-          <Link to="/today" className="min-h-11 shrink-0 text-sm font-medium text-muted-foreground hover:text-foreground">
-            Today
-          </Link>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-          <span className="rounded-full border border-border bg-card px-3 py-1.5">
-            Goal · <span className="font-medium text-foreground">{bodyGoalLabel(me.body_goal)}</span>
-          </span>
-          {me.daily_calorie_target ? (
-            <span className="rounded-full border border-border bg-card px-3 py-1.5">
-              {Math.round(me.daily_calorie_target).toLocaleString()} kcal/day
-            </span>
-          ) : null}
-          {me.daily_protein_target ? (
-            <span className="rounded-full border border-border bg-card px-3 py-1.5">
-              {Math.round(Number(me.daily_protein_target))}g protein/day
-            </span>
-          ) : null}
-        </div>
-      </header>
-
-      <div className="mt-6">
-        {!showComposer ? (
-          <Btn size="lg" className="w-full" onClick={() => setComposerOpen(true)}>
-            <Plus className="size-4" /> Create recipe
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Eyebrow>My Recipes</Eyebrow>
+          <Btn onClick={() => { setCreateMode((v) => !v); if (createMode) reset(); }}>
+            <Plus className="mr-1 size-4" /> New Recipe
           </Btn>
-        ) : (
-          <section className="rounded-3xl border border-border bg-card p-4">
-            <div className="flex items-center gap-2">
-              <WandSparkles className="size-4 text-primary" aria-hidden="true" />
-              <h2 className="font-medium">Describe your recipe</h2>
+        </div>
+
+        {createMode && (
+          <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <WandSparkles className="size-4 text-primary" />
+              Smart recipe adder
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Include amounts when you know them. You can edit grams after analysis.
-            </p>
             <Textarea
-              className="mt-4 min-h-28 resize-none rounded-2xl bg-background text-base"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(e) => setDescription(e.target.value)}
               placeholder="Bulking shake: 2 bananas, 50g oats, 2 tbsp peanut butter, 250ml whole milk, 5 dates"
+              className="min-h-24"
             />
-            <div className="mt-3 flex gap-2">
-              {savedRecipes.length > 0 && (
-                <Btn variant="ghost" className="flex-1" onClick={() => { setComposerOpen(false); resetDraft(); }}>
-                  Cancel
-                </Btn>
-              )}
-              <Btn className="flex-1" disabled={description.trim().length < 3 || analyzing} onClick={() => void analyze()}>
-                {analyzing ? "Analyzing…" : "Analyze recipe"}
-              </Btn>
-            </div>
+            <Btn className="w-full" disabled={busy || description.trim().length < 3} onClick={() => void analyze()}>
+              {busy && ingredients.length === 0 ? "Analyzing…" : "Analyze recipe"}
+            </Btn>
 
             {ingredients.length > 0 && (
-              <div className="mt-6 border-t border-border pt-5">
-                <div className="grid gap-3 min-[390px]:grid-cols-[1fr_110px]">
-                  <label>
-                    <span className="mb-1.5 block text-xs text-muted-foreground">Recipe name</span>
-                    <TextInput value={draftName} onChange={(event) => setDraftName(event.target.value)} maxLength={100} />
-                  </label>
+              <div className="space-y-3 border-t border-border pt-3">
+                <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Recipe name" />
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="mb-1.5 block text-xs text-muted-foreground">Makes</span>
-                    <div className="flex h-12 items-center justify-between rounded-xl border border-input bg-background px-2">
-                      <button
-                        type="button"
-                        className="flex size-10 items-center justify-center rounded-full hover:bg-secondary"
-                        onClick={() => setServings((value) => Math.max(0.25, Math.round((value - 0.25) * 4) / 4))}
-                        aria-label="Decrease recipe servings"
-                      >
-                        <Minus className="size-4" />
-                      </button>
-                      <span className="num font-semibold">{servings}</span>
-                      <button
-                        type="button"
-                        className="flex size-10 items-center justify-center rounded-full hover:bg-secondary"
-                        onClick={() => setServings((value) => Math.min(100, Math.round((value + 0.25) * 4) / 4))}
-                        aria-label="Increase recipe servings"
-                      >
-                        <Plus className="size-4" />
-                      </button>
-                    </div>
+                    <div className="mb-1 text-xs text-muted-foreground">Servings</div>
+                    <TextInput inputMode="decimal" value={servings} onChange={(e) => setServings(e.target.value)} />
+                  </div>
+                  <div className="rounded-lg bg-secondary p-2 text-xs text-muted-foreground">
+                    <div className="font-medium text-foreground">{Math.round(totals.calories)} kcal / serving</div>
+                    <div>P {Math.round(totals.protein)}g · C {Math.round(totals.carbs)}g · F {Math.round(totals.fat)}g</div>
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-2xl bg-background p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Per serving</div>
-                      <div className="num mt-1 text-3xl font-semibold">{Math.round(draftPerServing.calories)} kcal</div>
+                <div className="space-y-2">
+                  {ingredients.map((item, index) => (
+                    <div key={`${item.name}-${index}`} className="rounded-lg bg-secondary/70 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-medium">{item.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {item.amountLabel} · {item.source === "USDA" ? "USDA" : "estimate"}
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => setIngredients((all) => all.filter((_, i) => i !== index))}
+                          className="p-1 text-muted-foreground hover:text-destructive" aria-label={`Remove ${item.name}`}>
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-[90px_1fr] items-center gap-2">
+                        <TextInput
+                          inputMode="decimal"
+                          value={item.grams ?? ""}
+                          placeholder="grams"
+                          onChange={(e) => {
+                            const grams = Number(e.target.value);
+                            setIngredients((all) => all.map((current, i) =>
+                              i === index && Number.isFinite(grams) && grams > 0
+                                ? scaleIngredientGrams(current, grams)
+                                : i === index ? { ...current, grams: null } : current,
+                            ));
+                          }}
+                        />
+                        <div className="text-right text-xs text-muted-foreground">
+                          {Math.round(item.calories)} kcal · P {Math.round(item.protein)}g
+                        </div>
+                      </div>
                     </div>
-                    <div className={`rounded-full border px-3 py-1.5 text-xs font-medium ${goalTone(draftFit.tone)}`}>
-                      {draftFit.label}
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <MacroRow {...draftPerServing} />
-                  </div>
-                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{draftFit.detail}</p>
+                  ))}
                 </div>
 
-                <div className="mt-5">
-                  <div className="flex items-end justify-between">
+                <div className="flex gap-2">
+                  <Btn variant="ghost" className="flex-1" onClick={() => { setCreateMode(false); reset(); }}>Cancel</Btn>
+                  <Btn className="flex-1" disabled={busy || !name.trim() || ingredients.length === 0} onClick={() => void save()}>
+                    {busy ? "Saving…" : "Save Recipe"}
+                  </Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {(recipes.data ?? []).length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              <p>No recipes saved yet. Add one for meals or shakes you repeat.</p>
+            </div>
+          ) : (
+            (recipes.data ?? []).map((recipe) => {
+              const serving = perServing(recipeTotals(recipe.ingredients), recipe.servings);
+              return (
+                <div key={recipe.id} className="space-y-3 rounded-xl border border-border bg-card p-4">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <Eyebrow>Ingredients</Eyebrow>
-                      <p className="mt-1 text-xs text-muted-foreground">Review estimates before saving.</p>
+                      <div className="font-semibold">{recipe.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {recipe.ingredients.length} items · {Math.round(serving.calories)} kcal · {Math.round(serving.protein)}g protein / serving
+                      </div>
                     </div>
-                    <span className="text-xs text-muted-foreground">{ingredients.length} items</span>
+                    <div className="flex gap-1">
+                      <Btn size="md" onClick={() => void log(recipe)} disabled={Boolean(loggingId)}>
+                        <Utensils className="mr-1 size-3.5" /> {loggingId === recipe.id ? "…" : "Log Today"}
+                      </Btn>
+                      <Btn variant="ghost" size="md" onClick={() => void remove(recipe.id)}>
+                        <Trash2 className="size-4 text-destructive" />
+                      </Btn>
+                    </div>
                   </div>
-
-                  <div className="mt-3 space-y-2">
-                    {ingredients.map((item, index) => (
-                      <div key={`${item.name}-${index}`} className="rounded-2xl border border-border bg-background p-3">
-                        <div className="flex items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium">{item.name}</div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <span>{item.amountLabel}</span>
-                              <span aria-hidden="true">·</span>
-                              <span className={item.source === "USDA" ? "text-primary" : ""}>
-                                {item.source === "USDA" ? "USDA" : "Estimate — review"}
-                              </span>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
-                            aria-label={`Remove ${item.name}`}
-                            onClick={() => setIngredients((items) => items.filter((_, i) => i !== index))}
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-[100px_1fr] items-end gap-3">
-                          <label>
-                            <span className="mb-1 block text-[11px] text-muted-foreground">Grams</span>
-                            <TextInput
-                              inputMode="decimal"
-                              value={item.grams ?? ""}
-                              placeholder="—"
-                              onChange={(event) => {
-                                const grams = Number(event.target.value);
-                                setIngredients((items) => items.map((current, i) =>
-                                  i === index && Number.isFinite(grams) && grams > 0
-                                    ? scaleIngredientGrams(current, grams)
-                                    : i === index ? { ...current, grams: null } : current,
-                                ));
-                              }}
-                            />
-                          </label>
-                          <div className="pb-1 text-right text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">{Math.round(item.calories)} kcal</span>
-                            {" · "}P {Math.round(item.protein)}g · C {Math.round(item.carbs)}g · F {Math.round(item.fat)}g
-                          </div>
-                        </div>
+                  <div className="space-y-1.5 border-t border-border/50 pt-2">
+                    {recipe.ingredients.map((item, index) => (
+                      <div key={`${item.name}-${index}`} className="flex justify-between gap-3 rounded bg-secondary/50 px-2 py-1 text-xs">
+                        <span className="font-medium">{item.name}</span>
+                        <span className="text-muted-foreground">{item.amountLabel}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-
-                <Btn
-                  size="lg"
-                  className="mt-5 w-full"
-                  disabled={saving || ingredients.length === 0 || !draftName.trim()}
-                  onClick={() => void save()}
-                >
-                  {saving ? "Saving…" : "Save recipe"}
-                </Btn>
-              </div>
-            )}
-          </section>
-        )}
-      </div>
-
-      <section className="mt-8">
-        <div className="flex items-end justify-between">
-          <div>
-            <Eyebrow>Saved</Eyebrow>
-            <h2 className="mt-1 font-display text-2xl">Your recipes</h2>
-          </div>
-          {recipes.isFetching && <span className="text-xs text-muted-foreground">Updating…</span>}
+              );
+            })
+          )}
         </div>
 
-        {recipes.isError ? (
-          <div className="mt-4 rounded-2xl border border-border p-4 text-sm">
-            <p>Couldn't load your recipes.</p>
-            <button className="mt-2 min-h-11 font-medium text-primary" onClick={() => void recipes.refetch()}>Try again</button>
-          </div>
-        ) : savedRecipes.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-border p-5">
-            <h3 className="font-medium">No saved recipes yet</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Start with a shake, smoothie, sandwich, curry, or any meal you repeat.</p>
-          </div>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {savedRecipes.map((recipe) => {
-              const serving = perServing(recipeTotals(recipe.ingredients), recipe.servings);
-              const fit = recipeGoalFit(serving, me);
-              const amount = logServings[recipe.id] ?? 1;
-              return (
-                <article key={recipe.id} className="rounded-3xl border border-border bg-card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate font-display text-2xl">{recipe.name}</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {recipe.ingredients.length} ingredients · recipe makes {recipe.servings} serving{recipe.servings === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-destructive"
-                      aria-label={`Delete ${recipe.name}`}
-                      onClick={() => void removeRecipe(recipe.id)}
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-
-                  <div className="mt-4">
-                    <MacroRow {...serving} />
-                  </div>
-
-                  <div className="mt-3 flex items-start gap-2">
-                    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${goalTone(fit.tone)}`}>
-                      {fit.label}
-                    </span>
-                    <p className="flex-1 text-xs leading-relaxed text-muted-foreground">{fit.detail}</p>
-                  </div>
-
-                  <div className="mt-4 flex gap-2">
-                    <div className="flex h-11 items-center rounded-full border border-input bg-background px-1">
-                      <button
-                        type="button"
-                        className="flex size-9 items-center justify-center rounded-full hover:bg-secondary"
-                        aria-label="Decrease servings to log"
-                        onClick={() => setLogServings((current) => ({
-                          ...current,
-                          [recipe.id]: Math.max(0.25, Math.round((amount - 0.25) * 4) / 4),
-                        }))}
-                      >
-                        <Minus className="size-3.5" />
-                      </button>
-                      <span className="num min-w-10 text-center text-sm">{amount}×</span>
-                      <button
-                        type="button"
-                        className="flex size-9 items-center justify-center rounded-full hover:bg-secondary"
-                        aria-label="Increase servings to log"
-                        onClick={() => setLogServings((current) => ({
-                          ...current,
-                          [recipe.id]: Math.min(20, Math.round((amount + 0.25) * 4) / 4),
-                        }))}
-                      >
-                        <Plus className="size-3.5" />
-                      </button>
-                    </div>
-                    <Btn className="flex-1" disabled={Boolean(logBusy)} onClick={() => void logSaved(recipe)}>
-                      {logBusy === recipe.id ? "Logging…" : "Log serving"}
-                    </Btn>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {(legacy.data?.length ?? 0) > 0 && (
-        <details className="mt-8 rounded-2xl border border-border bg-card p-4">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between font-medium">
-            Older saved meal sets
-            <ChevronDown className="size-4 text-muted-foreground" />
-          </summary>
-          <p className="mt-1 text-xs text-muted-foreground">These are preserved from the previous recipe tool.</p>
-          <div className="mt-3 space-y-2">
-            {legacy.data!.map((template) => (
-              <div key={template.id} className="rounded-xl bg-secondary/60 p-3 text-sm">
-                <div className="font-medium">{template.name}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{template.meals.length} saved food items</div>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-
-      <div className="mt-8">
         <ScienceNote goal={me.body_goal} day={today} />
       </div>
     </Screen>
