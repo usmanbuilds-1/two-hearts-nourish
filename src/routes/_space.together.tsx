@@ -47,7 +47,7 @@ function DayCard({label,meals,partner}:{label:string;meals:Meal[];partner?:boole
           </ul>
         </>
       ):(
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">No meals logged on this date.</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Nothing logged on this date.</p>
       )}
     </div>
   );
@@ -102,7 +102,7 @@ function Together(){
               buildInviteUrl(window.location.origin, invite.roomCode, invite.token),
             ))
             .then(()=>toast.success("Private invitation copied"),()=>toast.error("Couldn't create the invitation."))}>
-            Copy private invitation
+            Copy invitation link
           </Btn>
           <p className="mt-4 text-sm text-muted-foreground">
             You can keep logging in <Link to="/today" className="font-medium text-primary underline-offset-2 hover:underline">Today</Link>.
@@ -117,9 +117,9 @@ function Together(){
               detail={room.together_since?"From the date you saved in Settings.":"Since this shared space was created."}
             />
             <SharedMetric
-              label="Days in a row"
+              label="Shared streak"
               value={stats.streak}
-              detail="Consecutive days where both of you logged at least one meal."
+              detail="Consecutive days with meal logs from both of you."
             />
           </div>
 
@@ -199,7 +199,7 @@ function Together(){
                   <span className="text-lg" aria-hidden="true">{item.icon}</span>
                   <span className={cn("min-w-0 flex-1 text-sm",item.achieved?"font-medium":"text-muted-foreground")}>{item.title}</span>
                   <span className={cn("shrink-0 text-xs font-medium",item.achieved?"text-primary":"text-muted-foreground")}>
-                    {item.achieved?"Reached":"Not yet"}
+                    {item.achieved?"Reached":"Ahead"}
                   </span>
                 </div>
               ))}

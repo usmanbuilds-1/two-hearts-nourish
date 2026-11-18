@@ -1,13 +1,13 @@
 import { createPartnerInvite } from "@/lib/room.functions";
 import { buildInviteUrl } from "@/lib/rejoin-links";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
 import { FavoriteMeals } from "@/components/us/FavoriteMeals";
 import { getQuickMeals } from "@/lib/meal-operations.functions";
 import { QuickMealsSheet } from "@/components/us/QuickMealsSheet";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Camera, Plus, Star, Wallet } from "lucide-react";
+import { Camera, Plus, Star, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
@@ -26,8 +26,7 @@ import { PrivateMealPhoto } from "@/components/us/PrivateMealPhoto";
 import { signedMealPhotoUrl } from "@/lib/private-photo";
 import { cn } from "@/lib/utils";
 import { copyMealToDay } from "@/lib/meal-operations.functions";
-import { ScienceNote } from "@/components/us/ScienceNote";
-import { bodyGoalLabel } from "@/lib/recipe";
+import { quoteForDay } from "@/lib/quotes";
 
 export const Route = createFileRoute("/_space/today")({
   head: () => ({ meta: [{ title: "Today — Us" }, { name: "description", content: "Your shared day of meals." }, { property: "og:title", content: "Today — Us" }, { property: "og:description", content: "Your shared day of meals." }] }),
@@ -168,20 +167,12 @@ function Today() {
         )}
       </header>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="flex min-h-11 items-center rounded-full border border-border bg-card px-3 text-xs text-muted-foreground">
-          Goal&nbsp;·&nbsp;<span className="font-medium text-foreground">{bodyGoalLabel(me.body_goal)}</span>
-        </div>
-        <Link
-          to="/recipes"
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary"
-        >
-          <BookOpen className="size-4" aria-hidden="true" />
-          Recipes
-        </Link>
-      </div>
+      <blockquote className="mt-4 rounded-2xl border border-border bg-card px-4 py-4">
+        <Eyebrow className="text-primary">A little note for us today</Eyebrow>
+        <p className="mt-2 font-display text-lg italic leading-relaxed text-foreground/90">“{quoteForDay(today)}”</p>
+      </blockquote>
 
-      <div className={cn("mt-4 grid gap-3",partner?"grid-cols-1 min-[350px]:grid-cols-2":"grid-cols-1")}>
+      <div className={cn("mt-6 grid gap-3",partner?"grid-cols-1 min-[350px]:grid-cols-2":"grid-cols-1")}>
         <PersonCard label="You" member={me} meals={mine} />
         {partner&&<PersonCard label={partner.display_name} member={partner} meals={theirs} partner />}
       </div>
@@ -199,12 +190,12 @@ function Today() {
       )}
 
       <div className="mt-4 grid grid-cols-3 gap-2">
-        <Btn size="lg" onClick={() => setScan(true)}><Camera className="size-4" /> Scan food</Btn>
-        <Btn size="lg" variant="outline" onClick={() => setSheet({ open: true, meal: null })}><Plus className="size-4" /> Add food</Btn>
+        <Btn size="lg" onClick={() => setScan(true)}><Camera className="size-4" /> Scan</Btn>
+        <Btn size="lg" variant="outline" onClick={() => setSheet({ open: true, meal: null })}><Plus className="size-4" /> Add</Btn>
         <Btn size="lg" variant="outline" onClick={() => {
           if (!me.daily_calorie_target) { toast("Set your calorie target in Settings first."); return; }
           setBudget(true);
-        }}><Wallet className="size-4" /> Plan day</Btn>
+        }}><Wallet className="size-4" /> Plan</Btn>
       </div>
 
       <FavoriteMeals
@@ -297,7 +288,6 @@ function Today() {
         )}
       </section>
 
-      <div className="mt-8"><ScienceNote goal={me.body_goal} day={today} /></div>
       <div className="mt-7"><WeightCard /></div>
       <QuickMealsSheet open={quickOpen} onOpenChange={setQuickOpen} meals={quick.data??[]}
         memberId={me.id} today={today} onCopy={repeatMeal} busyId={repeatId}
