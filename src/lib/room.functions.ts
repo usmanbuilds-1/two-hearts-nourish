@@ -181,7 +181,12 @@ export const getRoomPreview = createServerFn({ method: "POST" })
     const { data: room, error: roomError } = await db.from("rooms")
       .select("id,invite_token_hash,invite_expires_at").eq("room_code", code).maybeSingle();
     if (roomError) throw new Error("SERVER_ERROR");
-    if (!room) return { status: "not_found" as const };
+    if (!room) {
+      if (!(await claimSecurityAttempt(db, context.userId, "room_preview", 30))) {
+        return { status: "rate_limited" as const };
+      }
+      return { status: "not_found" as const };
+    }
 
     const now = new Date().toISOString();
     let authorized = false;
@@ -319,7 +324,7 @@ export const joinRoom = createServerFn({ method: "POST" })
     const validInvite = Boolean(
       inviteRoom?.invite_token_hash &&
       inviteRoom.invite_expires_at &&
-      inviteRoom.invite_expires_at > new Date().toISOString() &&
+      new Date(inviteRoom.invite_expires_at).getTime() > Date.now() &&
       inviteRoom.invite_token_hash === inviteHash
     );
     if (!validInvite) {
