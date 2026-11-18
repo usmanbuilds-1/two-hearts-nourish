@@ -153,6 +153,11 @@ export function assertNoSecretFields(value: unknown): void {
   }
 }
 
+export function assertExportSize(json: string, maxBytes: number): void {
+  const bytes = new TextEncoder().encode(json).byteLength;
+  if (bytes > maxBytes) throw new Error("EXPORT_TOO_LARGE");
+}
+
 export function serializeDataExport(bundle: DataExportBundle): string {
   assertNoSecretFields(bundle);
   return JSON.stringify(bundle, null, 2);
