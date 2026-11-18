@@ -37,3 +37,24 @@ export function calendarRollingAverage(entries: DatedWeight[], days = 7) {
     return { logged_date: entry.logged_date, avg: Math.round(avg*10)/10 };
   });
 }
+
+
+export function weightPlateauSpan(
+  entries: DatedWeight[],
+  opts: { minEntries?: number; minSpanDays?: number; maxRangeKg?: number } = {},
+): { detected: boolean; spanDays: number } {
+  const minEntries = opts.minEntries ?? 3;
+  const minSpanDays = opts.minSpanDays ?? 10;
+  const maxRangeKg = opts.maxRangeKg ?? 0.5;
+  if (entries.length < minEntries) return { detected: false, spanDays: 0 };
+
+  const sorted = [...entries].sort((a, b) => dayNumber(a.logged_date) - dayNumber(b.logged_date));
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  const spanDays = Math.max(0, dayNumber(last.logged_date) - dayNumber(first.logged_date));
+  if (spanDays < minSpanDays) return { detected: false, spanDays };
+
+  const weights = sorted.map((entry) => entry.weight_kg);
+  const range = Math.max(...weights) - Math.min(...weights);
+  return { detected: range < maxRangeKg, spanDays };
+}
