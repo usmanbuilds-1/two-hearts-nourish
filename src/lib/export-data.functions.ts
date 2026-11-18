@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   DATA_EXPORT_EXCLUDED,
   DATA_EXPORT_SCHEMA_VERSION,
+  assertExportSize,
   safeMealForExport,
   serializeDataExport,
   type DataExportBundle,
@@ -302,8 +303,6 @@ export const exportMyDataJson = createServerFn({ method: "POST" })
     };
 
     const json = serializeDataExport(bundle);
-    const bytes = new TextEncoder().encode(json).byteLength;
-    if (bytes > MAX_EXPORT_BYTES) throw new Error("EXPORT_TOO_LARGE");
-
+    assertExportSize(json, MAX_EXPORT_BYTES);
     return json;
   });
