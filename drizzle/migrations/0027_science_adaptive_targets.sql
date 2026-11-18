@@ -77,7 +77,7 @@ CREATE OR REPLACE FUNCTION public.apply_adaptive_target_change(
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $fn$
 DECLARE
   v_current_target integer;
   v_history_id uuid;
@@ -152,7 +152,7 @@ BEGIN
 
   RETURN v_history_id;
 END;
-$;
+$fn$;
 
 REVOKE ALL ON FUNCTION public.apply_adaptive_target_change(
   uuid,integer,integer,integer,integer,integer,integer,integer,numeric,numeric,numeric,date,date,integer,integer,jsonb
