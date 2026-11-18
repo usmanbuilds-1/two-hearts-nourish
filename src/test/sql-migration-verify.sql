@@ -188,6 +188,9 @@ BEGIN
   SELECT public.claim_ai_request_v2(member_b,'strong_scan',2,1) INTO succeeded;
   IF succeeded IS DISTINCT FROM false THEN RAISE EXCEPTION 'V2 global cap exceeded'; END IF;
 
+  SELECT public.claim_security_attempt(actor,'personal_data_export',60,3) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Personal export security budget unavailable'; END IF;
+
   SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
   IF succeeded IS DISTINCT FROM true THEN RAISE EXCEPTION 'Security budget first attempt'; END IF;
   SELECT public.claim_security_attempt(actor,'room_preview',600,2) INTO succeeded;
