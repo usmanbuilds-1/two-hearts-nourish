@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
+import { Pencil, Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { Btn, Screen, Eyebrow, TextInput } from "@/components/us/primitives";
 import { Textarea } from "@/components/ui/textarea";
-import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe } from "@/lib/recipe.functions";
+import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe, updateRecipe } from "@/lib/recipe.functions";
 import { perServing, recipeTotals, scaleIngredientGrams, type RecipeIngredient, type RecipeRecord } from "@/lib/recipe";
 import { defaultMealType } from "@/lib/nutrition";
 
@@ -60,6 +60,7 @@ function RecipesView() {
   const queryClient = useQueryClient();
 
   const [createMode, setCreateMode] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [name, setName] = useState("");
   const [servings, setServings] = useState("1");
@@ -75,10 +76,21 @@ function RecipesView() {
   const totals = useMemo(() => perServing(recipeTotals(ingredients), Number(servings) || 1), [ingredients, servings]);
 
   function reset() {
+    setEditingId(null);
     setDescription("");
     setName("");
     setServings("1");
     setIngredients([]);
+  }
+
+  function startEdit(recipe: RecipeRecord) {
+    setEditingId(recipe.id);
+    setName(recipe.name);
+    setDescription("");
+    setServings(String(recipe.servings));
+    setIngredients(recipe.ingredients);
+    setCreateMode(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function analyze() {
@@ -113,9 +125,13 @@ function RecipesView() {
     }
     setBusy(true);
     try {
-      await saveRecipe({ data: { name: name.trim(), servings: count, ingredients } });
+      if (editingId) {
+        await updateRecipe({ data: { recipeId: editingId, name: name.trim(), servings: count, ingredients } });
+      } else {
+        await saveRecipe({ data: { name: name.trim(), servings: count, ingredients } });
+      }
       await queryClient.invalidateQueries({ queryKey: ["recipes", me.id] });
-      toast.success("Recipe saved");
+      toast.success(editingId ? "Recipe updated" : "Recipe saved");
       reset();
       setCreateMode(false);
     } catch {
@@ -156,8 +172,8 @@ function RecipesView() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Eyebrow>My Recipes</Eyebrow>
-          <Btn onClick={() => { setCreateMode((v) => !v); if (createMode) reset(); }}>
-            <Plus className="mr-1 size-4" /> New Recipe
+          <Btn onClick={() => { if (createMode) { reset(); setCreateMode(false); } else { reset(); setCreateMode(true); } }}>
+            <Plus className="mr-1 size-4" /> {createMode ? "Close" : "New Recipe"}
           </Btn>
         </div>
 
@@ -165,7 +181,7 @@ function RecipesView() {
           <div className="space-y-3 rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <WandSparkles className="size-4 text-primary" />
-              Smart recipe adder
+              {editingId ? "Edit saved recipe" : "Create a recipe"}
             </div>
             <Textarea
               value={description}
@@ -261,7 +277,7 @@ function RecipesView() {
                 <div className="flex gap-2">
                   <Btn variant="ghost" className="flex-1" onClick={() => { setCreateMode(false); reset(); }}>Cancel</Btn>
                   <Btn className="flex-1" disabled={busy || !name.trim() || ingredients.length === 0} onClick={() => void save()}>
-                    {busy ? "Saving…" : "Save Recipe"}
+                    {busy ? "Saving…" : editingId ? "Save Changes" : "Save Recipe"}
                   </Btn>
                 </div>
               </div>
@@ -294,6 +310,9 @@ function RecipesView() {
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <Btn size="md" variant="outline" aria-label={`Edit ${recipe.name}`} onClick={() => startEdit(recipe)}>
+                        <Pencil className="size-4" />
+                      </Btn>
                       <Btn size="md" onClick={() => void log(recipe)} disabled={Boolean(loggingId)}>
                         <Utensils className="mr-1 size-3.5" /> {loggingId === recipe.id ? "…" : "Log Today"}
                       </Btn>
