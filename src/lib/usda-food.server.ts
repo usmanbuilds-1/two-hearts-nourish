@@ -58,12 +58,35 @@ function nutrientValue(food: FdcFood, names: RegExp[]): number | null {
   return null;
 }
 
+/**
+ * FDC exposes both kcal and kJ energy entries under the name "Energy".
+ * Never assume the first entry is kcal: 690 kJ is only about 165 kcal.
+ */
+export function foodEnergyKcal(food: FdcFood): number | null {
+  let energyKj: number | null = null;
+  for (const nutrient of food.foodNutrients ?? []) {
+    const name = nutrient.nutrientName ?? "";
+    const number = String(nutrient.nutrientNumber ?? "");
+    if (!/^Energy(?:\\b|,)/i.test(name)) continue;
+    const value = nutrient.value ?? nutrient.amount;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) continue;
+    const unit = (nutrient.unitName ?? "").trim().toLowerCase();
+    if (unit === "kcal" || unit === "kilocalories" ||
+        (!unit && number === "208") || /kcal/i.test(name)) {
+      return value;
+    }
+    if (unit === "kj" || number === "268") energyKj = value;
+  }
+  // If kcal is absent, make the units explicit by converting any kJ entry.
+  return energyKj === null ? null : energyKj / 4.184;
+}
+
 export function normalizeFdcFood(food: FdcFood, query: string): UsdaFoodMatch | null {
   const fdcId = food.fdcId;
   const label = food.description?.trim();
   if (!Number.isInteger(fdcId) || !label) return null;
 
-  const calories = nutrientValue(food, [/^Energy$/i, /Energy.*kcal/i]);
+  const calories = foodEnergyKcal(food);
   const protein = nutrientValue(food, [/^Protein$/i]);
   const carbs = nutrientValue(food, [/Carbohydrate.*difference/i, /^Carbohydrate$/i]);
   const fat = nutrientValue(food, [/Total lipid.*fat/i, /^Total fat$/i]);
