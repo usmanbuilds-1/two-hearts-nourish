@@ -693,6 +693,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_adaptive_target_change: {
+        Args: {
+          p_member_id:string
+          p_expected_old_target:number|null
+          p_new_target:number
+          p_estimated_maintenance:number
+          p_maintenance_ci95_low:number
+          p_maintenance_ci95_high:number
+          p_target_ci95_low:number
+          p_target_ci95_high:number
+          p_target_rate_pct_per_week:number
+          p_desired_kg_per_week:number
+          p_model_rmse_kg:number
+          p_data_start:string
+          p_data_end:string
+          p_complete_days:number
+          p_weight_points:number
+          p_source_references:Json
+        }
+        Returns:string
+      }
       my_member_id: { Args: never; Returns: string }
       my_room_id: { Args: never; Returns: string }
       claim_ai_request: { Args: { p_member_id: string; p_mode: string; p_daily_cap: number }; Returns: boolean }
