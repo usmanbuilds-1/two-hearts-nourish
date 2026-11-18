@@ -447,6 +447,112 @@ export type Database = {
           },
         ]
       }
+      nutrition_day_completeness: {
+        Row: {
+          member_id: string
+          log_date: string
+          completed_at: string
+        }
+        Insert: {
+          member_id: string
+          log_date: string
+          completed_at?: string
+        }
+        Update: {
+          member_id?: string
+          log_date?: string
+          completed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_day_completeness_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calorie_target_history: {
+        Row: {
+          id: string
+          member_id: string
+          old_target: number | null
+          new_target: number
+          estimated_maintenance: number
+          maintenance_ci95_low: number
+          maintenance_ci95_high: number
+          target_ci95_low: number
+          target_ci95_high: number
+          target_rate_pct_per_week: number
+          desired_kg_per_week: number
+          model_version: string
+          model_rmse_kg: number
+          data_start: string
+          data_end: string
+          complete_days: number
+          weight_points: number
+          change_reason: string
+          source_references: Json
+          created_at: string
+          seen_at: string | null
+        }
+        Insert: {
+          id?: string
+          member_id: string
+          old_target?: number | null
+          new_target: number
+          estimated_maintenance: number
+          maintenance_ci95_low: number
+          maintenance_ci95_high: number
+          target_ci95_low: number
+          target_ci95_high: number
+          target_rate_pct_per_week: number
+          desired_kg_per_week: number
+          model_version: string
+          model_rmse_kg: number
+          data_start: string
+          data_end: string
+          complete_days: number
+          weight_points: number
+          change_reason: string
+          source_references: Json
+          created_at?: string
+          seen_at?: string | null
+        }
+        Update: {
+          id?: string
+          member_id?: string
+          old_target?: number | null
+          new_target?: number
+          estimated_maintenance?: number
+          maintenance_ci95_low?: number
+          maintenance_ci95_high?: number
+          target_ci95_low?: number
+          target_ci95_high?: number
+          target_rate_pct_per_week?: number
+          desired_kg_per_week?: number
+          model_version?: string
+          model_rmse_kg?: number
+          data_start?: string
+          data_end?: string
+          complete_days?: number
+          weight_points?: number
+          change_reason?: string
+          source_references?: Json
+          created_at?: string
+          seen_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calorie_target_history_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       progress_notes: {
         Row: {
           created_at: string
