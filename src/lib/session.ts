@@ -49,20 +49,37 @@ export async function clearSession() {
  * A definitively dead Supabase session may be replaced with a fresh anonymous
  * identity; membership is then restored separately with the saved recovery key.
  */
+async function createAnonymousIdentity() {
+  const { data: anon, error } = await supabase.auth.signInAnonymously();
+  if (error || !anon.user) throw new Error("OFFLINE_OR_UNAVAILABLE");
+  return anon.user.id;
+}
+
+/**
+ * Replace only a definitively dead Supabase browser session. The app's own
+ * room/member recovery record is deliberately left intact so the new anonymous
+ * identity can immediately rebind to the same member.
+ */
+export async function replaceDeadIdentity() {
+  // local scope clears this browser first and never revokes another device.
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    // Local-scope signOut clears browser storage before the best-effort revoke.
+    // A dead server-side refresh token must not prevent local recovery.
+  }
+  return createAnonymousIdentity();
+}
+
 export async function ensureIdentity() {
-  const createAnonymous = async () => {
-    const { data: anon, error } = await supabase.auth.signInAnonymously();
-    if (error || !anon.user) throw new Error("OFFLINE_OR_UNAVAILABLE");
-    return anon.user.id;
-  };
 
   const { data, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
-    if (isDefinitiveAuthSessionFailure(sessionError)) return createAnonymous();
+    if (isDefinitiveAuthSessionFailure(sessionError)) return replaceDeadIdentity();
     throw new Error("OFFLINE_OR_UNAVAILABLE");
   }
 
-  if (!data.session) return createAnonymous();
+  if (!data.session) return createAnonymousIdentity();
 
   // getSession() reads local state; validate the token with Supabase before
   // trusting it as the current browser identity.
@@ -70,7 +87,7 @@ export async function ensureIdentity() {
   if (!userError && userData.user) return userData.user.id;
 
   if (userError && isDefinitiveAuthSessionFailure(userError)) {
-    return createAnonymous();
+    return replaceDeadIdentity();
   }
 
   throw new Error("OFFLINE_OR_UNAVAILABLE");
@@ -88,6 +105,7 @@ const MESSAGES: Record<string, string> = {
   ALREADY_IN_SPACE: "This browser is already connected to a space. Open Today instead; we never erase your existing space to create a new one.",
   OFFLINE_OR_UNAVAILABLE: "We can't reach the server right now. Check your connection and try again.",
   INVALID_LINK: "That recovery link is invalid or already used. Ask for a fresh link in Settings.",
+  INVALID_INVITE: "That invitation is invalid or has expired. Ask for a fresh invite.",
   NO_PARTNER: "Your partner has not joined this space yet.",
   RECOVERY_STORAGE_UNAVAILABLE: "Recovery needs a database update. Please contact the app owner.",
   NOT_MEMBER: "Your session has expired. Please rejoin with your invite link.",

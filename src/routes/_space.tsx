@@ -35,12 +35,12 @@ function ReconnectScreen({ entry }: { entry: FailedEntry }) {
     let inFlight = false;
     let timer: number | undefined;
     let attempt = 0;
-    const delays = [800, 2_000, 5_000, 10_000, 20_000, 30_000] as const;
+    const delays = [1_500, 8_000, 30_000, 120_000] as const;
 
     const schedule = () => {
       if (cancelled) return;
       window.clearTimeout(timer);
-      const delay = delays[Math.min(attempt, delays.length - 1)] ?? 30_000;
+      const delay = delays[Math.min(attempt, delays.length - 1)] ?? 120_000;
       timer = window.setTimeout(() => { void retry(); }, delay);
     };
 
