@@ -550,7 +550,7 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
                   <div>
                     <p className="font-display text-xl">{foodName}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {estimate.confidence} confidence · score {Math.round(estimate.confidence_score * 100)}%
+                      {estimate.confidence} evidence quality · estimate, not verified accuracy
                       {estimate.escalated ? " · checked by stronger model" : ""}
                     </p>
                   </div>
@@ -598,7 +598,7 @@ export function ScanSheetV2({ open, onOpenChange, onManual }: ScanSheetProps) {
                             source_ref: null,
                           })} />
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {item.source_name} · {Math.round(item.confidence * 100)}% evidence confidence
+                          {item.source_name} · Review ingredients and portions
                           {item.hidden_fat_risk !== "low" ? " · " + item.hidden_fat_risk + " hidden-fat uncertainty" : ""}
                         </p>
                         {item.personal_prior_grams && item.personal_prior_confirmations && (
