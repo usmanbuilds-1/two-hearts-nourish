@@ -1,8 +1,8 @@
 /**
  * Evidence-based estimates: BMI (WHO), BMR (Mifflin–St Jeor, the most accurate
  * general-population equation per ADA review), TDEE = BMR × activity factor.
- * Safety: adults only, no aggressive deficits, never below sex-specific floors
- * or BMR, no weight-loss suggestion when underweight.
+ * Adults only. This is a conservative starting estimate, not a measured TDEE.
+ * Goal calories should be calibrated against real weight/intake trends over time.
  */
 export type Sex = "male" | "female";
 export type Activity = "sedentary" | "light" | "moderate" | "active" | "very_active";
@@ -72,11 +72,11 @@ export function suggest(i: HealthInput): Suggestion {
   }
   let kcal = tdee;
   if (goal === "lose") kcal = tdee - Math.min(500, tdee * 0.2); // ~0.5 kg/week max
-  if (goal === "gain") kcal = tdee + 400; // moderate lean bulk (~0.4 kg/month)
+  if (goal === "gain") kcal = tdee + 400; // fixed starting surplus; adaptive calibration should refine this
   const floor = Math.max(i.sex === "male" ? 1500 : 1200, base);
   if (kcal < floor) {
     kcal = floor;
-    notes.push("We kept this at a safe minimum. Going lower should only happen with medical supervision.");
+    notes.push("We kept this at the app's conservative lower guardrail. Individual needs can differ.");
   }
   kcal = r10(kcal);
   // Protein from a reference weight (BMI 25) when BMI ≥ 30 so it isn't inflated.
