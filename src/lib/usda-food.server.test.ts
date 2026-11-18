@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { normalizeFdcFood, scoreFoodCandidate, scaleUsda } from "./usda-food.server";
+import { foodEnergyKcal, normalizeFdcFood, scoreFoodCandidate, scaleUsda } from "./usda-food.server";
 
 describe("USDA grounding", () => {
+  it("never treats FDC kJ values as kcal", () => {
+    expect(foodEnergyKcal({
+      foodNutrients: [
+        { nutrientName: "Energy", unitName: "kJ", value: 690.36 },
+        { nutrientName: "Energy", unitName: "kcal", value: 165 },
+      ],
+    })).toBe(165);
+    expect(foodEnergyKcal({
+      foodNutrients: [{ nutrientName: "Energy", unitName: "kJ", value: 690.36 }],
+    })).toBeCloseTo(165, 1);
+    expect(foodEnergyKcal({
+      foodNutrients: [{ nutrientName: "Energy", value: 690.36 }],
+    })).toBeNull();
+  });
   it("requires meaningful lexical overlap", () => {
     expect(scoreFoodCandidate("chicken breast", "Chicken breast, roasted")).toBeGreaterThan(0.5);
     expect(scoreFoodCandidate("chicken breast", "Chocolate cake")).toBe(0);
@@ -13,7 +27,8 @@ describe("USDA grounding", () => {
       description: "Chicken breast, roasted",
       dataType: "Foundation",
       foodNutrients: [
-        { nutrientName: "Energy", value: 165 },
+        { nutrientName: "Energy", unitName: "kJ", value: 690.36 },
+        { nutrientName: "Energy", unitName: "kcal", value: 165 },
         { nutrientName: "Protein", value: 31 },
         { nutrientName: "Carbohydrate, by difference", value: 0 },
         { nutrientName: "Total lipid (fat)", value: 3.6 },
