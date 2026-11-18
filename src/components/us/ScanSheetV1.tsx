@@ -85,6 +85,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setLabelSource(null);
     setDetectedPackage(null);
     setCheckingLabel(false);
+    setContextText("");
+    setAppliedContext("");
     try {
       const compressed = await compressImage(file);
       if (id !== requestRef.current) return;
@@ -235,6 +237,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setDetectedPackage(null);
     setLabelSource(null);
     setAmountGrams("");
+    setContextText("");
+    setAppliedContext("");
     setImage(null);
     setStage("pick");
     cameraRef.current?.click();
@@ -268,35 +272,9 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
             </div>
           )}
 
-          {image && (stage === "preview" || stage === "confirm") && (
-            <div className="mt-4">
-              <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
-                Tell the scanner more <span className="font-normal text-muted-foreground">(optional)</span>
-              </label>
-              <textarea id="scan-food-context" rows={2} maxLength={400}
-                value={contextText} onChange={(event) => setContextText(event.target.value)}
-                placeholder="e.g. This is a chicken patty, not fish. The bun was toasted in butter."
-                className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Add food identity, cooking method, or portion details the photo cannot show. Your notes are included in the scan.
-              </p>
-              {contextNeedsRescan && (
-                <div className="mt-3 space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Your updated details have not been used in the numbers below yet.
-                  </p>
-                  <Btn size="lg" variant="outline" className="w-full" onClick={() => void analyze()}>
-                    Reanalyze with updated details
-                  </Btn>
-                </div>
-              )}
-            </div>
-          )}
-
           {stage === "preview" && (
             <div className="mt-5 flex gap-2">
-              <Btn size="lg" className="flex-1" onClick={analyze}>{contextText.trim() ? "Analyze with details" : "Analyze"}</Btn>
+              <Btn size="lg" className="flex-1" onClick={analyze}>Analyze</Btn>
               <Btn size="lg" variant="outline" onClick={retake}>Retake photo</Btn>
             </div>
           )}
@@ -395,6 +373,30 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                    <div className="mt-4 text-xs text-muted-foreground">{labelSource ? "Source: Open Food Facts community label (check packet)" : <>AI estimate · Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></>}</div>
                 </div>
               )}
+<div className="mt-4">
+                  <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
+                    Was anything wrong? <span className="font-normal text-muted-foreground">(optional)</span>
+                  </label>
+                  <textarea id="scan-food-context" rows={2} maxLength={400}
+                    value={contextText} onChange={(event) => setContextText(event.target.value)}
+                    placeholder="e.g. This is a chicken patty, not fish. It was cooked with butter."
+                    className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Correct the food, ingredients, cooking method, or portion. We’ll analyze the same photo again using your correction.
+                  </p>
+                  {contextNeedsRescan && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        The estimate above still uses the previous information.
+                      </p>
+                      <Btn size="lg" variant="outline" className="w-full" onClick={() => void analyze()}>
+                        Recalculate with correction
+                      </Btn>
+                    </div>
+                  )}
+              </div>
+
               <label className="mt-4 flex min-h-12 items-start gap-3 rounded-xl border border-border p-3 text-sm text-foreground">
                 <input type="checkbox" checked={keepPhoto} onChange={event => setKeepPhoto(event.target.checked)}
                   className="mt-0.5 size-4 accent-primary" />
