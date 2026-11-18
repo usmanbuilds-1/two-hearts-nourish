@@ -11,6 +11,7 @@ DECLARE
   succeeded boolean;
   scan_a uuid := '99999999-9999-4999-8999-999999999999';
   scanned_meal uuid;
+  adaptive_history uuid;
 BEGIN
   IF (SELECT public FROM storage.buckets WHERE id='meal-photos') IS DISTINCT FROM false
     THEN RAISE EXCEPTION 'Bucket must be private'; END IF;
@@ -80,6 +81,15 @@ BEGIN
     OR has_table_privilege('authenticated','public.member_food_priors','SELECT')
     OR has_table_privilege('authenticated','public.meal_components','SELECT')
     THEN RAISE EXCEPTION 'Private scanner learning tables exposed'; END IF;
+  IF has_table_privilege('authenticated','public.nutrition_day_completeness','SELECT')
+    OR has_table_privilege('authenticated','public.calorie_target_history','SELECT')
+    THEN RAISE EXCEPTION 'Adaptive target evidence tables exposed'; END IF;
+  IF has_function_privilege(
+       'authenticated',
+       'public.apply_adaptive_target_change(uuid,integer,integer,integer,integer,integer,integer,integer,numeric,numeric,numeric,date,date,integer,integer,jsonb)',
+       'EXECUTE'
+     )
+    THEN RAISE EXCEPTION 'Adaptive target write RPC exposed to browser'; END IF;
 
   INSERT INTO public.rooms(id,room_code) VALUES(room,'TEST-ROOM');
   INSERT INTO public.members(
@@ -91,6 +101,63 @@ BEGIN
     VALUES (device_a,member_a,actor),(device_b,member_a,'11111111-1111-4111-8111-111111111111');
   INSERT INTO public.member_recovery_keys(member_id,device_id,token_hash)
     VALUES(member_a,device_b,repeat('c',64));
+
+  -- Adaptive target changes must update the target and audit history atomically.
+  SELECT public.apply_adaptive_target_change(
+    member_a,
+    NULL,
+    2450,
+    2300,
+    2200,
+    2400,
+    2350,
+    2550,
+    0.25,
+    0.175,
+    0.12,
+    '2026-10-01',
+    '2026-10-28',
+    28,
+    5,
+    '["Hall 2011","NIDDK Body Weight Planner"]'::jsonb
+  ) INTO adaptive_history;
+  IF adaptive_history IS NULL
+    THEN RAISE EXCEPTION 'Adaptive target history id missing'; END IF;
+  IF (SELECT daily_calorie_target FROM public.members WHERE id=member_a) <> 2450
+    THEN RAISE EXCEPTION 'Adaptive target was not applied'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.calorie_target_history
+    WHERE id=adaptive_history
+      AND member_id=member_a
+      AND old_target IS NULL
+      AND new_target=2450
+      AND model_version='hall-2011-longterm-v1'
+  ) THEN RAISE EXCEPTION 'Adaptive target history missing'; END IF;
+
+  BEGIN
+    PERFORM public.apply_adaptive_target_change(
+      member_a,
+      NULL,
+      2500,
+      2350,
+      2250,
+      2450,
+      2400,
+      2600,
+      0.25,
+      0.175,
+      0.10,
+      '2026-11-01',
+      '2026-11-28',
+      28,
+      5,
+      '["Hall 2011"]'::jsonb
+    );
+    RAISE EXCEPTION 'Concurrent target overwrite unexpectedly accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM='Concurrent target overwrite unexpectedly accepted' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE '%TARGET_CHANGED_CONCURRENTLY%' THEN RAISE; END IF;
+  END;
 
   INSERT INTO public.meals(
     room_id,member_id,food_name,calories,protein,carbs,fat,meal_date,meal_type,is_planned
