@@ -75,10 +75,12 @@ CREATE TABLE public.members (
 -- The disposable fixture begins after the early schema migrations, so
 -- reproduce the existing weight-log table before testing atomic writes.
 CREATE TABLE public.weight_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   member_id uuid NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
-  logged_date date NOT NULL,
-  weight_kg numeric NOT NULL CHECK (weight_kg > 0),
-  PRIMARY KEY(member_id,logged_date)
+  logged_date date NOT NULL DEFAULT CURRENT_DATE,
+  weight_kg numeric(5,2) NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT weight_logs_member_date UNIQUE(member_id,logged_date)
 );
 
 CREATE TABLE public.member_devices (
