@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { calendarDaysAgo, calendarRollingAverage, dayNumber, weightPlateauSpan, weightTrendKgPerWeek } from "./weight-math";
+import { calendarDaysAgo, calendarRollingAverage, weightPlateauSpan, weightTrendKgPerWeek } from "./weight-math";
+import { isCurrentLocalCalendarDate } from "./local-calendar-boundary";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -40,33 +41,23 @@ const EMPTY_ANALYTICS: WeightAnalytics = {
 export const logWeight = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: { weightKg: number; clientDate: string }) => ({
-    weightKg: z.number().min(20).max(400).parse(i.weightKg),
+    weightKg: z.number().finite().min(20).max(400).parse(i.weightKg),
     clientDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.clientDate),
   }))
   .handler(async ({ data, context }) => {
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
-    // Respect the phone calendar (including users near midnight in other time zones).
-    // Reject dates well outside the UTC-neighboring local day window.
+    // The migration-backed RPC performs both writes within one transaction,
+    // deriving the member again from the authenticated browser device.
     const today = data.clientDate;
-    const clockDistance = Math.abs(Date.now() - (dayNumber(today) * 86400000 + 12*3600000));
-    if (!Number.isFinite(clockDistance) || clockDistance > 48*3600000) throw new Error("INVALID_DATE");
-    const { error } = await db
-      .from("weight_logs")
-      .upsert(
-        { member_id: memberId, logged_date: today, weight_kg: data.weightKg },
-        { onConflict: "member_id,logged_date" },
-      );
-    if (error) throw new Error("SERVER_ERROR");
-
-    // Keep the member profile in sync with the latest weight used by target calculations.
-    const { error: memberError } = await db
-      .from("members")
-      .update({ weight_kg: data.weightKg })
-      .eq("id", memberId);
-    if (memberError) throw new Error("SERVER_ERROR");
-
+    if (!isCurrentLocalCalendarDate(today)) throw new Error("INVALID_DATE");
+    const { data: applied, error } = await db.rpc("log_member_weight_atomic", {
+      p_actor_auth_user_id: context.userId,
+      p_log_date: today,
+      p_weight_kg: data.weightKg,
+    });
+    if (error || applied !== true) throw new Error("SERVER_ERROR");
     return { ok: true, logged_date: today, weight_kg: data.weightKg };
   });
 
