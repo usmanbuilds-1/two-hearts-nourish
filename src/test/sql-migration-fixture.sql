@@ -24,7 +24,8 @@ CREATE TABLE storage.buckets (
 );
 CREATE TABLE storage.objects (
   bucket_id text NOT NULL,
-  name text NOT NULL
+  name text NOT NULL,
+  owner_id text
 );
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
