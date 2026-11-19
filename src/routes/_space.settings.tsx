@@ -15,6 +15,7 @@ import { evidenceRateBounds, isEvidenceSupportedRate } from "@/lib/adaptive-targ
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
 import { localDate } from "@/lib/nutrition";
+import { validateTargets } from "@/lib/settings-validation";
 
 export const Route = createFileRoute("/_space/settings")({
   head: () => ({ meta: [{ title: "Settings — Us" }, { name: "description", content: "Names, targets and your shared message." }, { property: "og:title", content: "Settings — Us" }, { property: "og:description", content: "Names, targets and your shared message." }] }),
@@ -22,24 +23,6 @@ export const Route = createFileRoute("/_space/settings")({
 });
 
 const n = (s: string): number | null => s.trim() === "" ? null : Number(s);
-
-function validateTargets(values: { kcal: string; p: string; c: string; fat: string }): string | null {
-  const fields: Array<[string, string, number, number]> = [
-    ["Daily calories", values.kcal, 1, 10000],
-    ["Protein", values.p, 0, 2000],
-    ["Carbs", values.c, 0, 2000],
-    ["Fat", values.fat, 0, 2000],
-  ];
-  for (const [name, input, min, max] of fields) {
-    if (!input.trim()) continue;
-    const value = Number(input);
-    if (!Number.isFinite(value) || value < min || value > max ||
-        (name === "Daily calories" && !Number.isInteger(value))) {
-      return name + " must be a valid number between " + min + " and " + max + ".";
-    }
-  }
-  return null;
-}
 
 const PAL_OPTIONS = [
   { value: "1.4", label: "Mostly seated", description: "Little walking or exercise most days" },
