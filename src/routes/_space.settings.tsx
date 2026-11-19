@@ -15,13 +15,14 @@ import { evidenceRateBounds, isEvidenceSupportedRate } from "@/lib/adaptive-targ
 import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.functions";
 import type { Member, Room } from "@/lib/nutrition";
 import { localDate } from "@/lib/nutrition";
+import { validateTargets } from "@/lib/settings-validation";
 
 export const Route = createFileRoute("/_space/settings")({
   head: () => ({ meta: [{ title: "Settings — Us" }, { name: "description", content: "Names, targets and your shared message." }, { property: "og:title", content: "Settings — Us" }, { property: "og:description", content: "Names, targets and your shared message." }] }),
   component: SettingsPage,
 });
 
-const n = (s: string) => (s.trim() === "" ? null : Math.max(0, Number(s)) || null);
+const n = (s: string): number | null => s.trim() === "" ? null : Number(s);
 
 const PAL_OPTIONS = [
   { value: "1.4", label: "Mostly seated", description: "Little walking or exercise most days" },
@@ -153,7 +154,10 @@ function SettingsPage() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
   async function save() {
+    if (busy) return;
     if (!f.name.trim()) return void toast.error("Your name can't be empty.");
+    const targetError = validateTargets(f);
+    if (targetError) return void toast.error(targetError);
     setBusy(true);
     // Incomplete optional adaptive setup must never block editing other
     // profile fields. No model adjustment is allowed until setup is complete.
@@ -188,20 +192,38 @@ function SettingsPage() {
             : me.adaptive_target_configured_at)
           : null,
     };
-    const [a, b] = await Promise.all([
-      supabase.from("members").update({
-        display_name: f.name.trim().slice(0, 40),
-        daily_calorie_target: n(f.kcal), daily_protein_target: n(f.p),
-        daily_carbs_target: n(f.c), daily_fat_target: n(f.fat),
-        ...healthFields,
-      }).eq("id", me.id).select("id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, height_cm, weight_kg, age, sex, activity_level, adaptive_targets_enabled, adaptive_target_configured_at, physical_activity_level, target_rate_pct_per_week, body_goal, daily_food_budget, currency, locality, created_at").single(),
-      supabase.from("rooms").update({ shared_goal: f.goal.trim().slice(0, 120) || null, couple_message: f.msg.trim().slice(0, 160) || null, together_since: f.since || null }).eq("id", room.id).select().single(),
-    ]);
-    setBusy(false);
-    if (a.error || b.error) return void toast.error("Couldn't save your settings. Please try again.");
-    setMember(a.data as Member);
-    setRoom(b.data as Room);
-    toast.success("Saved ❤️");
+    try {
+      // These are separate PostgREST writes until the atomic settings RPC is
+      // deployed. Inspect both outcomes rather than hiding partial success.
+      const [aResult, bResult] = await Promise.allSettled([
+        supabase.from("members").update({
+          display_name: f.name.trim().slice(0, 40),
+          daily_calorie_target: n(f.kcal), daily_protein_target: n(f.p),
+          daily_carbs_target: n(f.c), daily_fat_target: n(f.fat),
+          ...healthFields,
+        }).eq("id", me.id).select("id, room_id, auth_user_id, seat, display_name, daily_calorie_target, daily_protein_target, daily_carbs_target, daily_fat_target, height_cm, weight_kg, age, sex, activity_level, adaptive_targets_enabled, adaptive_target_configured_at, physical_activity_level, target_rate_pct_per_week, body_goal, daily_food_budget, currency, locality, created_at").single(),
+        supabase.from("rooms").update({
+          shared_goal: f.goal.trim().slice(0, 120) || null,
+          couple_message: f.msg.trim().slice(0, 160) || null,
+          together_since: f.since || null,
+        }).eq("id", room.id).select().single(),
+      ]);
+      const personal = aResult.status === "fulfilled" ? aResult.value : null;
+      const shared = bResult.status === "fulfilled" ? bResult.value : null;
+      const personalSaved = Boolean(personal && !personal.error && personal.data);
+      const sharedSaved = Boolean(shared && !shared.error && shared.data);
+      if (personalSaved && personal?.data) setMember(personal.data as Member);
+      if (sharedSaved && shared?.data) setRoom(shared.data as Room);
+
+      if (personalSaved && sharedSaved) toast.success("Saved ❤️");
+      else if (personalSaved) toast.error("Personal targets saved, but the shared space settings didn't. Try saving again.");
+      else if (sharedSaved) toast.error("Shared space settings saved, but personal targets didn't. Try saving again.");
+      else toast.error("Nothing was confirmed saved. Check your connection and retry.");
+    } catch {
+      toast.error("Couldn't confirm the save. Reopen Settings to check your latest values.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function exportMeals() {
