@@ -76,6 +76,17 @@ export const saveScannedMealV2 = createServerFn({ method: "POST" })
     if (data.photoUrl && !photoPath) return { ok: false, error: "INVALID_PHOTO_PATH" };
 
     const db = await admin();
+    if (photoPath) {
+      // Room access is not upload ownership: verify Supabase Storage owner_id
+      // before the service role embeds a caller-provided path in a meal.
+      const { data: owned, error: ownershipError } = await db.rpc("photo_uploaded_by_device", {
+        p_actor_auth_user_id: context.userId,
+        p_photo_path: photoPath,
+      });
+      if (ownershipError || owned !== true) {
+        return { ok: false, error: "PHOTO_NOT_OWNED" };
+      }
+    }
     const components = data.components.map((component) => ({
       label: component.label,
       grams: component.grams ?? null,
@@ -172,6 +183,13 @@ export const attachMyMealPhoto = createServerFn({ method: "POST" })
     const path = relativePhotoPath(data.photoPath, member.room_id);
     if (!path) return { ok: false, error: "INVALID_PHOTO_PATH" };
     const db = await admin();
+    const { data: owned, error: ownershipError } = await db.rpc("photo_uploaded_by_device", {
+      p_actor_auth_user_id: context.userId,
+      p_photo_path: path,
+    });
+    if (ownershipError || owned !== true) {
+      return { ok: false, error: "PHOTO_NOT_OWNED" };
+    }
     const { data: meal, error: mealError } = await db.from("meals")
       .select("id,photo_url").eq("id", data.mealId).eq("member_id", member.id).maybeSingle();
     // Never delete an object supplied by the caller on an invalid attachment:
