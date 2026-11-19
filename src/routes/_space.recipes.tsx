@@ -161,7 +161,7 @@ function RecipesView() {
       toast.error("Choose a portion between 0 and 20 servings.");
       return;
     }
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(logDraft.mealDate)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(logDraft.mealDate)) {
       toast.error("Choose a valid meal date.");
       return;
     }
