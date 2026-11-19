@@ -55,6 +55,27 @@ export function perServing(totals: RecipeTotals, servings: number): RecipeTotals
   };
 }
 
+/** Scale full recipe totals once, then round for the stored meal.
+ * Rounding an individual serving before multiplying biases fractional portions.
+ */
+export function scaledRecipeNutrition(
+  totals: RecipeTotals,
+  recipeServings: number,
+  consumedServings: number,
+): RecipeTotals {
+  if (!Number.isFinite(recipeServings) || recipeServings <= 0 ||
+      !Number.isFinite(consumedServings) || consumedServings <= 0) {
+    throw new Error("INVALID_RECIPE_SERVINGS");
+  }
+  const factor = consumedServings / recipeServings;
+  return {
+    calories: Math.round(totals.calories * factor),
+    protein: Math.round(totals.protein * factor * 10) / 10,
+    carbs: Math.round(totals.carbs * factor * 10) / 10,
+    fat: Math.round(totals.fat * factor * 10) / 10,
+  };
+}
+
 export function scaleIngredientGrams(item: RecipeIngredient, grams: number): RecipeIngredient {
   if (!Number.isFinite(grams) || grams <= 0) return item;
   const canScale = [

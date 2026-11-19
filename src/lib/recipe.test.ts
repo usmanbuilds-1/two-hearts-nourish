@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { perServing, recipeGoalFit, recipeTotals, scaleIngredientGrams, type RecipeIngredient } from "./recipe";
+import { perServing, recipeGoalFit, recipeTotals, scaleIngredientGrams, scaledRecipeNutrition, type RecipeIngredient } from "./recipe";
 import type { Member } from "./nutrition";
 
 const ingredient: RecipeIngredient = {
@@ -57,6 +57,19 @@ describe("recipe nutrition helpers", () => {
     const totals = recipeTotals([ingredient, ingredient]);
     expect(totals.calories).toBe(380);
     expect(perServing(totals, 2).calories).toBe(190);
+  });
+
+  it("scales the full batch before rounding fractional serving quantities", () => {
+    const whole = { calories: 100, protein: 10.05, carbs: 17.55, fat: 2.55 };
+    // One sixth-serving: rounding a 1/3 portion first biases a 0.5 serving.
+    expect(scaledRecipeNutrition(whole, 3, 0.5)).toEqual({
+      calories: 17, protein: 1.7, carbs: 2.9, fat: 0.4,
+    });
+  });
+
+  it("rejects missing/invalid recipe serving yields", () => {
+    expect(() => scaledRecipeNutrition(recipeTotals([ingredient]), 0, 1)).toThrow();
+    expect(() => scaledRecipeNutrition(recipeTotals([ingredient]), 2, 0)).toThrow();
   });
 
   it("identifies an energy-and-protein-dense serving as useful for a gain goal", () => {

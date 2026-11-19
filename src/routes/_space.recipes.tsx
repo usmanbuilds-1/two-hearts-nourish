@@ -8,7 +8,7 @@ import { Btn, Screen, Eyebrow, TextInput } from "@/components/us/primitives";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe, updateRecipe } from "@/lib/recipe.functions";
 import { perServing, recipeTotals, scaleIngredientGrams, type RecipeIngredient, type RecipeRecord } from "@/lib/recipe";
-import { defaultMealType } from "@/lib/nutrition";
+import { defaultMealType, type MealType } from "@/lib/nutrition";
 
 
 export const Route = createFileRoute("/_space/recipes")({
@@ -67,6 +67,9 @@ function RecipesView() {
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
   const [busy, setBusy] = useState(false);
   const [loggingId, setLoggingId] = useState<string | null>(null);
+  const [logDraft, setLogDraft] = useState<{
+    recipeId: string; servings: string; mealDate: string; mealType: MealType;
+  } | null>(null);
 
   const recipes = useQuery<RecipeRecord[]>({
     queryKey: ["recipes", me.id],
@@ -152,16 +155,31 @@ function RecipesView() {
   }
 
   async function log(recipe: RecipeRecord) {
-    if (loggingId) return;
+    if (loggingId || !logDraft || logDraft.recipeId !== recipe.id) return;
+    const count = Number(logDraft.servings);
+    if (!Number.isFinite(count) || count <= 0 || count > 20) {
+      toast.error("Choose a portion between 0 and 20 servings.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(logDraft.mealDate)) {
+      toast.error("Choose a valid meal date.");
+      return;
+    }
     setLoggingId(recipe.id);
     try {
       const result = await logRecipe({
-        data: { recipeId: recipe.id, servings: 1, mealType: defaultMealType(), mealDate: today },
+        data: {
+          recipeId: recipe.id,
+          servings: count,
+          mealType: logDraft.mealType,
+          mealDate: logDraft.mealDate,
+        },
       });
       upsertLocal(result.meal);
-      toast.success(`${recipe.name} logged`);
+      toast.success(`${recipe.name} logged · ${count} serving${count === 1 ? "" : "s"}`);
+      setLogDraft(null);
     } catch {
-      toast.error("Couldn't log recipe.");
+      toast.error("Couldn't log recipe. Your saved recipe is unchanged.");
     } finally {
       setLoggingId(null);
     }
@@ -313,14 +331,54 @@ function RecipesView() {
                       <Btn size="md" variant="outline" aria-label={`Edit ${recipe.name}`} onClick={() => startEdit(recipe)}>
                         <Pencil className="size-4" />
                       </Btn>
-                      <Btn size="md" onClick={() => void log(recipe)} disabled={Boolean(loggingId)}>
-                        <Utensils className="mr-1 size-3.5" /> {loggingId === recipe.id ? "…" : "Log Today"}
+                      <Btn size="md" onClick={() => setLogDraft(current =>
+                        current?.recipeId === recipe.id ? null : {
+                          recipeId: recipe.id, servings: "1", mealDate: today, mealType: defaultMealType(),
+                        }
+                      )} disabled={Boolean(loggingId)}>
+                        <Utensils className="mr-1 size-3.5" /> Log meal
                       </Btn>
                       <Btn variant="ghost" size="md" onClick={() => void remove(recipe.id)}>
                         <Trash2 className="size-4 text-destructive" />
                       </Btn>
                     </div>
                   </div>
+                  {logDraft?.recipeId === recipe.id && (
+                    <div className="space-y-3 rounded-xl border border-border bg-secondary/40 p-3">
+                      <div className="text-sm font-medium">Log this saved recipe</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="text-xs text-muted-foreground">
+                          Servings eaten
+                          <TextInput className="mt-1" type="number" inputMode="decimal"
+                            min={0.01} max={20} step="any" value={logDraft.servings}
+                            onChange={event => setLogDraft(d => d ? { ...d, servings: event.target.value } : d)} />
+                        </label>
+                        <label className="text-xs text-muted-foreground">
+                          Meal date
+                          <TextInput className="mt-1" type="date" value={logDraft.mealDate}
+                            onChange={event => setLogDraft(d => d ? { ...d, mealDate: event.target.value } : d)} />
+                        </label>
+                      </div>
+                      <label className="block text-xs text-muted-foreground">
+                        Meal type
+                        <select aria-label="Recipe meal type" value={logDraft.mealType}
+                          onChange={event => setLogDraft(d => d ? { ...d, mealType: event.target.value as MealType } : d)}
+                          className="mt-1 min-h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground">
+                          <option value="breakfast">Breakfast</option>
+                          <option value="lunch">Lunch</option>
+                          <option value="snack">Snack</option>
+                          <option value="dinner">Dinner</option>
+                        </select>
+                      </label>
+                      <div className="flex gap-2">
+                        <Btn variant="ghost" className="flex-1" disabled={Boolean(loggingId)}
+                          onClick={() => setLogDraft(null)}>Cancel</Btn>
+                        <Btn className="flex-1" disabled={Boolean(loggingId)} onClick={() => void log(recipe)}>
+                          {loggingId === recipe.id ? "Logging…" : "Add to diary"}
+                        </Btn>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-1.5 border-t border-border/50 pt-2">
                     {recipe.ingredients.map((item, index) => (
                       <div key={`${item.name}-${index}`} className="flex justify-between gap-3 rounded bg-secondary/50 px-2 py-1 text-xs">

@@ -5,7 +5,7 @@ import { claimAiQuota } from "./ai-quota.server";
 import { mapInBatches } from "./bounded-batch";
 import { normalizeFoodAlias } from "./scan-v2";
 import { scaleUsda, searchUsdaFood } from "./usda-food.server";
-import { perServing, recipeTotals, type RecipeIngredient, type RecipeRecord } from "./recipe";
+import { perServing, recipeTotals, scaledRecipeNutrition, type RecipeIngredient, type RecipeRecord } from "./recipe";
 import type { Meal, MealType } from "./nutrition";
 
 const MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"] as const;
@@ -337,8 +337,11 @@ export const logRecipe = createServerFn({ method: "POST" })
     const parsed = z.array(ingredientSchema).safeParse(recipe.ingredients);
     if (!parsed.success || parsed.data.length === 0) throw new Error("RECIPE_INVALID");
 
-    const totals = perServing(recipeTotals(parsed.data), Number(recipe.servings));
-    const multiplier = data.servings;
+    const nutrients = scaledRecipeNutrition(
+      recipeTotals(parsed.data),
+      Number(recipe.servings),
+      data.servings,
+    );
     const { data: meal, error } = await db.from("meals").insert({
       room_id: member.room_id,
       member_id: memberId,
@@ -346,10 +349,10 @@ export const logRecipe = createServerFn({ method: "POST" })
       meal_type: data.mealType,
       food_name: recipe.name,
       serving_description: `${data.servings} serving${data.servings === 1 ? "" : "s"} · saved recipe`,
-      calories: Math.round(totals.calories * multiplier),
-      protein: Math.round(totals.protein * multiplier * 10) / 10,
-      carbs: Math.round(totals.carbs * multiplier * 10) / 10,
-      fat: Math.round(totals.fat * multiplier * 10) / 10,
+      calories: nutrients.calories,
+      protein: nutrients.protein,
+      carbs: nutrients.carbs,
+      fat: nutrients.fat,
       ai_confidence: null,
       is_planned: false,
     }).select().single();
