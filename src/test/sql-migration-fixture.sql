@@ -72,6 +72,15 @@ CREATE TABLE public.members (
   UNIQUE(room_id, seat)
 );
 
+-- The disposable fixture begins after the early schema migrations, so
+-- reproduce the existing weight-log table before testing atomic writes.
+CREATE TABLE public.weight_logs (
+  member_id uuid NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
+  logged_date date NOT NULL,
+  weight_kg numeric NOT NULL CHECK (weight_kg > 0),
+  PRIMARY KEY(member_id,logged_date)
+);
+
 CREATE TABLE public.member_devices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   member_id uuid NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
