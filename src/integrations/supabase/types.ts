@@ -693,6 +693,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      log_member_weight_atomic: {
+        Args: {
+          p_actor_auth_user_id: string
+          p_log_date: string
+          p_weight_kg: number
+        }
+        Returns: boolean
+      }
+      photo_uploaded_by_device: {
+        Args: {
+          p_actor_auth_user_id: string
+          p_photo_path: string
+        }
+        Returns: boolean
+      }
       apply_adaptive_target_change: {
         Args: {
           p_member_id:string

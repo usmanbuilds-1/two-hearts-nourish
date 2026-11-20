@@ -24,7 +24,8 @@ CREATE TABLE storage.buckets (
 );
 CREATE TABLE storage.objects (
   bucket_id text NOT NULL,
-  name text NOT NULL
+  name text NOT NULL,
+  owner_id text
 );
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
@@ -69,6 +70,17 @@ CREATE TABLE public.members (
   link_code_expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(room_id, seat)
+);
+
+-- The disposable fixture begins after the early schema migrations, so
+-- reproduce the existing weight-log table before testing atomic writes.
+CREATE TABLE public.weight_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  member_id uuid NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
+  logged_date date NOT NULL DEFAULT CURRENT_DATE,
+  weight_kg numeric(5,2) NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT weight_logs_member_date UNIQUE(member_id,logged_date)
 );
 
 CREATE TABLE public.member_devices (

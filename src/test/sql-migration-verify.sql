@@ -128,6 +128,45 @@ BEGIN
   INSERT INTO public.member_recovery_keys(member_id,device_id,token_hash)
     VALUES(member_a,device_b,repeat('c',64));
 
+  -- Both new RPCs must remain inaccessible to ordinary browser clients.
+  IF has_function_privilege(
+    'authenticated','public.log_member_weight_atomic(uuid,date,numeric)','EXECUTE'
+  ) OR has_function_privilege(
+    'authenticated','public.photo_uploaded_by_device(uuid,text)','EXECUTE'
+  ) THEN RAISE EXCEPTION 'New server-only RPC exposed'; END IF;
+
+  -- Weight and profile must update in one transaction, then retain the latest
+  -- dated value on a backdated weight entry.
+  SELECT public.log_member_weight_atomic(
+    actor, (now() AT TIME ZONE 'UTC')::date, 72.4
+  ) INTO succeeded;
+  IF succeeded IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Atomic weight RPC failed'; END IF;
+  IF (SELECT weight_kg FROM public.members WHERE id=member_a) <> 72.4
+     OR (SELECT weight_kg FROM public.weight_logs WHERE member_id=member_a
+       AND logged_date=(now() AT TIME ZONE 'UTC')::date) <> 72.4
+  THEN RAISE EXCEPTION 'Atomic weight and member mismatch'; END IF;
+  SELECT public.log_member_weight_atomic(
+    actor, (now() AT TIME ZONE 'UTC')::date - 1, 68.1
+  ) INTO succeeded;
+  IF (SELECT weight_kg FROM public.members WHERE id=member_a) <> 72.4
+    THEN RAISE EXCEPTION 'Backdated weight incorrectly replaced latest'; END IF;
+
+  -- A valid same-room image is not automatically owned by this device.
+  INSERT INTO storage.objects(bucket_id,name,owner_id) VALUES
+    ('meal-photos',room::text || '/mine.jpg',actor::text),
+    ('meal-photos',room::text || '/theirs.jpg',
+      '11111111-1111-4111-8111-111111111111');
+  IF public.photo_uploaded_by_device(actor,room::text || '/mine.jpg')
+    IS DISTINCT FROM true THEN
+      RAISE EXCEPTION 'Owned meal photo rejected'; END IF;
+  IF public.photo_uploaded_by_device(actor,room::text || '/theirs.jpg')
+    IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'Cross-device photo unexpectedly accepted'; END IF;
+  IF public.photo_uploaded_by_device(actor,gen_random_uuid()::text || '/mine.jpg')
+    IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'Cross-room photo unexpectedly accepted'; END IF;
+
   -- Adaptive target changes must update the target and audit history atomically.
   SELECT public.apply_adaptive_target_change(
     member_a,
