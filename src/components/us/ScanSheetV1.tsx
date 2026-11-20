@@ -22,7 +22,9 @@ const ERRORS: Record<string, string> = {
   AI_LIMIT: "Daily AI scan allowance reached. You can still log meals manually.",
   AI_QUOTA_UNAVAILABLE: "AI budget checks are unavailable. Please try again later.",
   AI_CREDITS: "Photo scanning is paused for now (AI usage limit reached). You can still add meals by hand.",
-  NOT_MEMBER: "Your session expired. Please reopen your invite link.",
+  AI_MALFORMED: "The scanner couldn't verify that estimate. Try another photo or add the meal manually.",
+  AI_BLOCKED: "This image couldn't be analyzed. Try another photo or add the meal manually.",
+  NOT_MEMBER: "Your session needs to reconnect. Reopen the app; your meals are not erased.",
 };
 
 export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; onOpenChange: (o: boolean) => void; onManual: () => void }) {
@@ -396,6 +398,11 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                     ))}
                   </div>
                    <div className="mt-4 text-xs text-muted-foreground">{labelSource ? "Source: Open Food Facts community label (check packet)" : <>AI estimate · Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></>}</div>
+                  {!labelSource && draft.ai_confidence === "low" && (
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      The food type or serving may be uncertain. Check the guess and correct any hidden ingredients before saving; calories and macros may be significantly off.
+                    </p>
+                  )}
                 </div>
               )}
 <div className="mt-4">

@@ -28,7 +28,7 @@ type ScanResult =
   | { ok: false; error: string };
 
 const callHandler = analyzeFood as unknown as (arg: {
-  data: { image: string };
+  data: { image: string; context?: string };
   context: unknown;
 }) => Promise<ScanResult>;
 
@@ -105,11 +105,11 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     });
     expect(request).toHaveBeenCalledTimes(1);
     const args = request.mock.calls[0] as unknown as [string, { body: string }];
-    expect(args[0]).toContain("/models/gemini-3.5-flash-lite:generateContent");
+    expect(args[0]).toContain("/models/gemini-3.8-flash:generateContent");
     const payload = JSON.parse(args[1].body) as { contents: Array<{ parts: unknown[] }> };
     expect(payload.contents[0]?.parts).toHaveLength(1);
     expect(console.info).toHaveBeenCalledWith("food_scan_token_usage", {
-      model: "gemini-3.5-flash-lite",
+      model: "gemini-3.8-flash",
       input: 780,
       output: 130,
       thinking: 22,
@@ -138,6 +138,90 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it("uses a stronger first pass without a second call when the result is valid", async () => {
+    const request = mockGemini({
+      food_name: "rice and chicken", serving_description: "one plate",
+      calories: 610, protein: 33, carbs: 62, fat: 24,
+      confidence: "medium", packaged_food: null,
+    });
+    const result = await callHandler({ data: { image }, context });
+    expect(result.ok).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect((request.mock.calls[0] as unknown as [string])[0]).toContain("/models/gemini-3.8-flash:");
+  });
+
+  it("uses the Lite fallback if a 200 response contains unusable nutrition JSON", async () => {
+    const fallback = {
+      food_name: "toasted bun with breaded patty (filling unconfirmed)",
+      serving_description: "one bun and one fried rectangular filling",
+      calories: 390, protein: 12, carbs: 44, fat: 18,
+      confidence: "low", packaged_food: null,
+    };
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true, json: async () => ({
+          candidates: [{ content: { parts: [{ text: "{not-json" }] } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, json: async () => ({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(fallback) }] } }],
+        }),
+      });
+    vi.stubGlobal("fetch", request);
+    const result = await callHandler({ data: { image }, context });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.estimate.food_name).toContain("filling unconfirmed");
+      expect(result.estimate.confidence).toBe("low");
+    }
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.5-flash-lite:");
+  });
+
+  it("parses valid JSON from later Gemini text parts without a second request", async () => {
+    const response = {
+      food_name: "bun with patty", serving_description: "one bun",
+      calories: 320, protein: 11, carbs: 41, fat: 13,
+      confidence: "low", packaged_food: null,
+    };
+    const request = vi.fn(async () => ({
+      ok: true, json: async () => ({
+        candidates: [{ content: { parts: [{ text: "" }, { text: JSON.stringify(response) }] } }],
+      }),
+    }));
+    vi.stubGlobal("fetch", request);
+    const result = await callHandler({ data: { image }, context });
+    expect(result.ok).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("never retries a safety-blocked response on another model", async () => {
+    const request = vi.fn(async () => ({
+      ok: true, json: async () => ({ candidates: [{ finishReason: "SAFETY", content: { parts: [] } }] }),
+    }));
+    vi.stubGlobal("fetch", request);
+    const result = await callHandler({ data: { image }, context });
+    expect(result).toEqual({ ok: false, error: "AI_BLOCKED" });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes a post-result correction as an additional user data part", async () => {
+    const request = mockGemini({
+      food_name: "chicken patty bun", serving_description: "one bun",
+      calories: 430, protein: 24, carbs: 40, fat: 20,
+      confidence: "medium", packaged_food: null,
+    });
+    const result = await callHandler({
+      data: { image, context: "It is chicken, not fish." }, context,
+    });
+    expect(result.ok).toBe(true);
+    const args = request.mock.calls[0] as unknown as [string, { body: string }];
+    const payload = JSON.parse(args[1].body) as { contents: Array<{ parts: Array<{ text?: string }> }> };
+    expect(payload.contents[0]?.parts).toHaveLength(2);
+    expect(payload.contents[0]?.parts[0]?.text).toContain("chicken, not fish");
+  });
+
   it("does not silently accept nonsense macros even for a correctly named nihari", async () => {
     const request = mockGemini({
       food_name: "Beef nihari",
@@ -151,6 +235,7 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     });
     const result = await callHandler({ data: { image }, context });
     expect(result).toEqual({ ok: false, error: "AI_MALFORMED" });
-    expect(request).toHaveBeenCalledTimes(1);
+    // The same implausible output from both models is rejected.
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
