@@ -18,6 +18,7 @@ import { FoodSearchSheet } from "./FoodSearchSheet";
 import type { PackagedFood } from "@/lib/off-food";
 import { cn } from "@/lib/utils";
 import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
+import { editPortionMacro, parseMacroNumber, resetPortionBasis, scaleMealPortion, type MealMacroKey } from "@/lib/meal-portion";
 import { deleteMyMeal } from "@/lib/scanned-meal.functions";
 
 export type MealDraft = {
@@ -60,7 +61,7 @@ export function draftFromMeal(m: Meal): MealDraft {
 }
 
 // Empty fields count as 0 so a quick "Apple · 95 kcal" log works.
-const num = (s: string) => (s.trim() === "" ? 0 : Number(s.replace(",", ".")));
+const num = parseMacroNumber;
 
 export function validDraft(d: MealDraft) {
   const vals = [num(d.calories), num(d.protein), num(d.carbs), num(d.fat)];
@@ -82,25 +83,7 @@ export function MealFields({
   const set = (k: keyof MealDraft) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     if (k === "calories" || k === "protein" || k === "carbs" || k === "fat") {
-      const currentPct = draft.portion_percentage > 0 ? draft.portion_percentage : 100;
-      const parsed = num(value);
-      const nominalValue = Number.isFinite(parsed) ? parsed / currentPct * 100 : undefined;
-      const nominalKey = {
-        calories: "nominal_calories",
-        protein: "nominal_protein",
-        carbs: "nominal_carbs",
-        fat: "nominal_fat",
-      }[k] as "nominal_calories" | "nominal_protein" | "nominal_carbs" | "nominal_fat";
-
-      onChange({
-        ...draft,
-        [k]: value,
-        [nominalKey]: nominalValue === undefined
-          ? undefined
-          : k === "calories"
-            ? Math.round(nominalValue)
-            : Math.round(nominalValue * 10) / 10,
-      });
+      onChange(editPortionMacro(draft, k as MealMacroKey, value));
       return;
     }
     onChange({ ...draft, [k]: value });
@@ -118,7 +101,7 @@ export function MealFields({
   });
 
   function applyFav(f: MealFavorite) {
-    onChange({
+    onChange(resetPortionBasis({
       ...draft,
       food_name:           f.food_name,
       serving_description: f.serving_description ?? "",
@@ -126,7 +109,7 @@ export function MealFields({
       protein:             String(f.protein),
       carbs:               String(f.carbs),
       fat:                 String(f.fat),
-    });
+    }));
   }
 
   async function removeFav(foodName: string) {
@@ -163,24 +146,7 @@ export function MealFields({
   ];
 
   function applyPortion(pct: number) {
-    // Derive nominal base (undo any previous scaling first)
-    const prevPct = draft.portion_percentage;
-    const nomCal  = draft.nominal_calories ?? (prevPct > 0 ? Math.round(num(draft.calories) / prevPct * 100) : num(draft.calories));
-    const nomProt = draft.nominal_protein  ?? (prevPct > 0 ? num(draft.protein)  / prevPct * 100 : num(draft.protein));
-    const nomCarb = draft.nominal_carbs    ?? (prevPct > 0 ? num(draft.carbs)    / prevPct * 100 : num(draft.carbs));
-    const nomFat  = draft.nominal_fat      ?? (prevPct > 0 ? num(draft.fat)      / prevPct * 100 : num(draft.fat));
-    onChange({
-      ...draft,
-      portion_percentage: pct,
-      nominal_calories:   Math.round(nomCal),
-      nominal_protein:    Math.round(nomProt * 10) / 10,
-      nominal_carbs:      Math.round(nomCarb * 10) / 10,
-      nominal_fat:        Math.round(nomFat  * 10) / 10,
-      calories:           String(Math.round(nomCal  * pct / 100)),
-      protein:            String(Math.round(nomProt * pct / 100 * 10) / 10),
-      carbs:              String(Math.round(nomCarb * pct / 100 * 10) / 10),
-      fat:                String(Math.round(nomFat  * pct / 100 * 10) / 10),
-    });
+    onChange(scaleMealPortion(draft, pct));
   }
 
   async function aiLookup() {
@@ -195,7 +161,7 @@ export function MealFields({
         return;
       }
       const e = res.estimate;
-      onChange({
+      onChange(resetPortionBasis({
         ...draft,
         food_name: e.food_name,
         serving_description: e.serving_description || draft.serving_description,
@@ -204,7 +170,7 @@ export function MealFields({
         carbs: String(e.carbs),
         fat: String(e.fat),
         ai_confidence: e.confidence,
-      });
+      }));
       toast.success(`Estimated · ${e.confidence} confidence ✨`);
     } catch {
       toast.error("Couldn't estimate right now. Try again.");
