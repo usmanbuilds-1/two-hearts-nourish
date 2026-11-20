@@ -74,3 +74,25 @@ export function scaleMealPortion<T extends PortionDraftLike>(draft: T, percentag
     fat: String(oneDecimal(fat * percentage / 100)),
   };
 }
+
+/** A single storage contract for every manual meal-entry screen. */
+export function storedMealMacros(
+  draft: Pick<PortionDraftLike, MealMacroKey>,
+): { calories: number; protein: number; carbs: number; fat: number } {
+  const values = {
+    calories: parseMacroNumber(draft.calories),
+    protein: parseMacroNumber(draft.protein),
+    carbs: parseMacroNumber(draft.carbs),
+    fat: parseMacroNumber(draft.fat),
+  };
+  if (Object.values(values).some(value => !Number.isFinite(value) || value < 0)) {
+    throw new Error("INVALID_MACRO");
+  }
+  const oneDecimal = (value: number) => Math.round(value * 10) / 10;
+  return {
+    calories: Math.round(values.calories),
+    protein: oneDecimal(values.protein),
+    carbs: oneDecimal(values.carbs),
+    fat: oneDecimal(values.fat),
+  };
+}
