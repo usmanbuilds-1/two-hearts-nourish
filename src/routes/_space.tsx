@@ -101,8 +101,14 @@ function ReconnectScreen({ entry }: { entry: FailedEntry }) {
               Retry now
             </button>
             <p className="mt-3 text-center text-xs text-muted-foreground">
-              We'll keep trying in the background while this screen is open.
+              We'll keep trying while this screen is open. Your saved recovery details stay on this device.
             </p>
+            {savedCode && (
+              <Link to="/r/$code" params={{ code: savedCode }}
+                className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-input px-5 text-center text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                Reconnect securely using my saved key or a device link
+              </Link>
+            )}
           </>
         ) : savedCode ? (
           <Link to="/r/$code" params={{ code: savedCode }}
