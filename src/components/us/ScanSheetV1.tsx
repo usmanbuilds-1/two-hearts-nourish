@@ -18,12 +18,16 @@ import { attachMyMealPhoto } from "@/lib/scanned-meal.functions";
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
 
 const ERRORS: Record<string, string> = {
-  AI_BUSY: "Lots of people are scanning right now. Give it a moment and try again.",
-  AI_LIMIT: "Daily AI scan allowance reached. You can still log meals manually.",
-  AI_QUOTA_UNAVAILABLE: "AI budget checks are unavailable. Please try again later.",
-  AI_CREDITS: "Photo scanning is paused for now (AI usage limit reached). You can still add meals by hand.",
-  AI_MALFORMED: "The scanner couldn't verify that estimate. Try another photo or add the meal manually.",
-  AI_BLOCKED: "This image couldn't be analyzed. Try another photo or add the meal manually.",
+  AI_BUSY: "Google's scanner service is busy or timed out. Try again later, or log manually.",
+  AI_LIMIT: "Today's AI scan allowance is used up. You can still log meals manually.",
+  AI_QUOTA_UNAVAILABLE: "The scanner's safety limit couldn't be checked. Manual logging still works.",
+  AI_UNAVAILABLE: "The scanner isn't configured on this deployment. Manual logging still works.",
+  AI_MODEL_ACCESS: "The scanner models aren't available to this app's API key. This needs an app configuration fix.",
+  AI_CONFIGURATION: "The image-analysis request was rejected. The app needs a scanner configuration fix.",
+  AI_CREDITS: "The scanner provider requires billing or has insufficient credits. Manual logging still works.",
+  AI_MALFORMED: "The scanner couldn't validate a food estimate. Try again or enter the meal manually.",
+  AI_BLOCKED: "This image couldn't be analyzed. Try another photo or enter manually.",
+  AI_FAILED: "The scanner request failed. Try again or log the meal manually.",
   NOT_MEMBER: "Your session needs to reconnect. Reopen the app; your meals are not erased.",
 };
 

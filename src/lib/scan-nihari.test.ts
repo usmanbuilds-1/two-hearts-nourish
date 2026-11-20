@@ -105,11 +105,11 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     });
     expect(request).toHaveBeenCalledTimes(1);
     const args = request.mock.calls[0] as unknown as [string, { body: string }];
-    expect(args[0]).toContain("/models/gemini-4-hydrogen:generateContent");
+    expect(args[0]).toContain("/models/gemini-3-flash-preview:generateContent");
     const payload = JSON.parse(args[1].body) as { contents: Array<{ parts: unknown[] }> };
     expect(payload.contents[0]?.parts).toHaveLength(1);
     expect(console.info).toHaveBeenCalledWith("food_scan_token_usage", {
-      model: "gemini-4-hydrogen",
+      model: "gemini-3-flash-preview",
       input: 780,
       output: 130,
       thinking: 22,
@@ -147,10 +147,10 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     const result = await callHandler({ data: { image }, context });
     expect(result.ok).toBe(true);
     expect(request).toHaveBeenCalledTimes(1);
-    expect((request.mock.calls[0] as unknown as [string])[0]).toContain("/models/gemini-4-hydrogen:");
+    expect((request.mock.calls[0] as unknown as [string])[0]).toContain("/models/gemini-3-flash-preview:");
   });
 
-  it("uses Gemini 3.8 Flash if Hydrogen returns unusable nutrition JSON", async () => {
+  it("uses Gemini 3.5 Flash-Lite if the primary model returns unusable nutrition JSON", async () => {
     const fallback = {
       food_name: "toasted bun with breaded patty (filling unconfirmed)",
       serving_description: "one bun and one fried rectangular filling",
@@ -176,10 +176,10 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
       expect(result.estimate.confidence).toBe("low");
     }
     expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.8-flash:");
+    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.5-flash-lite:");
   });
 
-  it("falls back through accessible models if Hydrogen lacks key access", async () => {
+  it("falls back through accessible models if the primary model lacks key access", async () => {
     const request = vi.fn()
       .mockResolvedValueOnce({ ok: false, status: 403 })
       .mockResolvedValueOnce({ ok: false, status: 404 })
@@ -200,9 +200,50 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     const result = await callHandler({ data: { image }, context });
     expect(result.ok).toBe(true);
     expect(request).toHaveBeenCalledTimes(3);
-    expect(request.mock.calls[0]?.[0]).toContain("/models/gemini-4-hydrogen:");
-    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.8-flash:");
-    expect(request.mock.calls[2]?.[0]).toContain("/models/gemini-3.5-flash-lite:");
+    expect(request.mock.calls[0]?.[0]).toContain("/models/gemini-3-flash-preview:");
+    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.5-flash-lite:");
+    expect(request.mock.calls[2]?.[0]).toContain("/models/gemini-2.5-flash-lite:");
+  });
+
+  it("continues past 403 and 404 but reports restricted model access after all fallbacks fail", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 403 })
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: false, status: 404 });
+    vi.stubGlobal("fetch", request);
+    const result = await callHandler({ data: { image }, context });
+    expect(result).toEqual({ ok: false, error: "AI_MODEL_ACCESS" });
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it("reports Google capacity errors as busy instead of an invented billing failure", async () => {
+    const request = vi.fn(async () => ({ ok: false, status: 503 }));
+    vi.stubGlobal("fetch", request);
+    const result = await callHandler({ data: { image }, context });
+    expect(result).toEqual({ ok: false, error: "AI_BUSY" });
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects malformed requests immediately rather than retrying other models", async () => {
+    const request = vi.fn(async () => ({ ok: false, status: 400 }));
+    vi.stubGlobal("fetch", request);
+    expect(await callHandler({ data: { image }, context }))
+      .toEqual({ ok: false, error: "AI_CONFIGURATION" });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the documented Gemini generationConfig field for JSON mode", async () => {
+    const request = mockGemini({
+      food_name: "rice and chicken", serving_description: "one plate",
+      calories: 610, protein: 33, carbs: 62, fat: 24,
+      confidence: "medium", packaged_food: null,
+    });
+    const result = await callHandler({ data: { image }, context });
+    expect(result.ok).toBe(true);
+    const init = request.mock.calls[0] as unknown as [string, { body: string }];
+    const payload = JSON.parse(init[1].body);
+    expect(payload.generationConfig).toEqual({ responseMimeType: "application/json" });
+    expect(payload.systemInstruction.parts[0].text).toContain("food-photo analyst");
   });
 
   it("does not turn billing failures into model-switching retries", async () => {
