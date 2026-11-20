@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editPortionMacro, resetPortionBasis, scaleMealPortion, type PortionDraftLike } from "./meal-portion";
+import { editPortionMacro, resetPortionBasis, scaleMealPortion, storedMealMacros, type PortionDraftLike } from "./meal-portion";
 
 const meal: PortionDraftLike & { food_name: string } = {
   food_name: "One plate",
@@ -25,6 +25,16 @@ describe("nutrition portion rules", () => {
     const adjusted = editPortionMacro(half, "protein", "21");
     expect(adjusted.nominal_protein).toBe(42);
     expect(scaleMealPortion(adjusted, 100).protein).toBe("42");
+  });
+
+  it("stores comma decimals consistently across Today and Diary", () => {
+    expect(storedMealMacros({ calories: "540,5", protein: "26,5", carbs: "", fat: "12,25" })).toEqual({
+      calories: 541, protein: 26.5, carbs: 0, fat: 12.3,
+    });
+  });
+
+  it("rejects nonfinite nutrition before storage", () => {
+    expect(() => storedMealMacros({ calories: "abc", protein: "2", carbs: "4", fat: "1" })).toThrow("INVALID_MACRO");
   });
 
   it("replaces the old portion basis when a saved food is chosen", () => {

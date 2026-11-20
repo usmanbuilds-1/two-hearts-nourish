@@ -3,6 +3,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/compone
 import { useKeyboardAwareDrawer } from "./useKeyboardAwareDrawer";
 import { Btn, Field, TextInput } from "@/components/us/primitives";
 import { MealFields, emptyDraft, validDraft, type MealDraft } from "@/components/us/MealSheet";
+import { storedMealMacros } from "@/lib/meal-portion";
 import { useSpace } from "@/lib/space";
 import { supabase } from "@/integrations/supabase/client";
 import type { Meal } from "@/lib/nutrition";
@@ -37,10 +38,7 @@ export function DiarySheet({
           meal_date: targetDate,
           food_name: draft.food_name.trim(),
           serving_description: draft.serving_description.trim() || null,
-          calories: Math.round(Number(draft.calories)),
-          protein: Math.round(Number(draft.protein) * 10) / 10,
-          carbs: Math.round(Number(draft.carbs) * 10) / 10,
-          fat: Math.round(Number(draft.fat) * 10) / 10,
+          ...storedMealMacros(draft),
           meal_type: draft.meal_type,
           ai_confidence: draft.ai_confidence,
         })

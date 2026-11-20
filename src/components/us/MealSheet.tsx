@@ -19,7 +19,7 @@ import { FoodSearchSheet } from "./FoodSearchSheet";
 import type { PackagedFood } from "@/lib/off-food";
 import { cn } from "@/lib/utils";
 import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
-import { editPortionMacro, parseMacroNumber, resetPortionBasis, scaleMealPortion, type MealMacroKey } from "@/lib/meal-portion";
+import { editPortionMacro, parseMacroNumber, resetPortionBasis, scaleMealPortion, storedMealMacros, type MealMacroKey } from "@/lib/meal-portion";
 import { deleteMyMeal } from "@/lib/scanned-meal.functions";
 
 export type MealDraft = {
@@ -323,10 +323,7 @@ export function useSaveMeal() {
     const payload = {
       food_name: d.food_name.trim(),
       serving_description: d.serving_description.trim() || null,
-      calories: Math.round(num(d.calories)),
-      protein: Math.round(num(d.protein) * 10) / 10,
-      carbs: Math.round(num(d.carbs) * 10) / 10,
-      fat: Math.round(num(d.fat) * 10) / 10,
+      ...storedMealMacros(d),
       meal_type: d.meal_type,
       ai_confidence: d.ai_confidence,
       ...(photoUrl !== undefined ? { photo_url: photoUrl } : {}),
