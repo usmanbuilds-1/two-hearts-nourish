@@ -56,11 +56,11 @@ export function relationshipDurationMetric(
     ? {
       label,
       value: todayDay - startDay,
-      detail: "Elapsed calendar days since the relationship date in Settings.",
+      detail: "Since your first day together.",
     }
     : {
       label,
       value: todayDay - startDay + 1,
-      detail: "Calendar days since this shared space was created.",
+      detail: "Since you made this space.",
     };
 }
