@@ -235,6 +235,7 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     });
     const result = await callHandler({ data: { image }, context });
     expect(result).toEqual({ ok: false, error: "AI_MALFORMED" });
-    expect(request).toHaveBeenCalledTimes(1);
+    // The same implausible output from both models is rejected.
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });
