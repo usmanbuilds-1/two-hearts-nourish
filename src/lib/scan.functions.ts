@@ -7,9 +7,15 @@ import type { DetectedPackage } from "./packaged-scan";
 import { scanContextPart } from "./scan-v1-context";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
-// Prefer the stronger vision model for recognition. This remains ONE provider
-// request on success; Flash-Lite is a bounded fallback, not an automatic second scan.
-const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"] as const;
+// Gemini 4 Hydrogen is the primary model for image recognition. Continue to
+// use exactly ONE provider request on success. The older models are recovery
+// options if Hydrogen is unavailable or returns unusable structured output.
+// Keep the last Lite fallback for keys with narrower free-tier access.
+const GEMINI_MODELS = [
+  "gemini-4-hydrogen",
+  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
+] as const;
 
 // ── System prompt ─────────────────────────────────────────────────────────
 const SYSTEM = `You are a careful food-photo analyst. Identify the meal from the supplied photograph as accurately as the visible evidence allows, and estimate its nutrition.
@@ -137,7 +143,7 @@ async function callGeminiDirect(
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        signal: AbortSignal.timeout(model === "gemini-3.8-flash" ? 25_000 : 15_000),
+        signal: AbortSignal.timeout(model === "gemini-3.5-flash-lite" ? 15_000 : 25_000),
         body: JSON.stringify({
           system_instruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts }],
@@ -150,9 +156,10 @@ async function callGeminiDirect(
     }
     if (!res.ok) {
       lastError = Object.assign(new Error(`Gemini API HTTP ${res.status}`), { status: res.status });
-      // Model-specific capacity/access failures may not affect the fallback.
-      // Do not retry billing errors, bad credentials, or other client errors.
-      if (res.status === 404 || res.status === 429 || res.status >= 500) continue;
+      // Model-specific access, capacity and availability errors may not affect
+      // another model. Never retry billing failures (402) or generic 4xx
+      // invalid requests; these are not model-selection problems.
+      if (res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) continue;
       throw lastError;
     }
 
