@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BookOpen, Loader2, Sparkles, Star, Trash2 } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import { useKeyboardAwareDrawer } from "./useKeyboardAwareDrawer";
 import { supabase } from "@/integrations/supabase/client";
 import { Btn, Field, TextInput } from "./primitives";
 import { MEAL_TYPES, defaultMealType, fmt, type Meal, type MealType } from "@/lib/nutrition";
@@ -450,6 +451,7 @@ export function MealSheet({
   const [busy, setBusy] = useState(false);
   const [saveAsFavourite,setSaveAsFavourite]=useState(false);
   const qc=useQueryClient();
+  const keyboard = useKeyboardAwareDrawer(open);
   const mine = !meal || meal.member_id === me.id;
   const owner = meal ? members.find((m) => m.id === meal.member_id) : me;
 
@@ -514,9 +516,9 @@ export function MealSheet({
   }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="mx-auto max-h-[92dvh] max-w-xl border-border bg-background">
-        <div className="overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
+    <Drawer open={open} onOpenChange={onOpenChange} fixed repositionInputs={false} shouldScaleBackground={false}>
+      <DrawerContent className="mx-auto max-w-xl border-border bg-background" style={keyboard.style}>
+        <div ref={keyboard.scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
           <DrawerTitle className="font-display text-2xl font-normal">
             {!meal ? "Add a meal" : editing ? "Edit meal" : meal.food_name}
           </DrawerTitle>
