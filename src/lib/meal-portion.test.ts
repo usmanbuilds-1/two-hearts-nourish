@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { editPortionMacro, resetPortionBasis, scaleMealPortion } from "./meal-portion";
+import { editPortionMacro, resetPortionBasis, scaleMealPortion, type PortionDraftLike } from "./meal-portion";
 
-const meal = {
+const meal: PortionDraftLike & { food_name: string } = {
   food_name: "One plate",
   calories: "600",
   protein: "32",
