@@ -97,7 +97,6 @@ export function MealEditorDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/75" />
         <Dialog.Content
-          aria-describedby={undefined}
           className="fixed left-1/2 z-[60] flex w-full max-w-xl -translate-x-1/2 flex-col overflow-hidden border-x border-border bg-background shadow-2xl outline-none sm:rounded-2xl sm:border"
           style={{
             top: bounds ? `${bounds.top}px` : "0px",
