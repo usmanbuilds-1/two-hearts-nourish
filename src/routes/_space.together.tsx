@@ -6,7 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
 import { useSpace } from "@/lib/space";
-import { coupleStats, daysBetween, fmt, milestones, parseLocalDate, totals, type Meal } from "@/lib/nutrition";
+import { coupleStats, fmt, milestones, parseLocalDate, totals, type Meal } from "@/lib/nutrition";
+import { relationshipDurationMetric } from "@/lib/relationship-duration";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { coupleWeekDays, recentCoupleWeek, sharedRegularMeals } from "@/lib/couple-insights";
 import { cn } from "@/lib/utils";
@@ -71,9 +72,7 @@ function Together(){
   const allMilestones=milestones(stats);
   const reached=allMilestones.filter(item=>item.achieved).length;
   const todayEntry=week[week.length-1]!;
-  const togetherDays=Math.max(0,room.together_since
-    ? daysBetween(room.together_since,today)
-    : daysBetween(room.created_at.slice(0,10),today)+1);
+  const duration = relationshipDurationMetric(room, today);
   const selectedLabel=parseLocalDate(chosen.date).toLocaleDateString(undefined,{
     weekday:"long",month:"short",day:"numeric"
   });
@@ -112,9 +111,9 @@ function Together(){
         <>
           <div className="mt-6 grid grid-cols-2 gap-3">
             <SharedMetric
-              label={room.together_since?"Days together":"Days in this space"}
-              value={togetherDays}
-              detail={room.together_since?"From the date you saved in Settings.":"Since this shared space was created."}
+              label={duration.label}
+              value={duration.value}
+              detail={duration.detail}
             />
             <SharedMetric
               label="Shared streak"
