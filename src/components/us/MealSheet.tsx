@@ -3,8 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BookOpen, Loader2, Sparkles, Star, Trash2 } from "lucide-react";
-import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
-import { useKeyboardAwareDrawer } from "./useKeyboardAwareDrawer";
+import { MealEditorDialog } from "./MealEditorDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Btn, Field, TextInput } from "./primitives";
 import { MEAL_TYPES, defaultMealType, fmt, type Meal, type MealType } from "@/lib/nutrition";
@@ -182,6 +181,35 @@ export function MealFields({
 
   return (
     <div className="space-y-4">
+      {/* Food name with optional AI lookup */}
+      <Field label="Food">
+        <div className="flex gap-2">
+          <TextInput
+            value={draft.food_name}
+            onChange={set("food_name")}
+            placeholder="2 slices bread, KitKat 2 bars…"
+            maxLength={200}
+            className="flex-1"
+          />
+          <button
+            type="button"
+            onClick={aiLookup}
+            disabled={lookingUp || draft.food_name.trim().length < 2}
+            title="AI estimate from description"
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-xl border border-border bg-card px-3 transition-colors",
+              "hover:border-primary hover:text-primary disabled:opacity-40",
+            )}
+          >
+            {lookingUp ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          </button>
+        </div>
+        {draft.ai_confidence && (
+          <p className="mt-1 text-xs text-muted-foreground">AI estimate · {draft.ai_confidence} confidence</p>
+        )}
+      </Field>
+
+
       {/* Favourites quick-add (new meals only) */}
       {isNew && favs.length > 0 && (
         <div>
@@ -235,34 +263,6 @@ export function MealFields({
           <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyPackagedFood}/>
         </>
       )}
-      {/* Food name with optional AI lookup */}
-      <Field label="Food">
-        <div className="flex gap-2">
-          <TextInput
-            value={draft.food_name}
-            onChange={set("food_name")}
-            placeholder="2 slices bread, KitKat 2 bars…"
-            maxLength={200}
-            className="flex-1"
-          />
-          <button
-            type="button"
-            onClick={aiLookup}
-            disabled={lookingUp || draft.food_name.trim().length < 2}
-            title="AI estimate from description"
-            className={cn(
-              "flex shrink-0 items-center justify-center rounded-xl border border-border bg-card px-3 transition-colors",
-              "hover:border-primary hover:text-primary disabled:opacity-40",
-            )}
-          >
-            {lookingUp ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          </button>
-        </div>
-        {draft.ai_confidence && (
-          <p className="mt-1 text-xs text-muted-foreground">AI estimate · {draft.ai_confidence} confidence</p>
-        )}
-      </Field>
-
       <Field label="Serving">
         <TextInput value={draft.serving_description} onChange={set("serving_description")} placeholder="approximately 350g" maxLength={160} />
       </Field>
@@ -414,7 +414,6 @@ export function MealSheet({
   const [busy, setBusy] = useState(false);
   const [saveAsFavourite,setSaveAsFavourite]=useState(false);
   const qc=useQueryClient();
-  const keyboard = useKeyboardAwareDrawer(open);
   const mine = !meal || meal.member_id === me.id;
   const owner = meal ? members.find((m) => m.id === meal.member_id) : me;
 
@@ -479,16 +478,37 @@ export function MealSheet({
   }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} fixed repositionInputs={false} shouldScaleBackground={false}>
-      <DrawerContent className="mx-auto max-w-xl border-border bg-background" style={keyboard.style}>
-        <div ref={keyboard.scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
-          <DrawerTitle className="font-display text-2xl font-normal">
-            {!meal ? "Add a meal" : editing ? "Edit meal" : meal.food_name}
-          </DrawerTitle>
-          <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {!meal ? "Type a description and tap ✨ to auto-fill macros, or enter manually." : `Logged by ${mine ? "you" : owner?.display_name}`}
-          </DrawerDescription>
+    <MealEditorDialog
+      open={open}
+      onOpenChange={value => { if (!busy) onOpenChange(value); }}
+      title={!meal ? "Add a meal" : editing ? "Edit meal" : meal.food_name}
+      description={!meal
+        ? "Describe your food or enter its nutrition."
+        : `Logged by ${mine ? "you" : owner?.display_name}`}
+      footer={(
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <Btn size="lg" className="flex-1" onClick={submit} disabled={busy}>
+                  {busy ? "Saving…" : meal ? "Save changes" : "Add meal ❤️"}
+                </Btn>
+                {meal && <Btn size="lg" variant="outline" onClick={() => setEditing(false)}>Cancel</Btn>}
+              </>
+            ) : mine ? (
+              <>
+                <Btn size="lg" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>
+                <FavStarBtn meal={meal!} memberId={me.id} />
+                <Btn size="lg" variant="danger" onClick={remove} disabled={busy} aria-label="Delete meal">
+                  <Trash2 className="size-4" />
+                </Btn>
+              </>
+            ) : (
+              <Btn size="lg" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Close</Btn>
+            )}
+          </div>
 
+      )}
+    >
           <div className="mt-5">
             {editing ? (
               <div>
@@ -527,28 +547,7 @@ export function MealSheet({
             ) : null}
           </div>
 
-          <div className="mt-6 flex gap-2">
-            {editing ? (
-              <>
-                <Btn size="lg" className="flex-1" onClick={submit} disabled={busy}>
-                  {busy ? "Saving…" : meal ? "Save changes" : "Add meal ❤️"}
-                </Btn>
-                {meal && <Btn size="lg" variant="outline" onClick={() => setEditing(false)}>Cancel</Btn>}
-              </>
-            ) : mine ? (
-              <>
-                <Btn size="lg" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>
-                <FavStarBtn meal={meal!} memberId={me.id} />
-                <Btn size="lg" variant="danger" onClick={remove} disabled={busy} aria-label="Delete meal">
-                  <Trash2 className="size-4" />
-                </Btn>
-              </>
-            ) : (
-              <Btn size="lg" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Close</Btn>
-            )}
-          </div>
-        </div>
-      </DrawerContent>
-    </Drawer>
+
+    </MealEditorDialog>
   );
 }
