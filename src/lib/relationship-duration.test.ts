@@ -8,7 +8,7 @@ describe("relationship duration", () => {
     expect(relationshipDurationMetric({ created_at, together_since: "2025-08-28" }, "2026-11-20")).toEqual({
       label: "Days together",
       value: 449,
-      detail: "Elapsed calendar days since the relationship date in Settings.",
+      detail: "Since your first day together.",
     });
   });
 
