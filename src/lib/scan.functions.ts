@@ -7,14 +7,14 @@ import type { DetectedPackage } from "./packaged-scan";
 import { scanContextPart } from "./scan-v1-context";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
-// Gemini 4 Hydrogen is the primary model for image recognition. Continue to
-// use exactly ONE provider request on success. The older models are recovery
-// options if Hydrogen is unavailable or returns unusable structured output.
-// Keep the last Lite fallback for keys with narrower free-tier access.
+// Keep the original scanner on models with broad Gemini Developer API
+// compatibility. The November 20 Hydrogen/3.8 rollout made API-key access and
+// provider capacity a dependency for *every* scan. One model request on success,
+// and bounded fallbacks only if the first model is unavailable or malformed.
 const GEMINI_MODELS = [
-  "gemini-4-hydrogen",
-  "gemini-3.8-flash",
+  "gemini-3-flash-preview",
   "gemini-3.5-flash-lite",
+  "gemini-2.5-flash-lite",
 ] as const;
 
 // ── System prompt ─────────────────────────────────────────────────────────
@@ -136,6 +136,9 @@ async function callGeminiDirect(
   parts: GeminiRequestPart[],
 ): Promise<FoodEstimate> {
   let lastError: unknown = new Error("AI_MALFORMED");
+  const modelAccessFailures: number[] = [];
+  let transientFailures = 0;
+  let malformedResponses = 0;
   for (const model of GEMINI_MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     let res: Response;
@@ -143,23 +146,32 @@ async function callGeminiDirect(
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        signal: AbortSignal.timeout(model === "gemini-3.5-flash-lite" ? 15_000 : 25_000),
+        signal: AbortSignal.timeout(model === "gemini-3-flash-preview" ? 18_000 : 12_000),
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
+          systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts }],
-          generationConfig: { response_mime_type: "application/json" },
+          generationConfig: { responseMimeType: "application/json" },
         }),
       });
     } catch (e) {
+      // Network/timeout errors on one model may resolve with a different model.
       lastError = e;
+      transientFailures += 1;
       continue;
     }
     if (!res.ok) {
       lastError = Object.assign(new Error(`Gemini API HTTP ${res.status}`), { status: res.status });
-      // Model-specific access, capacity and availability errors may not affect
-      // another model. Never retry billing failures (402) or generic 4xx
-      // invalid requests; these are not model-selection problems.
-      if (res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) continue;
+      // 403/404 can be model-specific availability problems on a free key.
+      // 429/5xx are capacity issues. Do not retry invalid credentials, billing,
+      // or invalid requests across models.
+      if (res.status === 403 || res.status === 404) {
+        modelAccessFailures.push(res.status);
+        continue;
+      }
+      if (res.status === 429 || res.status >= 500) {
+        transientFailures += 1;
+        continue;
+      }
       throw lastError;
     }
 
@@ -168,6 +180,7 @@ async function callGeminiDirect(
       data = (await res.json()) as GeminiResponse;
     } catch {
       lastError = new Error("AI_MALFORMED");
+      malformedResponses += 1;
       continue;
     }
     const usage = data.usageMetadata;
@@ -192,7 +205,13 @@ async function callGeminiDirect(
     if (estimate) return estimate;
 
     lastError = new Error("AI_MALFORMED");
+    malformedResponses += 1;
   }
+  // Don't translate a model access/404 failure into "payment required".
+  // Preserve meaningful categories without exposing food details or API keys.
+  if (transientFailures > 0) throw new Error("AI_BUSY");
+  if (malformedResponses > 0) throw new Error("AI_MALFORMED");
+  if (modelAccessFailures.length > 0) throw new Error("AI_MODEL_ACCESS");
   throw lastError;
 }
 
@@ -247,8 +266,16 @@ export const analyzeFood = createServerFn({ method: "POST" })
       const status = errorStatus(e);
       // No private image or food details are emitted in error logs.
       console.error("analyzeFood (direct) failed", status ?? "provider_failure");
-      if (status === 429) return { ok: false, error: "AI_BUSY" };
-      if (status === 403 || status === 402) return { ok: false, error: "AI_CREDITS" };
+      if (status === 429 || (status != null && status >= 500) ||
+          (e instanceof Error && e.message === "AI_BUSY")) {
+        return { ok: false, error: "AI_BUSY" };
+      }
+      if (status === 401 || status === 403 || status === 404 ||
+          (e instanceof Error && e.message === "AI_MODEL_ACCESS")) {
+        return { ok: false, error: "AI_MODEL_ACCESS" };
+      }
+      if (status === 402) return { ok: false, error: "AI_CREDITS" };
+      if (status === 400) return { ok: false, error: "AI_CONFIGURATION" };
       if (e instanceof Error && e.message === "AI_BLOCKED") return { ok: false, error: "AI_BLOCKED" };
       if (e instanceof Error && e.message === "AI_MALFORMED") return { ok: false, error: "AI_MALFORMED" };
       return { ok: false, error: "AI_FAILED" };
