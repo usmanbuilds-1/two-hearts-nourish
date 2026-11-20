@@ -105,11 +105,11 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     });
     expect(request).toHaveBeenCalledTimes(1);
     const args = request.mock.calls[0] as unknown as [string, { body: string }];
-    expect(args[0]).toContain("/models/gemini-3.8-flash:generateContent");
+    expect(args[0]).toContain("/models/gemini-4-hydrogen:generateContent");
     const payload = JSON.parse(args[1].body) as { contents: Array<{ parts: unknown[] }> };
     expect(payload.contents[0]?.parts).toHaveLength(1);
     expect(console.info).toHaveBeenCalledWith("food_scan_token_usage", {
-      model: "gemini-3.8-flash",
+      model: "gemini-4-hydrogen",
       input: 780,
       output: 130,
       thinking: 22,
@@ -147,10 +147,10 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     const result = await callHandler({ data: { image }, context });
     expect(result.ok).toBe(true);
     expect(request).toHaveBeenCalledTimes(1);
-    expect((request.mock.calls[0] as unknown as [string])[0]).toContain("/models/gemini-3.8-flash:");
+    expect((request.mock.calls[0] as unknown as [string])[0]).toContain("/models/gemini-4-hydrogen:");
   });
 
-  it("uses the Lite fallback if a 200 response contains unusable nutrition JSON", async () => {
+  it("uses Gemini 3.8 Flash if Hydrogen returns unusable nutrition JSON", async () => {
     const fallback = {
       food_name: "toasted bun with breaded patty (filling unconfirmed)",
       serving_description: "one bun and one fried rectangular filling",
@@ -176,7 +176,41 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
       expect(result.estimate.confidence).toBe("low");
     }
     expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.5-flash-lite:");
+    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.8-flash:");
+  });
+
+  it("falls back through accessible models if Hydrogen lacks key access", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 403 })
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [{
+            content: { parts: [{ text: JSON.stringify({
+              food_name: "toasted bun with unidentified patty",
+              serving_description: "one bun", calories: 380,
+              protein: 12, carbs: 42, fat: 18,
+              confidence: "low", packaged_food: null,
+            }) }] },
+          }],
+        }),
+      });
+    vi.stubGlobal("fetch", request);
+    const result = await callHandler({ data: { image }, context });
+    expect(result.ok).toBe(true);
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls[0]?.[0]).toContain("/models/gemini-4-hydrogen:");
+    expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.8-flash:");
+    expect(request.mock.calls[2]?.[0]).toContain("/models/gemini-3.5-flash-lite:");
+  });
+
+  it("does not turn billing failures into model-switching retries", async () => {
+    const request = vi.fn(async () => ({ ok: false, status: 402 }));
+    vi.stubGlobal("fetch", request);
+    const result = await callHandler({ data: { image }, context });
+    expect(result).toEqual({ ok: false, error: "AI_CREDITS" });
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it("parses valid JSON from later Gemini text parts without a second request", async () => {
@@ -235,7 +269,7 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     });
     const result = await callHandler({ data: { image }, context });
     expect(result).toEqual({ ok: false, error: "AI_MALFORMED" });
-    // The same implausible output from both models is rejected.
-    expect(request).toHaveBeenCalledTimes(2);
+    // Every configured model rejects the same implausible nutrition.
+    expect(request).toHaveBeenCalledTimes(3);
   });
 });
