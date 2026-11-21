@@ -43,7 +43,7 @@ describe("Diary meal groups", () => {
 
   it("marks planned meals separately and excludes them from the heading total", () => {
     render(<GroupTest entries={[example, { ...example, id:"planned", calories:900, is_planned:true, food_name:"Future breakfast" }]} />);
-    expect(screen.getByText("Planned · not eaten")).toBeInTheDocument();
+    expect(screen.getByText(/Planned · not eaten/)).toBeInTheDocument();
     expect(screen.getByText("Future breakfast")).toBeInTheDocument();
     expect(screen.getByText(/2 items/)).toBeInTheDocument();
     const heading = screen.getByRole("button", {name:/Breakfast/});
