@@ -105,11 +105,11 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     });
     expect(request).toHaveBeenCalledTimes(1);
     const args = request.mock.calls[0] as unknown as [string, { body: string }];
-    expect(args[0]).toContain("/models/gemini-3-flash-preview:generateContent");
+    expect(args[0]).toContain("/models/gemini-3.8-flash:generateContent");
     const payload = JSON.parse(args[1].body) as { contents: Array<{ parts: unknown[] }> };
     expect(payload.contents[0]?.parts).toHaveLength(1);
     expect(console.info).toHaveBeenCalledWith("food_scan_token_usage", {
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.8-flash",
       input: 780,
       output: 130,
       thinking: 22,
@@ -147,7 +147,7 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     const result = await callHandler({ data: { image }, context });
     expect(result.ok).toBe(true);
     expect(request).toHaveBeenCalledTimes(1);
-    expect((request.mock.calls[0] as unknown as [string])[0]).toContain("/models/gemini-3-flash-preview:");
+    expect((request.mock.calls[0] as unknown as [string])[0]).toContain("/models/gemini-3.8-flash:");
   });
 
   it("uses Gemini 3.5 Flash-Lite if the primary model returns unusable nutrition JSON", async () => {
@@ -200,9 +200,9 @@ describe("nihari: real server scan contract with mocked Gemini response", () => 
     const result = await callHandler({ data: { image }, context });
     expect(result.ok).toBe(true);
     expect(request).toHaveBeenCalledTimes(3);
-    expect(request.mock.calls[0]?.[0]).toContain("/models/gemini-3-flash-preview:");
+    expect(request.mock.calls[0]?.[0]).toContain("/models/gemini-3.8-flash:");
     expect(request.mock.calls[1]?.[0]).toContain("/models/gemini-3.5-flash-lite:");
-    expect(request.mock.calls[2]?.[0]).toContain("/models/gemini-2.5-flash-lite:");
+    expect(request.mock.calls[2]?.[0]).toContain("/models/gemini-3.1-flash-lite:");
   });
 
   it("continues past 403 and 404 but reports restricted model access after all fallbacks fail", async () => {
