@@ -7,11 +7,11 @@ import { FavoriteMeals } from "@/components/us/FavoriteMeals";
 import { getQuickMeals } from "@/lib/meal-operations.functions";
 import { QuickMealsSheet } from "@/components/us/QuickMealsSheet";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, Plus, Star, Wallet } from "lucide-react";
+import { Camera, ChevronRight, ChefHat, Heart, Plus, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { getRoomLifetimeStats } from "@/lib/room-stats.functions";
-import { MEAL_TYPES, coupleStats, defaultMealType, fmt, parseLocalDate, totals, type Meal, type Member } from "@/lib/nutrition";
+import { MEAL_TYPES, coupleStats, defaultMealType, fmt, parseLocalDate, type Meal } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MealSheet, emptyDraft, useSaveMeal } from "@/components/us/MealSheet";
 import {
@@ -28,32 +28,13 @@ import { cn } from "@/lib/utils";
 import { copyMealToDay } from "@/lib/meal-operations.functions";
 import { quoteForDay } from "@/lib/quotes";
 import { AdaptiveTargetCard } from "@/components/us/AdaptiveTargetCard";
+import { TodayNutritionSummary } from "@/components/us/TodayNutritionSummary";
+import { TodayMealRow } from "@/components/us/TodayMealRow";
 
 export const Route = createFileRoute("/_space/today")({
   head: () => ({ meta: [{ title: "Today — Us" }, { name: "description", content: "Your shared day of meals." }, { property: "og:title", content: "Today — Us" }, { property: "og:description", content: "Your shared day of meals." }] }),
   component: Today,
 });
-
-function PersonCard({ label, member, meals, partner }: { label: string; member: Member | null; meals: Meal[]; partner?: boolean }) {
-  const t = totals(meals);
-  const kT = member?.daily_calorie_target ?? 0;
-  const pT = Number(member?.daily_protein_target ?? 0);
-  const bar = (v: number, max: number) => (
-    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-secondary">
-      <div className={cn("h-full rounded-full transition-all", partner ? "bg-partner" : "bg-primary")} style={{ width: `${Math.min(100, (v / max) * 100)}%` }} />
-    </div>
-  );
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <Eyebrow className={partner ? "text-partner" : "text-primary"}>{label}</Eyebrow>
-      <div className="num mt-2 text-2xl font-semibold">{fmt(t.calories)}{kT > 0 && <span className="text-sm font-normal text-muted-foreground"> / {fmt(kT)}</span>}<span className="text-sm font-normal text-muted-foreground"> kcal</span></div>
-      {kT > 0 && bar(t.calories, kT)}
-      <div className="num mt-3 text-sm">{fmt(t.protein)}{pT > 0 && <span className="text-muted-foreground"> / {fmt(pT)}</span>}g protein</div>
-      {pT > 0 && bar(t.protein, pT)}
-      <div className="num mt-2 text-xs text-muted-foreground">{fmt(t.carbs)}g carbs · {fmt(t.fat)}g fat</div>
-    </div>
-  );
-}
 
 function Today() {
   const { me, partner, meals, today, room, fresh, upsertLocal } = useSpace();
@@ -147,155 +128,183 @@ function Today() {
   const bothLoggedToday = stats.bothDays.has(today);
 
   return (
-    <Screen>
-      <header className="border-b border-border pb-5">
-        <p className="text-xs font-medium text-muted-foreground">{parseLocalDate(today).toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"})}</p>
-        <h1 className="mt-2 font-display text-4xl font-normal leading-tight tracking-tight">Today, together.</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{me.display_name}</span>
-          <span aria-hidden="true" className="text-primary">♡</span>
-          <span className="font-medium text-foreground">{partner?.display_name ?? "Your person"}</span>
+    <Screen className="max-w-xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
+      <header className="pb-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="font-display text-xl font-semibold leading-[0.95] tracking-tight text-foreground">
+              Two Hearts<br />Nourish
+            </div>
+            <Heart className="size-6 text-primary" strokeWidth={1.6} aria-hidden="true" />
+          </div>
+          <Link to="/settings"
+            className="flex min-h-11 items-center rounded-full border border-border px-3 text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Settings
+          </Link>
         </div>
-        {room.couple_message ? (
-          <p className="mt-3 font-display text-base italic text-foreground/80">“{room.couple_message}”</p>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">
-            {bothLoggedToday?"You both logged meals today.":"Your daily meals, in one place."}
-          </p>
-        )}
+        <p className="mt-5 text-xs font-medium text-muted-foreground">
+          {parseLocalDate(today).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+        </p>
+        <h1 className="mt-1 flex items-center gap-2 font-display text-[2.3rem] font-medium leading-tight tracking-tight sm:text-4xl">
+          Today, together <Heart className="size-6 shrink-0 text-primary" strokeWidth={1.5} aria-hidden="true" />
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{me.display_name}</span>
+          <span className="mx-2 text-primary" aria-hidden="true">♡</span>
+          <span className="font-medium text-foreground">{partner?.display_name ?? "Your person"}</span>
+        </p>
         {sharedStreak >= 2 && (
-          <p className="mt-2 text-xs text-primary">{sharedStreak} days of logging together</p>
+          <p className="mt-2 text-xs text-primary">
+            {sharedStreak} days logging meals together
+          </p>
         )}
       </header>
 
-      <blockquote className="mt-4 rounded-2xl border border-border bg-card px-4 py-4">
-        <Eyebrow className="text-primary">A little note for us today</Eyebrow>
-        <p className="mt-2 font-display text-lg italic leading-relaxed text-foreground/90">“{quoteForDay(today)}”</p>
+      <blockquote className="mt-5 rounded-2xl border border-primary/20 bg-accent px-4 py-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">A little note for us</p>
+        <p className="mt-2 font-display text-lg italic leading-snug text-foreground">
+          “{quoteForDay(today)}”
+        </p>
+        {room.couple_message && (
+          <p className="mt-3 border-t border-primary/15 pt-2 text-sm text-muted-foreground">
+            {room.couple_message}
+          </p>
+        )}
       </blockquote>
 
-      <div className={cn("mt-6 grid gap-3",partner?"grid-cols-1 min-[350px]:grid-cols-2":"grid-cols-1")}>
-        <PersonCard label="You" member={me} meals={mine} />
-        {partner&&<PersonCard label={partner.display_name} member={partner} meals={theirs} partner />}
+      <TodayNutritionSummary me={me} partner={partner} mine={mine} theirs={theirs} />
+
+      <div className="mt-5 grid grid-cols-3 gap-2" role="group" aria-label="Log or plan a meal">
+        <Btn size="lg" className="min-h-12 min-w-0 gap-1.5 rounded-xl px-2 text-xs sm:text-sm"
+          onClick={() => setScan(true)}>
+          <Camera className="size-4 shrink-0" aria-hidden="true" /> Scan food
+        </Btn>
+        <Btn size="lg" variant="outline"
+          className="min-h-12 min-w-0 gap-1.5 rounded-xl px-2 text-xs sm:text-sm"
+          onClick={() => setSheet({ open: true, meal: null })}>
+          <Plus className="size-4 shrink-0" aria-hidden="true" /> Add meal
+        </Btn>
+        <Btn size="lg" variant="outline"
+          className="min-h-12 min-w-0 gap-1.5 rounded-xl px-2 text-xs sm:text-sm"
+          onClick={() => {
+            if (!me.daily_calorie_target) {
+              toast("Set your calorie target in Settings first.");
+              return;
+            }
+            setBudget(true);
+          }}>
+          <Wallet className="size-4 shrink-0" aria-hidden="true" /> Plan meals
+        </Btn>
       </div>
 
       <AdaptiveTargetCard />
 
-      {!partner&&(
-        <div className="mt-5 rounded-2xl border border-border bg-card p-4">
-          <p className="font-medium">Invite your person</p>
-          <p className="mt-1 text-sm text-muted-foreground">Share a private invitation link so your partner can join this space.</p>
-          <Btn variant="outline" className="mt-3 w-full" onClick={()=>void createPartnerInvite().then((invite)=>
-            navigator.clipboard.writeText(buildInviteUrl(window.location.origin, invite.roomCode, invite.token))
-          ).then(()=>toast.success("Private invitation copied"),()=>toast.error("Couldn't create the invitation."))}>
+      {!partner && (
+        <section className="mt-5 rounded-2xl border border-border bg-card p-4">
+          <p className="font-display text-lg">Invite your person ♡</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Share a private invitation link so you can keep a space together.
+          </p>
+          <Btn variant="outline" className="mt-3 w-full" onClick={() =>
+            void createPartnerInvite().then(invite =>
+              navigator.clipboard.writeText(buildInviteUrl(window.location.origin, invite.roomCode, invite.token))
+            ).then(() => toast.success("Private invitation copied"), () =>
+              toast.error("Couldn't create the invitation. Try again."))}>
             Copy invitation link
           </Btn>
-        </div>
+        </section>
       )}
-
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <Btn size="lg" onClick={() => setScan(true)}><Camera className="size-4" /> Scan</Btn>
-        <Btn size="lg" variant="outline" onClick={() => setSheet({ open: true, meal: null })}><Plus className="size-4" /> Add</Btn>
-        <Btn size="lg" variant="outline" onClick={() => {
-          if (!me.daily_calorie_target) { toast("Set your calorie target in Settings first."); return; }
-          setBudget(true);
-        }}><Wallet className="size-4" /> Plan</Btn>
-      </div>
-
-      <Link to="/recipes" className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
-        My recipes · Create, edit or log a recipe
-      </Link>
 
       <FavoriteMeals
         favorites={favsData}
         loading={favoritesPending}
         error={favoritesError}
-        onRetry={()=>void refetchFavorites()}
-        onViewAll={()=>{
-          setQuickInitialTab(favsData.length?"saved":"recent");
+        onRetry={() => void refetchFavorites()}
+        onViewAll={() => {
+          setQuickInitialTab(favsData.length ? "saved" : "recent");
           setQuickOpen(true);
         }}
         onLog={logFavorite}
         busyId={favoriteLogId}
       />
-      <section className="mt-8">
-        <h2 className="font-display text-2xl font-normal">Today's meals</h2>
-        {todays.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-border p-6 text-center">
-            <div className="font-display text-lg">No meals logged today</div>
-            <div className="mt-1 text-sm text-muted-foreground">Tap Scan or Add to log your first meal.</div>
-          </div>
-        ) : (
-          MEAL_TYPES.map((t) => {
-            const list = todays.filter((m) => m.meal_type === t.key);
+
+      <section className="mt-7" aria-labelledby="today-meals-heading">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="today-meals-heading" className="font-display text-2xl font-normal">Today's meals</h2>
+          <Link to="/diary" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-medium text-primary">
+            View diary <ChevronRight className="size-4" aria-hidden="true" />
+          </Link>
+        </div>
+        {todays.length === 0 && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Nothing logged yet. Scan a photo or add your first meal.
+          </p>
+        )}
+        <div className="mt-3 space-y-3">
+          {MEAL_TYPES.map((type) => {
+            const list = todays.filter(meal => meal.meal_type === type.key);
             return (
-              <div key={t.key} className="mt-5">
-                <Eyebrow>{t.label} {t.icon}</Eyebrow>
-                {list.length === 0 ? <div className="mt-2 text-sm text-muted-foreground/70">Not logged yet</div> : (
-                  <div className="mt-2 space-y-2">
-                    {list.map((m) => {
-                      const isMe = m.member_id === me.id;
+              <div key={type.key} className="space-y-2">
+                {list.length === 0 ? (
+                  <div className="flex min-h-[58px] items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/60 px-3">
+                    <span className="text-sm font-medium">{type.label}</span>
+                    <span className="text-xs text-muted-foreground">Not logged yet</span>
+                    <button type="button"
+                      onClick={() => setSheet({ open: true, meal: null })}
+                      className="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <Plus className="size-4" aria-hidden="true" /> Add
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Eyebrow className="pl-1">{type.label}</Eyebrow>
+                    {list.map(meal => {
+                      const isMine = meal.member_id === me.id;
+                      const saved = isMine ? findSavedFood(favsData, meal) : null;
                       return (
-                        <div key={m.id} className={cn("flex w-full items-center gap-2 rounded-xl border border-border bg-card p-3", fresh.has(m.id) && "animate-arrive")}>
-                          <div className="flex min-w-0 flex-1 items-center gap-3">
-                            {m.photo_url ? (
-                              <button
-                                className="flex size-11 shrink-0 items-center justify-center rounded-xl focus-visible:ring-2 focus-visible:ring-ring"
-                                onClick={() => {
-                                  void signedMealPhotoUrl(m.photo_url!, room.id).then((url) => {
-                                    if (url) setLightbox({ src: url, caption: `${m.food_name} · ${fmt(m.calories)} kcal` });
-                                    else toast.error("This photo is not available.");
-                                  });
-                                }}
-                                aria-label="View photo full screen"
-                              >
-                                <PrivateMealPhoto
-                                  stored={m.photo_url}
-                                  roomId={room.id}
-                                  className="size-11 rounded-xl object-cover border border-border transition-opacity hover:opacity-90"
-                                />
-                              </button>
-                            ) : (
-                              <span className={cn("size-2 shrink-0 rounded-full", isMe ? "bg-primary" : "bg-partner")} />
-                            )}
-                            <button type="button" className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left"
-                              onClick={() => setSheet({ open: true, meal: m })}
-                              aria-label={`View ${m.food_name} meal details`}>
-                              <div className="min-w-0 flex-1">
-                              <div className="truncate">{m.food_name}</div>
-                              <div className="text-xs text-muted-foreground">{isMe ? "You" : partner?.display_name}{m.is_planned ? " · Planned, not eaten" : ""}</div>
-                            </div>
-                            <div className="num text-right text-sm">
-                              <div>{fmt(m.calories)} kcal</div>
-                              <div className="text-xs text-muted-foreground">{fmt(Number(m.protein))}g protein</div>
-                            </div>
-                            </button>
-                          </div>
-                          {isMe && (() => {
-                            const saved=findSavedFood(favsData,m);
-                            const marked=isSavedPortion(saved,m);
-                            return <button
-                              type="button"
-                              onClick={() => void handleToggleFav(m)}
-                              disabled={Boolean(favoriteBusyId)||favoritesPending||favoritesError}
-                              aria-pressed={marked}
-                              className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
-                              aria-label={marked ? "Remove saved portion of "+m.food_name : saved ? "Update saved portion of "+m.food_name : "Save "+m.food_name+" to favourites"}
-                            >
-                              <Star className={cn("size-5",marked&&"fill-primary")} aria-hidden="true"/>
-                            </button>;
-                          })()}
+                        <div key={meal.id} className={cn(fresh.has(meal.id) && "animate-arrive")}>
+                          <TodayMealRow
+                            meal={meal}
+                            mealType={type.label}
+                            owner={isMine ? "You" : (partner?.display_name ?? "Your person")}
+                            isMine={isMine}
+                            roomId={room.id}
+                            marked={isSavedPortion(saved, meal)}
+                            favoriteDisabled={Boolean(favoriteBusyId) || favoritesPending || favoritesError}
+                            onViewMeal={() => setSheet({ open: true, meal })}
+                            onViewPhoto={() => {
+                              if (!meal.photo_url) return;
+                              void signedMealPhotoUrl(meal.photo_url, room.id).then(url => {
+                                if (url) setLightbox({ src: url, caption: `${meal.food_name} · ${fmt(meal.calories)} kcal` });
+                                else toast.error("This photo is not available.");
+                              }).catch(() => toast.error("This photo is not available."));
+                            }}
+                            onToggleFavorite={() => void handleToggleFav(meal)}
+                          />
                         </div>
                       );
                     })}
-                  </div>
+                  </>
                 )}
               </div>
             );
-          })
-        )}
+          })}
+        </div>
       </section>
 
-      <div className="mt-7"><WeightCard /></div>
+      <Link to="/recipes"
+        className="mt-5 flex min-h-16 items-center gap-3 rounded-xl border border-border bg-card px-4 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <ChefHat className="size-6 shrink-0 text-primary" strokeWidth={1.6} aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">My recipes</span>
+          <span className="block text-xs text-muted-foreground">Create, edit or log a recipe</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-primary" aria-hidden="true" />
+      </Link>
+
+      <section className="mt-3" aria-label="Weight logging">
+        <WeightCard />
+      </section>
       <QuickMealsSheet open={quickOpen} onOpenChange={setQuickOpen} meals={quick.data??[]}
         memberId={me.id} today={today} onCopy={repeatMeal} busyId={repeatId}
         initialTab={quickInitialTab} historyPending={quick.isPending} historyError={quick.isError}
