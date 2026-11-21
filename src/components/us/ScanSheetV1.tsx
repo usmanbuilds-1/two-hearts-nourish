@@ -7,7 +7,9 @@ import { Btn, TextInput } from "./primitives";
 import { MealFields, emptyDraft, useSaveMeal, validDraft, type MealDraft } from "./MealSheet";
 import { useSpace } from "@/lib/space";
 import { compressImage, uploadMealPhoto } from "@/lib/image";
-import { analyzeFood } from "@/lib/scan.functions";
+import { analyzeFood, type FoodEstimate } from "@/lib/scan.functions";
+import { resetPortionBasis, scaleMealPortion } from "@/lib/meal-portion";
+import { ScanPortionPicker } from "./ScanPortionPicker";
 import { searchPackagedFoods } from "@/lib/food-catalog.functions";
 import type { PackagedFood } from "@/lib/off-food";
 import { detectedTotalGrams, packageSearchQuery, scalePackagedLabel, strictPackageMatch, type DetectedPackage } from "@/lib/packaged-scan";
@@ -44,6 +46,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const [contextText, setContextText] = useState("");
   const [appliedContext, setAppliedContext] = useState("");
   const [rechecking, setRechecking] = useState(false);
+  const [reanalysisResult, setReanalysisResult] = useState<{ estimate: FoodEstimate; context: string } | null>(null);
   const [correctionError, setCorrectionError] = useState("");
   const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [editing, setEditing] = useState(false);
@@ -75,6 +78,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setContextText("");
       setAppliedContext("");
       setRechecking(false);
+      setReanalysisResult(null);
+      setDraft(emptyDraft());
       setCorrectionError("");
       setDetectedPackage(null);
       setCandidates([]);
@@ -96,6 +101,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     const id = ++requestRef.current;
     setPendingPhoto(null);
     setPhotoSaveError("");
+    setReanalysisResult(null);
+    setDraft(emptyDraft());
     editedRef.current = false;
     setCandidates([]);
     setLabelSource(null);
@@ -121,107 +128,136 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setAmountGrams(String(grams));
       setLabelSource(food);
       setLabelAdjusted(false);
-      setDraft(previous => ({
+      setDraft(previous => scaleMealPortion(resetPortionBasis({
         ...previous,
         food_name: [food.brand, food.name].filter(Boolean).join(" ").slice(0, 200),
-        serving_description: String(grams) + " g/ml · Open Food Facts (check packet label)",
+        serving_description: String(grams) + " g/ml pictured · Open Food Facts (check packet label)",
         calories: String(nutrition.calories),
         protein: String(nutrition.protein),
         carbs: String(nutrition.carbs),
         fat: String(nutrition.fat),
         ai_confidence: null,
-        nominal_calories: undefined,
-        nominal_protein: undefined,
-        nominal_carbs: undefined,
-        nominal_fat: undefined,
-        portion_percentage: 100,
-      }));
+      }), previous.portion_percentage));
     } catch {
       toast.error("Enter an amount greater than 0 and no more than 2000 g.");
     }
   }
 
+
+  async function applyEstimate(estimate: FoodEstimate, foodContext: string, id: number) {
+    editedRef.current = false;
+    setLabelSource(null);
+    setLabelAdjusted(false);
+    setCandidates([]);
+    setDetectedPackage(null);
+    setCheckingLabel(false);
+    setAppliedContext(foodContext);
+    // A new AI or package estimate is for the FULL photographed portion.
+    // Preserve how much the member ate without scaling already-scaled numbers.
+    setDraft(previous => scaleMealPortion(resetPortionBasis({
+      ...previous,
+      food_name: estimate.food_name,
+      serving_description: estimate.serving_description,
+      calories: String(estimate.calories),
+      protein: String(estimate.protein),
+      carbs: String(estimate.carbs),
+      fat: String(estimate.fat),
+      ai_confidence: estimate.confidence,
+    }), previous.portion_percentage));
+    setEditing(false);
+    setStage("confirm");
+
+    const detected = estimate.packaged_food ?? null;
+    setDetectedPackage(detected);
+    const grams = detectedTotalGrams(detected);
+    setAmountGrams(grams === null ? "" : String(grams));
+    if (!detected?.brand || !detected.product) return;
+
+    setCheckingLabel(true);
+    try {
+      const result = await searchPackagedFoods({ data: { query: packageSearchQuery(detected) } });
+      if (requestRef.current !== id) return;
+      if (!result.ok) return;
+      setCandidates(result.foods.slice(0, 5));
+      const exact = strictPackageMatch(detected, result.foods);
+      if (exact && grams !== null && !editedRef.current) applyLabel(exact, grams);
+    } catch {
+      // Optional community-label lookup; leave the AI estimate editable.
+    } finally {
+      if (requestRef.current === id) setCheckingLabel(false);
+    }
+  }
+
   async function analyze() {
-    if (!image || rechecking) return;
+    if (!image || rechecking || busy || pendingPhoto || reanalysisResult) return;
     const isCorrection = stage === "confirm";
     const id = ++requestRef.current;
     const foodContext = contextText.trim();
     setCorrectionError("");
-    if (isCorrection) {
-      setRechecking(true);
-    } else {
-      setStage("analyzing");
-    }
+    if (isCorrection) setRechecking(true);
+    else setStage("analyzing");
     try {
-      // One normal Gemini photo request. Product search below uses NO Gemini tokens.
-      const r = await analyzeFood({ data: { image, ...(foodContext ? { context: foodContext } : {}) } });
+      // Reanalysis is always a fresh request for THIS image; it uses an extra
+      // AI quota unit and a deliberate second-pass instruction, not a new photo.
+      const result = await analyzeFood({ data: {
+        image,
+        ...(foodContext ? { context: foodContext } : {}),
+        ...(isCorrection ? { reanalyse: true } : {}),
+      } });
       if (requestRef.current !== id) return;
-      if (!r.ok) {
-        const message = ERRORS[r.error] ?? "Couldn't analyze that correction. Please try again.";
+      if (!result.ok) {
+        const message = ERRORS[result.error] ?? "Couldn't analyze that photo. Try again or enter the meal manually.";
         if (isCorrection) setCorrectionError(message);
-        else {
-          setErrMsg(message);
-          setStage("error");
-        }
+        else { setErrMsg(message); setStage("error"); }
         return;
       }
-      const estimate = r.estimate;
-      editedRef.current = false;
-      setLabelSource(null);
-      setLabelAdjusted(false);
-      setCandidates([]);
-      setDetectedPackage(null);
-      setCheckingLabel(false);
-      setAppliedContext(foodContext);
-      setDraft({
-        ...emptyDraft(),
-        food_name: estimate.food_name,
-        serving_description: estimate.serving_description,
-        calories: String(estimate.calories),
-        protein: String(estimate.protein),
-        carbs: String(estimate.carbs),
-        fat: String(estimate.fat),
-        ai_confidence: estimate.confidence,
-      });
-      setEditing(false);
-      setStage("confirm");
-      const detected = estimate.packaged_food ?? null;
-      setDetectedPackage(detected);
-      const grams = detectedTotalGrams(detected);
-      setAmountGrams(grams === null ? "" : String(grams));
-      if (!detected?.brand || !detected.product) return;
-
-      setCheckingLabel(true);
-      try {
-        const result = await searchPackagedFoods({ data: { query: packageSearchQuery(detected) } });
-        if (requestRef.current !== id) return;
-        if (!result.ok) return; // AI estimate remains available; never invent a match.
-        setCandidates(result.foods.slice(0, 5));
-        const exact = strictPackageMatch(detected, result.foods);
-        if (exact && grams !== null && !editedRef.current) applyLabel(exact, grams);
-      } catch {
-        // Open Food Facts is optional. The user can edit the AI estimate or find a label manually.
-      } finally {
-        if (requestRef.current === id) setCheckingLabel(false);
+      if (isCorrection) {
+        // Never overwrite an edited or previously reviewed estimate silently.
+        setReanalysisResult({ estimate: result.estimate, context: foodContext });
+      } else {
+        await applyEstimate(result.estimate, foodContext, id);
       }
     } catch {
       if (requestRef.current !== id) return;
       const message = navigator.onLine
-        ? "Couldn't recalculate. Retry or discard the correction to keep the previous estimate."
+        ? "Couldn't reanalyse. Your previous estimate is still available."
         : "You're offline. Your previous estimate is still available.";
       if (isCorrection) setCorrectionError(message);
-      else {
-        setErrMsg(message);
-        setStage("error");
-      }
+      else { setErrMsg(message); setStage("error"); }
     } finally {
       if (requestRef.current === id) setRechecking(false);
     }
   }
 
+  function useReanalysis() {
+    if (!reanalysisResult || busy || pendingPhoto) return;
+    const candidate = reanalysisResult;
+    const id = ++requestRef.current;
+    setReanalysisResult(null);
+    setCorrectionError("");
+    void applyEstimate(candidate.estimate, candidate.context, id);
+  }
+
+  function keepPreviousEstimate() {
+    setReanalysisResult(null);
+    setCorrectionError("");
+    // Rejected context changes must not leave an unsavable old estimate.
+    setContextText(appliedContext);
+  }
+
+  const revisedPortion = reanalysisResult
+    ? scaleMealPortion(resetPortionBasis({
+        ...draft,
+        food_name: reanalysisResult.estimate.food_name,
+        calories: String(reanalysisResult.estimate.calories),
+        protein: String(reanalysisResult.estimate.protein),
+        carbs: String(reanalysisResult.estimate.carbs),
+        fat: String(reanalysisResult.estimate.fat),
+      }), draft.portion_percentage)
+    : null;
 
   async function confirm() {
-    if (busy) return;
+    if (busy || reanalysisResult) return;
     if (!pendingPhoto && (rechecking || contextText.trim() !== appliedContext)) {
       toast.error("Update the estimate with your new context before saving.");
       return;
@@ -295,6 +331,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     setAppliedContext("");
     setCorrectionError("");
     setRechecking(false);
+    setReanalysisResult(null);
+    setDraft(emptyDraft());
     setImage(null);
     setStage("pick");
     cameraRef.current?.click();
@@ -349,6 +387,34 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
 
           {stage === "confirm" && (
             <div className="mt-5">
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3">
+                <div>
+                  <p className="text-sm font-medium">Want a second assessment?</p>
+                  <p className="text-xs text-muted-foreground">Reanalyse this same photo. A new AI estimate may differ, not necessarily improve.</p>
+                </div>
+                <Btn variant="outline" disabled={rechecking || busy || Boolean(pendingPhoto) || Boolean(reanalysisResult)}
+                  onClick={() => void analyze()}>
+                  {rechecking ? "Reanalysing…" : "Reanalyse"}
+                </Btn>
+              </div>
+              {reanalysisResult && revisedPortion && (
+                <section aria-label="Reanalysis comparison" className="mb-4 rounded-xl border border-primary/40 bg-card p-3">
+                  <p className="text-sm font-semibold">Compare the new estimate</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    For the {draft.portion_percentage}% you ate. Your current values will stay until you choose the new ones.
+                  </p>
+                  <p className="mt-2 text-sm">
+                    {draft.food_name} · {draft.calories} kcal → {revisedPortion.food_name} · {revisedPortion.calories} kcal
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Protein {draft.protein} → {revisedPortion.protein} g · Carbs {draft.carbs} → {revisedPortion.carbs} g · Fat {draft.fat} → {revisedPortion.fat} g
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <Btn onClick={useReanalysis} className="flex-1">Use new estimate</Btn>
+                    <Btn variant="outline" onClick={keepPreviousEstimate} className="flex-1">Keep previous</Btn>
+                  </div>
+                </section>
+              )}
               {detectedPackage && (
                 <p className="mb-3 text-sm text-muted-foreground">
                   Packaging spotted: {detectedPackage.brand} {detectedPackage.product}
@@ -434,11 +500,20 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   )}
                 </div>
               )}
+              {!editing && (
+                <ScanPortionPicker
+                  percentage={draft.portion_percentage}
+                  fullCalories={draft.nominal_calories ?? Number(draft.calories)}
+                  eatenCalories={Number(draft.calories)}
+                  disabled={busy || rechecking || Boolean(pendingPhoto) || Boolean(reanalysisResult)}
+                  onChange={percentage => setDraft(previous => scaleMealPortion(previous, percentage))}
+                />
+              )}
 <div className="mt-4">
                   <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
                     Was anything wrong? <span className="font-normal text-muted-foreground">(optional)</span>
                   </label>
-                  <textarea id="scan-food-context" rows={2} maxLength={400} disabled={Boolean(pendingPhoto)}
+                  <textarea id="scan-food-context" rows={2} maxLength={400} disabled={Boolean(pendingPhoto) || rechecking || Boolean(reanalysisResult)}
                     value={contextText} onChange={(event) => setContextText(event.target.value)}
                     placeholder="e.g. This is a chicken patty, not fish. It was cooked with butter."
                     className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -452,12 +527,12 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                         The estimate above still uses the previous information.
                       </p>}
                       {correctionError && <p role="alert" className="text-sm text-destructive">{correctionError}</p>}
-                      {contextNeedsRescan && (
+                      {contextNeedsRescan && !reanalysisResult && (
                         <Btn size="lg" variant="outline" className="w-full" disabled={rechecking} onClick={() => void analyze()}>
                           {rechecking ? "Recalculating…" : "Recalculate with correction"}
                         </Btn>
                       )}
-                      {contextNeedsRescan && (
+                      {contextNeedsRescan && !reanalysisResult && (
                         <Btn size="lg" variant="ghost" className="w-full" disabled={rechecking}
                           onClick={() => { setContextText(appliedContext); setCorrectionError(""); }}>
                           Discard correction and keep previous estimate
@@ -475,8 +550,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                 Save this portion to my favourites for next time
               </label>
               <div className="mt-5 flex flex-col gap-2">
-                <Btn size="lg" onClick={confirm} disabled={busy || (!pendingPhoto && (rechecking || contextNeedsRescan))}>
-                  {busy ? "Saving…" : pendingPhoto ? "Retry saving photo" : "Looks right ❤️"}
+                <Btn size="lg" onClick={confirm} disabled={busy || Boolean(reanalysisResult) || (!pendingPhoto && (rechecking || contextNeedsRescan))}>
+                  {busy ? "Saving…" : pendingPhoto ? "Retry saving photo" : "Save meal"}
                 </Btn>
                 <div className="flex gap-2">
                   {!editing && !pendingPhoto && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
