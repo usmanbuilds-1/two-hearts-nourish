@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { ingredientSchema, recipeInputSchema } from "./recipe-input";
 import { claimAiQuota } from "./ai-quota.server";
 import { mapInBatches } from "./bounded-batch";
 import { normalizeFoodAlias } from "./scan-v2";
@@ -23,29 +24,6 @@ async function memberIdFor(db: Awaited<ReturnType<typeof admin>>, authUserId: st
   if (error) throw new Error("SERVER_ERROR");
   return data?.member_id ?? null;
 }
-
-const ingredientSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  amountLabel: z.string().trim().min(1).max(100),
-  grams: z.number().finite().positive().max(10000).nullable(),
-  calories: z.number().finite().min(0).max(20000),
-  protein: z.number().finite().min(0).max(2000),
-  carbs: z.number().finite().min(0).max(2000),
-  fat: z.number().finite().min(0).max(2000),
-  caloriesPer100g: z.number().finite().min(0).max(2000).nullable(),
-  proteinPer100g: z.number().finite().min(0).max(100).nullable(),
-  carbsPer100g: z.number().finite().min(0).max(100).nullable(),
-  fatPer100g: z.number().finite().min(0).max(100).nullable(),
-  source: z.enum(["USDA", "model-estimate", "manual"]),
-  sourceRef: z.string().max(200).nullable(),
-  confidence: z.enum(["high", "medium", "low"]),
-});
-
-const recipeInputSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  servings: z.number().finite().min(0.25).max(100),
-  ingredients: z.array(ingredientSchema).min(1).max(30),
-});
 
 const modelIngredientSchema = z.object({
   name: z.string().trim().min(1).max(120),
