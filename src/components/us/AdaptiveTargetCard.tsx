@@ -81,7 +81,7 @@ export function AdaptiveTargetCard({ location = "today" }: { location?: "today" 
   // A confirmed day should not occupy space on Today every time someone opens
   // the app. The persistent record and its reversal live in Settings.
   if (location === "today" && !change && !needsConfirmation) return null;
-  if (location === "settings" && !data.enabled) return null;
+  if (location === "settings" && !data.enabled && !data.yesterdayComplete && !change) return null;
 
   return (
     <div className="mt-4 space-y-3">
@@ -163,13 +163,13 @@ export function AdaptiveTargetCard({ location = "today" }: { location?: "today" 
           </Btn>
         </section>
       )}
-      {location === "settings" && (
+      {location === "settings" && (data.enabled || data.yesterdayComplete) && (
         <section className="border-t border-border pt-4" aria-labelledby="adaptive-day-review">
           <Eyebrow>Food log confirmations</Eyebrow>
           <p id="adaptive-day-review" className="mt-2 text-sm font-medium text-foreground">
             Yesterday · {yesterday}
           </p>
-          {!data.configurationReady ? (
+          {!data.configurationReady && !data.yesterdayComplete ? (
             <p className="mt-1 text-sm text-muted-foreground">
               Save your goal, activity and pace above before confirming days.
             </p>
