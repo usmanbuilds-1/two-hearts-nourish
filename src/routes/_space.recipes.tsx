@@ -73,6 +73,7 @@ function RecipesView() {
   const [createMode, setCreateMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const labelRef = useRef<HTMLInputElement>(null);
+  const createRequestId = useRef<string | null>(null);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -100,6 +101,7 @@ function RecipesView() {
     setServings("1");
     setIngredients([]);
     setSaveError("");
+    createRequestId.current = null;
   }
 
   function addBarcodeIngredient(food: PackagedFood, amount: number) {
@@ -142,6 +144,7 @@ function RecipesView() {
   }
 
   function startEdit(recipe: RecipeRecord) {
+    createRequestId.current = null;
     setEditingId(recipe.id);
     setName(recipe.name);
     setDescription("");
@@ -152,7 +155,7 @@ function RecipesView() {
   }
 
   async function analyze() {
-    if (description.trim().length < 3 || busy) return;
+    if (description.trim().length < 3 || busy || scanningLabel) return;
     setBusy(true);
     try {
       const result = await analyzeRecipe({ data: { description: description.trim() } });
@@ -201,9 +204,15 @@ function RecipesView() {
       if (editingId) {
         await updateRecipe({ data: { recipeId: editingId, name: name.trim(), servings: count, ingredients } });
       } else {
-        await saveRecipe({ data: { name: name.trim(), servings: count, ingredients } });
+        const requestId = createRequestId.current ?? crypto.randomUUID();
+        createRequestId.current = requestId;
+        await saveRecipe({ data: { name: name.trim(), servings: count, ingredients, requestId } });
       }
-      await queryClient.invalidateQueries({ queryKey: ["recipes", me.id] });
+      // An unsuccessful list refresh must never tell the user a successful
+      // database write failed, or encourage them to save a duplicate recipe.
+      void queryClient.invalidateQueries({ queryKey: ["recipes", me.id] }).catch(() => {
+        toast.error("Recipe saved, but the list couldn't refresh. Reopen Recipes to see it.");
+      });
       toast.success(editingId ? "Recipe updated" : "Recipe saved");
       reset();
       setCreateMode(false);
@@ -298,7 +307,7 @@ function RecipesView() {
               />
             </label>
             <div className="grid grid-cols-2 gap-2">
-              <Btn variant="outline" disabled={busy || description.trim().length < 3} onClick={() => void analyze()}>
+              <Btn variant="outline" disabled={busy || scanningLabel || description.trim().length < 3} onClick={() => void analyze()}>
                 {busy ? "Analyzing…" : "Analyze with AI"}
               </Btn>
               <Btn variant="outline" disabled={busy || scanningLabel || ingredients.length >= 30}
