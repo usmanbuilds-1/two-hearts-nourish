@@ -7,13 +7,14 @@ import { searchPackagedFoods } from "@/lib/food-catalog.functions";
 import type { PackagedFood } from "@/lib/off-food";
 
 export function FoodSearchSheet({
-  open,onOpenChange,onSelect
+  open,onOpenChange,onSelect,initialMode="name"
 }:{
+  initialMode?:"name"|"barcode";
   open:boolean;
   onOpenChange:(open:boolean)=>void;
   onSelect:(food:PackagedFood,amount:number)=>void;
 }) {
-  const [mode,setMode]=useState<"name"|"barcode">("name");
+  const [mode,setMode]=useState<"name"|"barcode">(initialMode);
   const [query,setQuery]=useState("");
   const [grams,setGrams]=useState("100");
   const [foods,setFoods]=useState<PackagedFood[]>([]);
