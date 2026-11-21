@@ -12,7 +12,7 @@ export type RecipeIngredient = {
   proteinPer100g: number | null;
   carbsPer100g: number | null;
   fatPer100g: number | null;
-  source: "USDA" | "model-estimate" | "manual";
+  source: "USDA" | "model-estimate" | "manual" | "nutrition-label" | "Open Food Facts";
   sourceRef: string | null;
   confidence: "high" | "medium" | "low";
 };
