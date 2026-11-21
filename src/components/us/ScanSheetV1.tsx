@@ -257,6 +257,11 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     : null;
 
   async function confirm() {
+    // The estimate describes the pictured full serving; meal history and
+    // favourites must explicitly describe the fraction actually consumed.
+    const consumedServing = draft.portion_percentage === 100
+      ? draft.serving_description
+      : `${draft.serving_description.trim() || "Full pictured portion"} · ${draft.portion_percentage}% eaten`.slice(0, 160);
     if (busy || reanalysisResult) return;
     if (!pendingPhoto && (rechecking || contextText.trim() !== appliedContext)) {
       toast.error("Update the estimate with your new context before saving.");
@@ -269,7 +274,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     try {
       // Insert nutrition only once. If photo storage fails, the next press
       // retries the attachment to the SAME meal, never another meal insertion.
-      const savedMeal = pendingPhoto?.meal ?? await save({ ...draft, photo_url: null });
+      const savedMeal = pendingPhoto?.meal ?? await save({ ...draft, serving_description: consumedServing, photo_url: null });
       const result = await saveMealPhoto({
         roomId: room.id,
         mealId: savedMeal.id,
@@ -299,7 +304,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
         try {
           await saveFavoriteMeal({ data: {
             foodName: draft.food_name.trim(),
-            servingDescription: draft.serving_description,
+            servingDescription: consumedServing,
             calories: Number(draft.calories || 0),
             protein: Number(draft.protein || 0),
             carbs: Number(draft.carbs || 0),
@@ -429,7 +434,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   <p className="text-sm font-medium">Open Food Facts community label: {labelSource.name}</p>
                   <p className="text-xs text-muted-foreground">These numbers come from a matching database entry, not Gemini. Compare the brand, flavour and nutrition label on your packet. Community data may be wrong.</p>
                   <label className="block text-sm">
-                    Amount eaten (g/ml)
+                    Total amount shown in photo (g/ml)
                     <TextInput type="number" inputMode="decimal" min={1} max={2000}
                       value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
                       className="mt-1" />
@@ -446,7 +451,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   <p className="text-sm font-medium">Possible packaged foods</p>
                   <p className="text-xs text-muted-foreground">Not automatically verified. Choose only if the exact product and variant match your packet.</p>
                   <label className="block text-sm">
-                    Total amount eaten (g/ml)
+                    Total package amount shown in photo (g/ml)
                     <TextInput type="number" inputMode="decimal" min={1} max={2000}
                       value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
                       className="mt-1" placeholder="Enter packet weight × count" />
