@@ -38,7 +38,7 @@ describe("Week overview", () => {
     expect(screen.getByText("375")).toBeInTheDocument();
     expect(screen.getAllByText("Not logged").length).toBe(2);
     expect(screen.getByText(/does not mean 0 kcal/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button",{name:/Sun Nov 15: you 500 kcal/i}));
+    fireEvent.click(screen.getByRole("button",{name:/Nov 15: you 500 kcal/i}));
     expect(onSelect).toHaveBeenCalledWith("2026-11-15");
     expect(screen.getByRole("button",{name:"Next week"})).toBeDisabled();
   });
