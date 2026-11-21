@@ -420,62 +420,6 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   </div>
                 </section>
               )}
-              {detectedPackage && (
-                <p className="mb-3 text-sm text-muted-foreground">
-                  Packaging spotted: {detectedPackage.brand} {detectedPackage.product}
-                  {detectedTotalGrams(detectedPackage) !== null
-                    ? " · " + String(detectedPackage.pack_count) + " × " + String(detectedPackage.grams_per_pack) + " g (confirm on pack)"
-                    : " · serving size not readable"}
-                </p>
-              )}
-              {checkingLabel && <p className="mb-3 text-sm text-muted-foreground">Checking the food database for a matching label…</p>}
-              {labelSource && (
-                <div className="mb-3 space-y-2 border-b border-border pb-3">
-                  <p className="text-sm font-medium">Open Food Facts community label: {labelSource.name}</p>
-                  <p className="text-xs text-muted-foreground">These numbers come from a matching database entry, not Gemini. Compare the brand, flavour and nutrition label on your packet. Community data may be wrong.</p>
-                  <label className="block text-sm">
-                    Total amount shown in photo (g/ml)
-                    <TextInput type="number" inputMode="decimal" min={1} max={2000}
-                      value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
-                      className="mt-1" />
-                  </label>
-                  <Btn variant="outline" disabled={!Number.isFinite(Number(amountGrams)) || Number(amountGrams) <= 0 || Number(amountGrams) > 2000}
-                    onClick={() => applyLabel(labelSource, Number(amountGrams))}>
-                    Recalculate from label
-                  </Btn>
-                  {labelAdjusted && <p className="text-xs text-muted-foreground">Numbers were adjusted after applying the label.</p>}
-                </div>
-              )}
-              {!labelSource && candidates.length > 0 && !editing && (
-                <div className="mb-4 space-y-2">
-                  <p className="text-sm font-medium">Possible packaged foods</p>
-                  <p className="text-xs text-muted-foreground">Not automatically verified. Choose only if the exact product and variant match your packet.</p>
-                  <label className="block text-sm">
-                    Total package amount shown in photo (g/ml)
-                    <TextInput type="number" inputMode="decimal" min={1} max={2000}
-                      value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
-                      className="mt-1" placeholder="Enter packet weight × count" />
-                  </label>
-                  {candidates.map(food => (
-                    <button key={food.code} type="button"
-                      disabled={!Number.isFinite(Number(amountGrams)) || Number(amountGrams) <= 0 || Number(amountGrams) > 2000}
-                      onClick={() => applyLabel(food, Number(amountGrams))}
-                      className="w-full rounded-xl border border-border p-3 text-left text-sm disabled:opacity-40">
-                      <span className="block font-medium">{food.brand} {food.name}{food.packageQuantity ? " · " + food.packageQuantity : ""}</span>
-                      <span className="block text-xs text-muted-foreground">Per 100 g/ml: {food.calories} kcal · P {food.protein} · C {food.carbs} · F {food.fat}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {!labelSource && !checkingLabel && (
-                <p className="mb-3 text-xs text-muted-foreground">
-                  AI estimate only. For packaged food, check its nutrition label before saving.
-                </p>
-              )}
-              {!editing && <Btn variant="outline" className="mb-4 w-full" onClick={() => setFoodSearchOpen(true)}>
-                {labelSource ? "Use a different package label" : "Find label by name or barcode"}
-              </Btn>}
-              <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyLabel} />
               {editing ? (
                 <div className="border-t border-border pt-4">
                   <MealFields draft={draft} onChange={next => {
@@ -540,7 +484,71 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   </div>
                 </div>
               )}
-<div className="mt-4">
+              <details className="mt-3 border-b border-border pb-3">
+                <summary className="cursor-pointer rounded-sm py-2 text-sm text-primary focus-visible:outline-2 focus-visible:outline-ring">
+                  Check food label or barcode
+                </summary>
+                <div className="mt-2 space-y-2">
+              {detectedPackage && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Packaging spotted: {detectedPackage.brand} {detectedPackage.product}
+                  {detectedTotalGrams(detectedPackage) !== null
+                    ? " · " + String(detectedPackage.pack_count) + " × " + String(detectedPackage.grams_per_pack) + " g (confirm on pack)"
+                    : " · serving size not readable"}
+                </p>
+              )}
+              {checkingLabel && <p className="mb-3 text-sm text-muted-foreground">Checking the food database for a matching label…</p>}
+              {labelSource && (
+                <div className="mb-3 space-y-2 border-b border-border pb-3">
+                  <p className="text-sm font-medium">Open Food Facts community label: {labelSource.name}</p>
+                  <p className="text-xs text-muted-foreground">These numbers come from a matching database entry, not Gemini. Compare the brand, flavour and nutrition label on your packet. Community data may be wrong.</p>
+                  <label className="block text-sm">
+                    Total amount shown in photo (g/ml)
+                    <TextInput type="number" inputMode="decimal" min={1} max={2000}
+                      value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
+                      className="mt-1" />
+                  </label>
+                  <Btn variant="outline" disabled={!Number.isFinite(Number(amountGrams)) || Number(amountGrams) <= 0 || Number(amountGrams) > 2000}
+                    onClick={() => applyLabel(labelSource, Number(amountGrams))}>
+                    Recalculate from label
+                  </Btn>
+                  {labelAdjusted && <p className="text-xs text-muted-foreground">Numbers were adjusted after applying the label.</p>}
+                </div>
+              )}
+              {!labelSource && candidates.length > 0 && !editing && (
+                <div className="mb-4 space-y-2">
+                  <p className="text-sm font-medium">Possible packaged foods</p>
+                  <p className="text-xs text-muted-foreground">Not automatically verified. Choose only if the exact product and variant match your packet.</p>
+                  <label className="block text-sm">
+                    Total package amount shown in photo (g/ml)
+                    <TextInput type="number" inputMode="decimal" min={1} max={2000}
+                      value={amountGrams} onChange={event => setAmountGrams(event.target.value)}
+                      className="mt-1" placeholder="Enter packet weight × count" />
+                  </label>
+                  {candidates.map(food => (
+                    <button key={food.code} type="button"
+                      disabled={!Number.isFinite(Number(amountGrams)) || Number(amountGrams) <= 0 || Number(amountGrams) > 2000}
+                      onClick={() => applyLabel(food, Number(amountGrams))}
+                      className="w-full rounded-xl border border-border p-3 text-left text-sm disabled:opacity-40">
+                      <span className="block font-medium">{food.brand} {food.name}{food.packageQuantity ? " · " + food.packageQuantity : ""}</span>
+                      <span className="block text-xs text-muted-foreground">Per 100 g/ml: {food.calories} kcal · P {food.protein} · C {food.carbs} · F {food.fat}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!labelSource && !checkingLabel && (
+                <p className="mb-3 text-xs text-muted-foreground">
+                  AI estimate only. For packaged food, check its nutrition label before saving.
+                </p>
+              )}
+              {!editing && <Btn variant="outline" className="mb-4 w-full" onClick={() => setFoodSearchOpen(true)}>
+                {labelSource ? "Use a different package label" : "Find label by name or barcode"}
+              </Btn>}
+              <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyLabel} />
+
+                </div>
+              </details>
+              <div className="mt-4">
                   <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
                     Add details for a better estimate <span className="font-normal text-muted-foreground">(optional)</span>
                   </label>
