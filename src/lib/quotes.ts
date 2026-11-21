@@ -111,41 +111,29 @@ export const REDDIT_INSPIRED_QUOTES: readonly string[] = [
 
 export const ALL_QUOTES: readonly string[] = [...ORIGINAL_QUOTES, ...REDDIT_INSPIRED_QUOTES];
 
-/**
- * Editorial lines for Today, written in a neutral voice. The app must not
- * impersonate either partner or invent a message they never sent.
- * The larger legacy library remains for compatibility, but never appears as
- * a supposed personal note on the Home screen.
+/** Restored original couple voice: affectionate and quietly encouraging.
+ * Home rotates through 49 of the original 50 notes plus 11 supporting
+ * lines from the existing library. The one line the member specifically
+ * disliked is deliberately excluded, not deleted from the legacy catalog.
+ * These are editorial lines, not partner-authored messages.
  */
-export const TODAY_LINES: readonly string[] = [
-  "Some days, a good conversation is better than a grand plan.",
-  "A familiar voice makes a long day feel shorter.",
-  "The best part of dinner might be who you tell about it.",
-  "Little routines have a way of becoming the important ones.",
-  "Some stories are worth saving for the end of the day.",
-  "A table for two is a lovely plan for another day.",
-  "The ordinary moments deserve a little time, too.",
-  "Good company makes even a simple meal feel special.",
-  "A favourite recipe often comes with a favourite person.",
-  "Sometimes the nicest date is simply making dinner.",
-  "The best check-ins are the ones that feel easy.",
-  "There is something comforting about a shared routine.",
-  "Small plans count. So do the days between them.",
-  "A slow meal and an unhurried conversation sound just right.",
-  "Being remembered in the middle of a busy day means a lot.",
-  "A meal doesn't need to be elaborate to be memorable.",
-  "It is nice to have someone to tell the little things to.",
-  "One day, deciding what to cook can be the hardest part.",
-  "Some evenings are made for leftovers and a long chat.",
-  "The little things add up to a life together.",
-  "The best meals tend to come with good stories.",
-  "Distance can change dinner plans, but not the conversation.",
-  "Everyday care often looks like remembering the small details.",
-  "Some days are better simply because there's someone to call.",
-  "Good memories often begin around an ordinary table.",
-  "A familiar routine can be its own kind of comfort.",
-  "There is plenty of time for big plans. Today is worth enjoying too.",
-  "A favourite meal is even better when someone remembers it.",
+const SUPPORTIVE_DAILY_QUOTES: readonly string[] = [
+  "I hope your day was kind to you. If not, tell me about it.",
+  "One day, goodnight won't have to mean goodbye for now.",
+  "You make the distance feel worth it.",
+  "I can't fix every bad day, but I can stay and listen.",
+  "Don't forget lunch. I know you get busy.",
+  "You're allowed to be quiet with me, too.",
+  "If today was hard, I wish I could hold your hand.",
+  "I hope you have a meal today that feels like a treat.",
+  "I know you can take care of yourself. I still want to help.",
+  "I hope something reminds you today how loved you are.",
+  "Whatever today looks like, I'm happy we're doing life together.",
+];
+
+export const TODAY_QUOTES: readonly string[] = [
+  ...ORIGINAL_QUOTES.filter(q => q !== "There's no special occasion. I just really love you."),
+  ...SUPPORTIVE_DAILY_QUOTES,
 ];
 
 function hashDay(day:string):number {
@@ -157,10 +145,15 @@ function hashDay(day:string):number {
   return hash>>>0;
 }
 
-/** Stable for a supplied local YYYY-MM-DD, avoiding UTC midnight changes. */
-export function quoteForDay(day:string): string {
-  const idx=hashDay(day)%TODAY_LINES.length;
-  return TODAY_LINES[idx] ?? TODAY_LINES[0] ?? "";
+/** Stable local calendar date. A 60-day cycle avoids accidental repeats
+ * between nearby days, unlike the old hash/modulo selection. */
+export function quoteForDay(day: string): string {
+  const ordinal = /^\d{4}-\d{2}-\d{2}$/.test(day)
+    ? Math.floor(Date.parse(day + "T00:00:00Z") / 86_400_000)
+    : NaN;
+  const seed = Number.isFinite(ordinal) ? ordinal : hashDay(day);
+  const index = ((seed % TODAY_QUOTES.length) + TODAY_QUOTES.length) % TODAY_QUOTES.length;
+  return TODAY_QUOTES[index] ?? TODAY_QUOTES[0] ?? "";
 }
 
 /** Legacy fallback for call sites without a local date. */
