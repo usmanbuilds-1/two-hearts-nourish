@@ -447,7 +447,7 @@ function SettingsPage() {
           </div>
         )}
 
-        {adaptiveEnabled && <AdaptiveTargetCard location="settings" />}
+        <AdaptiveTargetCard location="settings" />
 
         {/* Weight log */}
         <Eyebrow className="pt-2">Weight log</Eyebrow>
