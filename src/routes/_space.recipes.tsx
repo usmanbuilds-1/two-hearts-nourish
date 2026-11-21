@@ -52,9 +52,14 @@ function editIngredientNutrition(
     calories: "caloriesPer100g", protein: "proteinPer100g",
     carbs: "carbsPer100g", fat: "fatPer100g",
   } as const)[key];
-  const per100 = ingredient.grams
+  // A tiny, manually measured ingredient can produce an out-of-range
+  // per-100g extrapolation. Keep its valid measured macros without writing
+  // a fabricated reference density that the server would reject.
+  const maximum = key === "calories" ? 2000 : 100;
+  const reference = ingredient.grams
     ? Math.round(value / ingredient.grams * 1000) / 10
     : null;
+  const per100 = reference !== null && reference <= maximum ? reference : null;
   return {
     ...ingredient, [key]: value, [per100Key]: per100,
     source: "manual", sourceRef: null, confidence: "low",
