@@ -1,8 +1,12 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronLeft, ChevronRight, Info, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { useSpace } from "@/lib/space";
+import { WeekOverview } from "@/components/us/WeekOverview";
+import { supabase } from "@/integrations/supabase/client";
+import type { Meal } from "@/lib/nutrition";
 import { addDays, fmt, parseLocalDate, totals } from "@/lib/nutrition";
 import { Btn, Eyebrow, Screen } from "@/components/us/primitives";
 import { MacroSuggestions } from "@/components/us/MacroSuggestions";
@@ -108,6 +112,7 @@ function WeekView() {
   const [quickKg, setQuickKg]   = useState("");
   const [logging, setLogging]   = useState(false);
   const [tappedDay, setTappedDay]           = useState<string | null>(null);
+  const [overviewEnd, setOverviewEnd]       = useState(today);
   const [lightbox, setLightbox]             = useState<{ src: string; caption: string } | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState(() => me.id);
 
@@ -141,28 +146,33 @@ function WeekView() {
     finally { setLogging(false); }
   }
 
-  // ── calorie chart data ──
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)), [today]);
-  const rows = useMemo(() => days.map((d) => {
-    const mineMeals  = meals.filter((m) => m.meal_date === d && m.member_id === me.id);
-    const theirMeals = partner ? meals.filter((m) => m.meal_date === d && m.member_id === partner.id) : [];
+  // ── weekly overview (actual logged meals, never fabricated complete days) ──
+  const overviewStart = useMemo(() => addDays(overviewEnd, -6), [overviewEnd]);
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(overviewStart, i)), [overviewStart]);
+  // SpaceProvider holds 90 days. Older ranges are fetched explicitly rather
+  // than silently displaying a fake seven-day span of empty logs.
+  const outsideCache = overviewStart < addDays(today, -89);
+  const historyWeek = useQuery<Meal[]>({
+    queryKey: ["week-history", room.id, overviewStart, overviewEnd],
+    enabled: tab === "week" && outsideCache,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("meals")
+        .select("*")
+        .eq("room_id", room.id)
+        .gte("meal_date", overviewStart)
+        .lte("meal_date", overviewEnd)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Meal[];
+    },
+  });
+  const overviewMeals = outsideCache ? historyWeek.data ?? [] : meals;
+  const rows = useMemo(() => days.map(d => {
+    const mineMeals = overviewMeals.filter(m => m.meal_date === d && m.member_id === me.id && !m.is_planned);
+    const theirMeals = partner ? overviewMeals.filter(m => m.meal_date === d && m.member_id === partner.id && !m.is_planned) : [];
     return { d, mine: totals(mineMeals), theirs: totals(theirMeals), mineMeals, theirMeals };
-  }), [days, meals, me.id, partner]);
-
-  const avg = (sel: (r: typeof rows[0]) => { calories: number; protein: number; count: number }) => {
-    const logged = rows.map(sel).filter((t) => t.count > 0);
-    return logged.length
-      ? { kcal: logged.reduce((a, t) => a + t.calories, 0) / logged.length, p: logged.reduce((a, t) => a + t.protein, 0) / logged.length, n: logged.reduce((a, t) => a + t.count, 0) }
-      : { kcal: 0, p: 0, n: 0 };
-  };
-  const a1   = avg((r) => r.mine);
-  const a2   = avg((r) => r.theirs);
-  const both = rows.filter((r) => r.mine.count && r.theirs.count).length;
-  const max  = Math.max(1, ...rows.flatMap((r) => [r.mine.calories, r.theirs.calories]));
-  const targetPct        = me.daily_calorie_target && max > 0 ? Math.min(100, (me.daily_calorie_target / max) * 100) : null;
-  const partnerTargetPct = partner?.daily_calorie_target && max > 0 ? Math.min(100, (partner.daily_calorie_target / max) * 100) : null;
-  const myProteinTarget    = Number(me.daily_protein_target ?? 0);
-  const theirProteinTarget = Number(partner?.daily_protein_target ?? 0);
+  }), [days, overviewMeals, me.id, partner]);
 
   // ── 30-day history data ──
   const last30  = useMemo(() => Array.from({ length: 30 }, (_, i) => addDays(today, i - 29)), [today]);
@@ -191,259 +201,41 @@ function WeekView() {
   ];
 
   return (
-    <Screen>
-      {/* Tab bar — 4 cols */}
-      <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary p-1 mb-5">
+    <Screen className="pb-0">
+      <header>
+        <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-primary">Two Hearts Nourish</p>
+        <h1 className="mt-1 font-display text-4xl font-normal leading-tight text-foreground">
+          {tab === "week" ? "Our week" : tab === "history" ? "30 days" : tab === "stats" ? "Stats" : "Weight"}
+        </h1>
+      </header>
+      <div className="mb-5 mt-4 grid grid-cols-4 gap-1 rounded-2xl border border-border bg-secondary/60 p-1" role="tablist" aria-label="Week views">
         {TABS.map(({ key, label }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={cn("rounded-lg py-2 text-[13px] font-medium transition-colors",
-              tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>
+          <button key={key} type="button" role="tab" aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={cn("min-h-11 rounded-xl px-1 text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              tab === key ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-card")}>
             {label}
           </button>
         ))}
       </div>
 
-      {/* ── TAB: THIS WEEK ── */}
       {tab === "week" && (
-        <div className="space-y-5">
-          <div>
-            <h1 className="text-3xl">Our week</h1>
-            <p className="mt-1 text-muted-foreground">
-              {partner ? `${both} of 7 days with meals from both of you.` : "Your last seven days, in one place."}
-            </p>
-          </div>
-
-          {/* ── Calorie chart: date numbers + partner target line ── */}
-          <div>
-            <div
-              className="relative flex h-40 items-end gap-2 rounded-2xl border border-border bg-card p-4 overflow-visible"
-              onClick={() => setTappedDay(null)}
-            >
-              {rows.map((r) => {
-                const myPct    = max > 0 ? (r.mine.calories / max) * 100 : 0;
-                const theirPct = max > 0 ? (r.theirs.calories / max) * 100 : 0;
-                const dayNum   = parseLocalDate(r.d).getDate();
-                const dayLabel = parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "short" });
-                return (
-                  <button
-                    key={r.d}
-                    className="relative flex h-full flex-1 flex-col items-center justify-end gap-0 focus:outline-none"
-                    onClick={(e) => { e.stopPropagation(); setTappedDay(tappedDay === r.d ? null : r.d); }}
-                    aria-label={`${dayLabel} ${dayNum}: You ${r.mine.calories} kcal`}
-                  >
-                    <div className="flex h-full w-full items-end justify-center gap-0.5">
-                      <div
-                        className={cn("w-1/2 max-w-3 rounded-t bg-primary transition-opacity duration-150",
-                          tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
-                        style={{ height: `${myPct}%` }}
-                      />
-                      <div
-                        className={cn("w-1/2 max-w-3 rounded-t bg-partner transition-opacity duration-150",
-                          tappedDay && tappedDay !== r.d ? "opacity-25" : "")}
-                        style={{ height: `${theirPct}%` }}
-                      />
-                    </div>
-                    <div className={cn("text-[10px] uppercase leading-none mt-0.5 transition-colors",
-                      tappedDay === r.d ? "font-bold text-foreground" : "text-muted-foreground")}>
-                      {dayLabel}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground/50 leading-none">{dayNum}</div>
-                  </button>
-                );
-              })}
-              {/* My target line */}
-              {targetPct !== null && (
-                <div className="pointer-events-none absolute inset-x-4 border-t border-dashed border-primary/50"
-                  style={{ bottom: `calc(${targetPct}% + 1rem)` }}>
-                  <span className="absolute -top-3.5 right-0 text-[9px] text-primary/70">Your target</span>
-                </div>
-              )}
-              {/* Partner target line */}
-              {partnerTargetPct !== null && (
-                <div className="pointer-events-none absolute inset-x-4 border-t border-dashed border-partner/40"
-                  style={{ bottom: `calc(${partnerTargetPct}% + 1rem)` }}>
-                  <span className="absolute top-0.5 right-0 text-[9px] text-partner/70">
-                    {(partner?.display_name ?? "Partner").split(" ")[0]}&apos;s target
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-4 mt-2 px-1 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="inline-block size-2 rounded-full bg-primary" /> You</span>
-              {partner && (
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block size-2 rounded-full bg-partner" />
-                  {partner.display_name?.split(" ")[0] ?? "Partner"}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* ── Day Focus Card — replaces clipped tooltip ── */}
-          {tappedDay && (() => {
-            const r = rows.find((row) => row.d === tappedDay);
-            if (!r) return null;
-            const myTarget    = me.daily_calorie_target ?? 0;
-            const theirTarget = partner?.daily_calorie_target ?? 0;
-            return (
-              <div className="rounded-2xl border border-primary/20 bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <Eyebrow className="text-primary">
-                    {parseLocalDate(r.d).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
-                  </Eyebrow>
-                  <button onClick={() => setTappedDay(null)} className="text-xs text-muted-foreground hover:text-foreground">✕</button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <div className="text-xs font-semibold text-primary">You</div>
-                    {r.mine.count === 0 ? <p className="text-xs text-muted-foreground">Not logged</p> : (
-                      <>
-                        <div className="num text-lg font-bold leading-tight">{fmt(r.mine.calories)} kcal</div>
-                        {myTarget > 0 && <div className="text-xs text-muted-foreground">{Math.round((r.mine.calories / myTarget) * 100)}% of {fmt(myTarget)} target</div>}
-                        <div className="text-xs text-muted-foreground">P {fmt(r.mine.protein)}g · C {fmt(r.mine.carbs)}g · F {fmt(r.mine.fat)}g</div>
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {r.mineMeals.slice(0, 4).map((m) => (
-                            <span key={m.id} className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
-                              {m.food_name.length > 15 ? m.food_name.slice(0, 14) + "…" : m.food_name} {fmt(m.calories)}
-                            </span>
-                          ))}
-                          {r.mineMeals.length > 4 && <span className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">+{r.mineMeals.length - 4} more</span>}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  {partner && (
-                    <div className="space-y-1.5">
-                      <div className="text-xs font-semibold text-partner">{partner.display_name}</div>
-                      {r.theirs.count === 0 ? <p className="text-xs text-muted-foreground">Not logged</p> : (
-                        <>
-                          <div className="num text-lg font-bold leading-tight">{fmt(r.theirs.calories)} kcal</div>
-                          {theirTarget > 0 && <div className="text-xs text-muted-foreground">{Math.round((r.theirs.calories / theirTarget) * 100)}% of {fmt(theirTarget)} target</div>}
-                          <div className="text-xs text-muted-foreground">P {fmt(r.theirs.protein)}g · C {fmt(r.theirs.carbs)}g · F {fmt(r.theirs.fat)}g</div>
-                          <div className="flex flex-wrap gap-1 pt-1">
-                            {r.theirMeals.slice(0, 4).map((m) => (
-                              <span key={m.id} className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
-                                {m.food_name.length > 15 ? m.food_name.slice(0, 14) + "…" : m.food_name} {fmt(m.calories)}
-                              </span>
-                            ))}
-                            {r.theirMeals.length > 4 && <span className="rounded-lg bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">+{r.theirMeals.length - 4} more</span>}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
+        outsideCache && historyWeek.isPending
+          ? <p className="py-8 text-sm text-muted-foreground" role="status">Loading this week’s entries…</p>
+          : outsideCache && historyWeek.isError
+            ? <div className="space-y-2 border-y border-border py-4">
+                <p className="text-sm text-foreground" role="alert">Couldn't load these dates. Your existing entries are unchanged.</p>
+                <Btn variant="outline" onClick={() => void historyWeek.refetch()}>Try again</Btn>
               </div>
-            );
-          })()}
-
-          {/* ── Shared weekly summary ── */}
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            <Eyebrow>This week, together</Eyebrow>
-            <div className="space-y-2.5 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Days logged together</span>
-                <span className="num font-semibold">{both} / 7{both >= 5 ? " 💕" : ""}</span>
-              </div>
-              {partner && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Meals logged this week</span>
-                  <span className="num font-semibold">{a1.n + a2.n}</span>
-                </div>
-              )}
-              {me.daily_calorie_target && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Your on-target days</span>
-                  <span className="num font-semibold">
-                    {rows.filter((r) => {
-                      const t = me.daily_calorie_target!;
-                      return r.mine.count > 0 && Math.abs(r.mine.calories - t) <= Math.max(t * 0.1, 150);
-                    }).length} / 7
-                  </span>
-                </div>
-              )}
-              {partner?.daily_calorie_target && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">{partner.display_name?.split(" ")[0]}&apos;s on-target days</span>
-                  <span className="num font-semibold">
-                    {rows.filter((r) => {
-                      const t = partner!.daily_calorie_target!;
-                      return r.theirs.count > 0 && Math.abs(r.theirs.calories - t) <= Math.max(t * 0.1, 150);
-                    }).length} / 7
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Macro Meters — You ── */}
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            <Eyebrow className="text-primary">You — Avg Macros</Eyebrow>
-            <div className="space-y-3">
-              {(() => {
-                const loggedRows = rows.filter((r) => r.mine.count > 0);
-                const n = Math.max(loggedRows.length, 1);
-                return [
-                  { label: "Protein", val: a1.p, target: myProteinTarget },
-                  { label: "Carbs",   val: Math.round(loggedRows.reduce((a, r) => a + r.mine.carbs, 0) / n), target: Number(me.daily_carbs_target ?? 0) },
-                  { label: "Fat",     val: Math.round(loggedRows.reduce((a, r) => a + r.mine.fat,   0) / n), target: Number(me.daily_fat_target   ?? 0) },
-                ].map(({ label, val, target }) => {
-                  const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0;
-                  return (
-                    <div key={label} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">{label}</span>
-                        <span className="num font-medium">
-                          {fmt(val)}g{target > 0 ? ` / ${fmt(target)}g (${pct}%)` : ""}
-                        </span>
-                      </div>
-                      {target > 0 && (
-                        <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          </div>
-
-          {/* ── Macro Meters — Partner ── */}
-          {partner && a2.kcal > 0 && (
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-              <Eyebrow className="text-partner">{partner.display_name} — Avg Macros</Eyebrow>
-              <div className="space-y-3">
-                {(() => {
-                  const loggedRows = rows.filter((r) => r.theirs.count > 0);
-                  const n = Math.max(loggedRows.length, 1);
-                  return [
-                    { label: "Protein", val: a2.p, target: theirProteinTarget },
-                    { label: "Carbs",   val: Math.round(loggedRows.reduce((a, r) => a + r.theirs.carbs, 0) / n), target: Number(partner.daily_carbs_target ?? 0) },
-                    { label: "Fat",     val: Math.round(loggedRows.reduce((a, r) => a + r.theirs.fat,   0) / n), target: Number(partner.daily_fat_target   ?? 0) },
-                  ].map(({ label, val, target }) => {
-                    const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0;
-                    return (
-                      <div key={label} className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">{label}</span>
-                          <span className="num font-medium">
-                            {fmt(val)}g{target > 0 ? ` / ${fmt(target)}g (${pct}%)` : ""}
-                          </span>
-                        </div>
-                        {target > 0 && (
-                          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                            <div className="h-full rounded-full bg-partner transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-          )}
-        </div>
+            : <WeekOverview
+                rows={rows} me={me} partner={partner}
+                selectedDay={tappedDay && rows.some(row => row.d === tappedDay) ? tappedDay : overviewEnd}
+                onSelectDay={setTappedDay}
+                onPreviousWeek={() => { setOverviewEnd(previous => addDays(previous, -7)); setTappedDay(null); }}
+                onNextWeek={() => { setOverviewEnd(previous => previous < today ? addDays(previous, 7) : previous); setTappedDay(null); }}
+                atCurrentWeek={overviewEnd >= today}
+                onShowWeight={() => setTab("weight")}
+              />
       )}
 
       {/* ── TAB: 30-DAY HISTORY ── */}
