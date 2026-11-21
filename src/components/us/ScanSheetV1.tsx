@@ -55,7 +55,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const [amountGrams, setAmountGrams] = useState("");
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const [rememberPortion, setRememberPortion] = useState(false);
-  const [keepPhoto, setKeepPhoto] = useState(false);
+  const [keepPhoto, setKeepPhoto] = useState(true);
   const save = useSaveMeal();
   const { room, me } = useSpace();
   const queryClient = useQueryClient();
@@ -80,7 +80,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setAmountGrams("");
       setFoodSearchOpen(false);
       setRememberPortion(false);
-      setKeepPhoto(false);
+      setKeepPhoto(true);
       setEditing(false);
     }
   }, [open]);
@@ -285,7 +285,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis. A copy is kept only if you explicitly choose to save the photo with the meal."}
+            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis. When you save the meal, the photo is also saved privately unless you turn that option off."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
@@ -447,7 +447,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   className="mt-0.5 size-4 accent-primary" />
                 <span>
                   <span className="block font-medium">Keep this photo with the meal</span>
-                  <span className="block text-xs text-muted-foreground">Off by default. If you leave this off, the analysis image is discarded when you close the scanner.</span>
+                  <span className="block text-xs text-muted-foreground">On by default. Saved privately with your meal. Uncheck to keep only the nutrition details.</span>
                 </span>
               </label>
               <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-foreground">
