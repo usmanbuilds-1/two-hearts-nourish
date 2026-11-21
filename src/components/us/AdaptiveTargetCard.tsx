@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
 import { addDays, fmt } from "@/lib/nutrition";
@@ -10,7 +9,7 @@ import {
 } from "@/lib/adaptive-target.functions";
 import { Btn, Eyebrow } from "@/components/us/primitives";
 
-export function AdaptiveTargetCard() {
+export function AdaptiveTargetCard({ location = "today" }: { location?: "today" | "settings" } = {}) {
   const { me, today, setMember } = useSpace();
   const queryClient = useQueryClient();
   const yesterday = addDays(today, -1);
@@ -64,6 +63,7 @@ export function AdaptiveTargetCard() {
 
   if (status.isPending) return null;
   if (status.isError || !status.data) {
+    if (location === "today") return null;
     return (
       <div className="mt-4 rounded-xl border border-border p-4">
         <p className="text-sm text-muted-foreground">
@@ -77,6 +77,11 @@ export function AdaptiveTargetCard() {
   }
   const data = status.data;
   const change = data.latestUnseenChange;
+  const needsConfirmation = data.enabled && data.configurationReady && !data.yesterdayComplete;
+  // A confirmed day should not occupy space on Today every time someone opens
+  // the app. The persistent record and its reversal live in Settings.
+  if (location === "today" && !change && !needsConfirmation) return null;
+  if (location === "settings" && !data.enabled && !data.yesterdayComplete && !change) return null;
 
   return (
     <div className="mt-4 space-y-3">
@@ -145,45 +150,53 @@ export function AdaptiveTargetCard() {
         </section>
       )}
 
-      {data.enabled && (
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <Eyebrow>Adaptive target evidence</Eyebrow>
-          {!data.configurationReady ? (
-            <>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Finish the adaptive-target setup in Settings before the model can evaluate your target.
-              </p>
-              <Link
-                to="/settings"
-                className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-primary"
-              >
-                Open Settings
-              </Link>
-            </>
+      {location === "today" && needsConfirmation && (
+        <section className="flex items-center justify-between gap-3 border-y border-border py-3" aria-label="Yesterday's food log">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Finished logging yesterday?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {yesterday} · Confirm only if all meals and calorie-containing drinks are recorded.
+            </p>
+          </div>
+          <Btn variant="outline" className="shrink-0 text-primary" onClick={() => void setComplete(true)}>
+            Confirm
+          </Btn>
+        </section>
+      )}
+      {location === "settings" && (data.enabled || data.yesterdayComplete) && (
+        <section className="border-t border-border pt-4" aria-labelledby="adaptive-day-review">
+          <Eyebrow>Food log confirmations</Eyebrow>
+          <p id="adaptive-day-review" className="mt-2 text-sm font-medium text-foreground">
+            Yesterday · {yesterday}
+          </p>
+          {!data.configurationReady && !data.yesterdayComplete ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Save your goal, activity and pace above before confirming days.
+            </p>
           ) : (
             <>
-              <p className="mt-2 text-sm text-muted-foreground">
-                The model uses your dated weight logs and consecutive days you confirm as fully logged.
-                A weight entry alone does not trigger a calorie change.
+              <p className="mt-1 text-sm text-muted-foreground">
+                {data.yesterdayComplete
+                  ? "Marked fully logged. You can correct this record here."
+                  : "Not confirmed. Only mark complete when every meal and calorie-containing drink is in your diary."}
               </p>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium">Was yesterday fully logged?</div>
-                  <div className="text-xs text-muted-foreground">{yesterday}</div>
-                </div>
-                <Btn
-                  variant={data.yesterdayComplete ? "outline" : "primary"}
-                  onClick={() => void setComplete(!data.yesterdayComplete)}
-                >
-                  {data.yesterdayComplete ? "Undo" : "Yes, complete"}
-                </Btn>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                Only confirm this if all food and calorie-containing drinks from yesterday are in the diary.
-                For safety, an adjustment requires at least 21 consecutive complete intake days
-                and four weight readings spanning at least 14 days. These are conservative
-                app safeguards, not research-validated minimums.
-              </p>
+              <Btn variant="outline" className="mt-3" onClick={() => void setComplete(!data.yesterdayComplete)}>
+                {data.yesterdayComplete ? "Undo confirmation" : "Mark yesterday complete"}
+              </Btn>
+              {data.yesterdayComplete && (
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Undo removes the completeness record. It does not reverse a calorie-target adjustment already applied.
+                </p>
+              )}
+              <details className="mt-3 text-sm text-muted-foreground">
+                <summary className="min-h-11 cursor-pointer py-2 text-primary">How adaptive targets use this</summary>
+                <p className="pb-2 text-xs leading-relaxed">
+                  The model compares dated weight changes with consecutive days of complete food logs.
+                  A weight entry alone cannot change your target. Adjustments require at least 21
+                  consecutive fully logged days and four weights spanning 14 days. These are conservative
+                  safeguards rather than research-validated cutoffs.
+                </p>
+              </details>
             </>
           )}
         </section>
