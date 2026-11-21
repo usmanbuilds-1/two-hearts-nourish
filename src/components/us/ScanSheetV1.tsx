@@ -229,7 +229,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     }
   }
 
-  function useReanalysis() {
+  function acceptReanalysis() {
     if (!reanalysisResult || busy || pendingPhoto) return;
     const candidate = reanalysisResult;
     const id = ++requestRef.current;
@@ -410,7 +410,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                     Protein {draft.protein} → {revisedPortion.protein} g · Carbs {draft.carbs} → {revisedPortion.carbs} g · Fat {draft.fat} → {revisedPortion.fat} g
                   </p>
                   <div className="mt-3 flex gap-2">
-                    <Btn onClick={useReanalysis} className="flex-1">Use new estimate</Btn>
+                    <Btn onClick={acceptReanalysis} className="flex-1">Use new estimate</Btn>
                     <Btn variant="outline" onClick={keepPreviousEstimate} className="flex-1">Keep previous</Btn>
                   </div>
                 </section>
