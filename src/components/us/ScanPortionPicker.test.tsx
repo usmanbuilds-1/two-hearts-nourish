@@ -26,6 +26,15 @@ function PortionTest() {
 }
 
 describe("scanner portion eaten", () => {
+  it("starts at 100% with the full estimated nutrition and no custom input", () => {
+    render(<PortionTest />);
+    expect(screen.getByRole("button", { name: "100%" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(JSON.parse(screen.getByLabelText("Nutrition").textContent ?? "")).toEqual({
+      calories: 610, protein: 39, carbs: 67, fat: 20,
+    });
+  });
+
   it("scales all nutrients immediately, using the full pictured portion each time", () => {
     render(<PortionTest />);
     fireEvent.click(screen.getByRole("button", { name: "50%" }));
