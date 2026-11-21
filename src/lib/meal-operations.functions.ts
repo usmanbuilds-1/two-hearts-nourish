@@ -285,7 +285,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
     const newMeals = sourceMeals.map((m) => mealCopyFields(m as Meal,data.targetDate));
     const { data: inserted, error: insertError } = await db.from("meals").insert(newMeals).select();
     if (insertError || !inserted) throw new Error("COPY_FAILED");
-    return { ok: true, count: inserted.length };
+    return { ok: true, count: inserted.length, meals: inserted as Meal[] };
   });
 
 export const getMealTemplates = createServerFn({ method: "GET" })
