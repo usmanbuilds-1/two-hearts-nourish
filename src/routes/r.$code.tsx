@@ -149,7 +149,7 @@ function Join() {
       } catch (err) {
         const msg = String(err);
         if (msg.includes("EXPIRED") || msg.includes("INVALID") || msg.includes("NOT_FOUND")) {
-          toast.error("This link has expired — ask your partner to send a new one.");
+          toast.error("This link is no longer valid. Use your personal recovery key or a link created by a device already signed in to your profile.");
         } else {
           toast.error(friendlyError(err));
         }
@@ -168,7 +168,7 @@ function Join() {
             {busy ? "Rejoining…" : "Rejoin our space ❤️"}
           </Btn>
           <p className="mt-4 text-xs text-muted-foreground">
-            One-use link · ask your partner for a fresh one if it has expired
+            One-use link · a signed-in device on your profile can make a new one
           </p>
           <Btn variant="outline" className="mt-5 w-full" onClick={() => {
             window.history.replaceState(window.history.state, "", window.location.pathname);
@@ -225,7 +225,7 @@ function Join() {
 
   const rejoinForm = (
     <form onSubmit={doRejoin} className="mt-8 space-y-4">
-      <Field label="Your private recovery key" hint="A 64-character key stored privately on your device. If you lost it, ask your partner for a new recovery link from Settings.">
+      <Field label="Your private recovery key" hint="A 64-character key saved for your own profile. If it's missing, check a signed-in device or a secure backup.">
         <TextInput value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="64-character recovery key" className="font-mono text-sm" autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="off" />
       </Field>
       <Btn size="lg" className="w-full" disabled={!/^[a-f0-9]{64}$/i.test(key.trim()) || busy}>
@@ -241,7 +241,7 @@ function Join() {
         <h1 className="font-display text-3xl leading-tight">This room code isn't a sign-in key.</h1>
         <p className="mt-3 text-muted-foreground">
           For a new partner, use the private invitation link sent from the existing member.
-          If this is already your space, use your personal recovery key below or ask your partner for a one-use reconnect link.
+          If this is already your space, use your personal recovery key below. Your partner can share the recovery instructions, but cannot sign in for you.
         </p>
         {!rejoin ? (
           <Btn variant="outline" className="mt-7 w-full" onClick={() => setRejoin(true)}>
@@ -256,7 +256,7 @@ function Join() {
       <>
         <h1 className="font-display text-3xl leading-tight">This space already has two people.</h1>
         <p className="mt-3 text-muted-foreground">
-          If one of them is you, use your saved recovery key or ask your partner for a private reconnect link from Settings → Come back to us.
+          If one of them is you, use your saved recovery key. Your partner can send recovery instructions from Settings → Come back to us.
         </p>
         {!rejoin ? (
           <Btn variant="outline" className="mt-7 w-full" onClick={() => setRejoin(true)}>
