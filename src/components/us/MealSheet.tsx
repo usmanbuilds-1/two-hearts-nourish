@@ -21,7 +21,8 @@ import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
 import { editPortionMacro, parseMacroNumber, resetPortionBasis, scaleMealPortion, storedMealMacros, type MealMacroKey } from "@/lib/meal-portion";
 import { attachMyMealPhoto, deleteMyMeal } from "@/lib/scanned-meal.functions";
 import { compressImage, uploadMealPhoto } from "@/lib/image";
-import { saveMealPhoto } from "@/lib/meal-photo-save";
+import { saveMealPhotoWithServerFallback } from "@/lib/meal-photo-save";
+import { uploadAndAttachMyMealPhoto } from "@/lib/meal-photo-upload.functions";
 
 export type MealDraft = {
   food_name: string;
@@ -443,7 +444,7 @@ export function MealSheet({
     try {
       const dataUrl = file ? await compressImage(file) : photoRetry?.dataUrl;
       if (!dataUrl) throw new Error("NO_IMAGE");
-      const result = await saveMealPhoto({
+      const result = await saveMealPhotoWithServerFallback({
         roomId: meal.room_id,
         mealId: meal.id,
         compressedImage: dataUrl,
@@ -454,6 +455,9 @@ export function MealSheet({
           const response = await attachMyMealPhoto({ data: { mealId, photoPath: uploadedPath } });
           return response.ok ? { ok: true, photoPath: response.photoPath } : { ok: false };
         },
+      }, async (mealId, compressedImage) => {
+        const response = await uploadAndAttachMyMealPhoto({ data: { mealId, image: compressedImage } });
+        return response;
       });
       if (!result.ok) {
         setPhotoRetry({ dataUrl, uploadedPath: result.uploadedPath });
