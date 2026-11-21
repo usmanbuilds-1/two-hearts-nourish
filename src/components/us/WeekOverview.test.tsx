@@ -24,7 +24,7 @@ describe("Week overview", () => {
   it("never treats an unlogged day as recorded 0 kcal or a completed intake day",()=>{
     const summary=weekAtAGlance(rows);
     expect(summary).toEqual({bothLogged:2,mineLoggedDays:4,mineLoggedDayAverage:375});
-    expect(weekAtAGlance(rows.map(r=>({...r,mine:totals([]),theirs:totals([])}))).toEqual({
+    expect(weekAtAGlance(rows.map(r=>({...r,mine:totals([]),theirs:totals([])})))).toEqual({
       bothLogged:0,mineLoggedDays:0,mineLoggedDayAverage:null,
     });
   });
