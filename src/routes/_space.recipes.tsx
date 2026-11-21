@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Pencil, Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Barcode, Camera, Pencil, Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
@@ -9,6 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe, updateRecipe } from "@/lib/recipe.functions";
 import { perServing, recipeTotals, scaleIngredientGrams, type RecipeIngredient, type RecipeRecord } from "@/lib/recipe";
 import { defaultMealType, type MealType } from "@/lib/nutrition";
+import { FoodSearchSheet } from "@/components/us/FoodSearchSheet";
+import { compressImage } from "@/lib/image";
+import { scanNutritionLabel } from "@/lib/nutrition-label.functions";
+import { ingredientFromBarcode, ingredientFromLabel } from "@/lib/recipe-scanned-ingredients";
+import { recipeInputSchema } from "@/lib/recipe-input";
+import type { PackagedFood } from "@/lib/off-food";
 
 
 export const Route = createFileRoute("/_space/recipes")({
@@ -61,6 +67,10 @@ function RecipesView() {
 
   const [createMode, setCreateMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const labelRef = useRef<HTMLInputElement>(null);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [scanningLabel, setScanningLabel] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [description, setDescription] = useState("");
   const [name, setName] = useState("");
   const [servings, setServings] = useState("1");
@@ -84,6 +94,46 @@ function RecipesView() {
     setName("");
     setServings("1");
     setIngredients([]);
+    setSaveError("");
+  }
+
+  function addBarcodeIngredient(food: PackagedFood, amount: number) {
+    if (ingredients.length >= 30) return void toast.error("A recipe can have at most 30 ingredients.");
+    try {
+      const item = ingredientFromBarcode(food, amount);
+      setIngredients(items => items.length < 30 ? [...items, item] : items);
+      toast.success("Label values added. Check the ingredient amount.");
+    } catch {
+      toast.error("Couldn't apply this label. Check the amount.");
+    }
+  }
+
+  async function handleLabelPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || scanningLabel || busy) return;
+    if (ingredients.length >= 30) return void toast.error("A recipe can have at most 30 ingredients.");
+    setScanningLabel(true);
+    try {
+      const image = await compressImage(file);
+      const result = await scanNutritionLabel({ data: { image } });
+      if (!result.ok) {
+        const message = result.error === "LABEL_INCOMPLETE"
+          ? "Some values weren't readable. Enter them manually or try a clearer label."
+          : result.error === "AI_LIMIT"
+            ? "Label scan limit reached. You can still add ingredients manually."
+            : "Couldn't read this nutrition label. Try a clearer photo or add the values manually.";
+        toast.error(message);
+        return;
+      }
+      const item = ingredientFromLabel(result.estimate);
+      setIngredients(items => items.length < 30 ? [...items, item] : items);
+      toast.success("Nutrition label added. Check the serving size.");
+    } catch {
+      toast.error("Couldn't read that label. Try again or enter the values manually.");
+    } finally {
+      setScanningLabel(false);
+    }
   }
 
   function startEdit(recipe: RecipeRecord) {
@@ -105,7 +155,7 @@ function RecipesView() {
         toast.error(ERRORS[result.error] ?? "Couldn't analyze this recipe.");
         return;
       }
-      setName(result.recipe.name);
+      setName(previous => previous.trim() ? previous : result.recipe.name);
       setServings(String(result.recipe.servings));
       setIngredients(result.recipe.ingredients);
       toast.success("Recipe analyzed. Review before saving.");
@@ -118,13 +168,28 @@ function RecipesView() {
 
   async function save() {
     const count = Number(servings);
+    setSaveError("");
     if (busy) return;
     if (!name.trim()) return void toast.error("Give your recipe a name.");
     if (!Number.isFinite(count) || count < 0.25 || count > 100) {
       return void toast.error("Servings must be between 0.25 and 100.");
     }
     if (ingredients.length === 0 || ingredients.some((ingredient) => !ingredient.name.trim() || !ingredient.amountLabel.trim())) {
-      return void toast.error("Add at least one named ingredient and its amount.");
+      const error = "Add at least one named ingredient and its amount.";
+      setSaveError(error);
+      return void toast.error(error);
+    }
+    const checked = recipeInputSchema.safeParse({
+      name: name.trim(), servings: count, ingredients,
+    });
+    if (!checked.success) {
+      const issue = checked.error.issues[0];
+      const item = typeof issue?.path[1] === "number" ? Number(issue.path[1]) + 1 : null;
+      const error = item ? `Ingredient ${item}: check ${String(issue?.path.at(-1) ?? "nutrition values")} and try again.`
+        : "Review the recipe name, servings and ingredient values before saving.";
+      setSaveError(error);
+      toast.error(error);
+      return;
     }
     setBusy(true);
     try {
@@ -137,8 +202,15 @@ function RecipesView() {
       toast.success(editingId ? "Recipe updated" : "Recipe saved");
       reset();
       setCreateMode(false);
-    } catch {
-      toast.error("Couldn't save this recipe.");
+    } catch (error) {
+      const message = String(error);
+      const detail = /unauthorized|not_member/i.test(message)
+        ? "Your session needs reconnecting. Your recipe is still here."
+        : /network|fetch/i.test(message)
+          ? "Couldn't reach the server. Your recipe is still here—try saving again."
+          : "Couldn't save the recipe. Your entries are still here; try again.";
+      setSaveError(detail);
+      toast.error(detail);
     } finally {
       setBusy(false);
     }
