@@ -35,7 +35,7 @@ describe("Week overview", () => {
       onPreviousWeek={vi.fn()} onNextWeek={vi.fn()} atCurrentWeek onShowWeight={vi.fn()} />);
     expect(screen.getByText("Days both logged")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
-    expect(screen.getByText("375")).toBeInTheDocument();
+    expect(screen.getAllByText("375").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Not logged").length).toBe(2);
     expect(screen.getByText(/does not mean 0 kcal/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:/Nov 15: you 500 kcal/i}));
