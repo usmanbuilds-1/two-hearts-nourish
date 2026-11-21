@@ -4,7 +4,7 @@ import { z } from "zod";
 import { claimAiQuota } from "./ai-quota.server";
 import { labelEnergyWarning } from "./scan-v2";
 
-const MODEL = "gemini-3.5-flash-lite";
+const MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"] as const;
 const SCANNER_VERSION = "two-hearts-label-v1.0.0";
 const PROMPT_VERSION = "visible-label-only-v1";
 
@@ -58,13 +58,17 @@ export const scanNutritionLabel = createServerFn({ method: "POST" })
     const {supabaseAdmin}=await import("@/integrations/supabase/client.server");
     const {data:event,error:eventError}=await supabaseAdmin.from("scan_events").insert({
       member_id:device.member_id,scanner_version:SCANNER_VERSION,prompt_version:PROMPT_VERSION,
-      model:MODEL,route:"label",status:"started"
+      model:MODELS[0],route:"label",status:"started"
     }).select("id").single();
     if(eventError||!event)return {ok:false as const,error:"V2_STORAGE_UNAVAILABLE"};
 
     const started=Date.now();
     try{
-      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+MODEL+":generateContent",{
+      let response: Response | null = null;
+      let chosenModel: string = MODELS[0];
+      for (const model of MODELS) {
+        chosenModel = model;
+        const next = await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",{
         method:"POST",
         headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
         signal:AbortSignal.timeout(12_000),
@@ -77,8 +81,18 @@ Return JSON only with: product_name,basis,serving_size_g,serving_size_ml,calorie
           contents:[{role:"user",parts:[{inline_data:{mime_type:image.mime,data:image.base64}}]}],
           generationConfig:{response_mime_type:"application/json",temperature:0,maxOutputTokens:700}
         })
-      });
-      if(!response.ok)throw Object.assign(new Error("Gemini HTTP "+response.status),{status:response.status});
+        });
+        if (next.ok) { response = next; break; }
+        // Only model-specific access/availability problems trigger a bounded
+        // second model; auth, image, or safety failures must not be bypassed.
+        if (![403,404,503].includes(next.status)) {
+          throw Object.assign(new Error("Gemini HTTP "+next.status),{status:next.status});
+        }
+        if (model === MODELS[MODELS.length-1]) {
+          throw Object.assign(new Error("Gemini HTTP "+next.status),{status:next.status});
+        }
+      }
+      if (!response) throw new Error("LABEL_UNAVAILABLE");
       const raw=await response.json() as {
         candidates?:Array<{content?:{parts?:Array<{text?:string}>}}>;
         usageMetadata?:{promptTokenCount?:number;candidatesTokenCount?:number;thoughtsTokenCount?:number;totalTokenCount?:number};
@@ -90,7 +104,7 @@ Return JSON only with: product_name,basis,serving_size_g,serving_size_ml,calorie
       const label=parsed.data;
       const usage=raw.usageMetadata;
       await supabaseAdmin.from("scan_events").update({
-        status:"succeeded",latency_ms:Date.now()-started,
+        status:"succeeded",model:chosenModel,latency_ms:Date.now()-started,
         input_tokens:usage?.promptTokenCount??0,
         output_tokens:usage?.candidatesTokenCount??0,
         thinking_tokens:usage?.thoughtsTokenCount??0,

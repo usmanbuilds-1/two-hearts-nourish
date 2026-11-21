@@ -7,13 +7,15 @@ import { searchPackagedFoods } from "@/lib/food-catalog.functions";
 import type { PackagedFood } from "@/lib/off-food";
 
 export function FoodSearchSheet({
-  open,onOpenChange,onSelect
+  open,onOpenChange,onSelect,initialMode="name",amountLabel="Amount eaten, in g/ml"
 }:{
+  initialMode?:"name"|"barcode";
+  amountLabel?:string;
   open:boolean;
   onOpenChange:(open:boolean)=>void;
   onSelect:(food:PackagedFood,amount:number)=>void;
 }) {
-  const [mode,setMode]=useState<"name"|"barcode">("name");
+  const [mode,setMode]=useState<"name"|"barcode">(initialMode);
   const [query,setQuery]=useState("");
   const [grams,setGrams]=useState("100");
   const [foods,setFoods]=useState<PackagedFood[]>([]);
@@ -67,7 +69,7 @@ export function FoodSearchSheet({
               {error&&<p role="status" className="text-sm text-muted-foreground">{error}</p>}
               {foods.length>0&&(
                 <>
-                  <label className="block text-sm">Amount eaten, in g/ml
+                  <label className="block text-sm">{amountLabel}
                     <TextInput type="number" inputMode="decimal" min={1} max={2000}
                       value={grams} onChange={e=>setGrams(e.target.value)}/>
                   </label>

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Pencil, Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Barcode, Camera, Pencil, Plus, Trash2, Utensils, WandSparkles } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSpace } from "@/lib/space";
@@ -9,6 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { analyzeRecipe, deleteRecipe, getRecipes, logRecipe, saveRecipe, updateRecipe } from "@/lib/recipe.functions";
 import { perServing, recipeTotals, scaleIngredientGrams, type RecipeIngredient, type RecipeRecord } from "@/lib/recipe";
 import { defaultMealType, type MealType } from "@/lib/nutrition";
+import { FoodSearchSheet } from "@/components/us/FoodSearchSheet";
+import { compressImage } from "@/lib/image";
+import { scanNutritionLabel } from "@/lib/nutrition-label.functions";
+import { ingredientFromBarcode, ingredientFromLabel } from "@/lib/recipe-scanned-ingredients";
+import { recipeInputSchema } from "@/lib/recipe-input";
+import type { PackagedFood } from "@/lib/off-food";
 
 
 export const Route = createFileRoute("/_space/recipes")({
@@ -46,9 +52,14 @@ function editIngredientNutrition(
     calories: "caloriesPer100g", protein: "proteinPer100g",
     carbs: "carbsPer100g", fat: "fatPer100g",
   } as const)[key];
-  const per100 = ingredient.grams
+  // A tiny, manually measured ingredient can produce an out-of-range
+  // per-100g extrapolation. Keep its valid measured macros without writing
+  // a fabricated reference density that the server would reject.
+  const maximum = key === "calories" ? 2000 : 100;
+  const reference = ingredient.grams
     ? Math.round(value / ingredient.grams * 1000) / 10
     : null;
+  const per100 = reference !== null && reference <= maximum ? reference : null;
   return {
     ...ingredient, [key]: value, [per100Key]: per100,
     source: "manual", sourceRef: null, confidence: "low",
@@ -61,6 +72,11 @@ function RecipesView() {
 
   const [createMode, setCreateMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const labelRef = useRef<HTMLInputElement>(null);
+  const createRequestId = useRef<string | null>(null);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [scanningLabel, setScanningLabel] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [description, setDescription] = useState("");
   const [name, setName] = useState("");
   const [servings, setServings] = useState("1");
@@ -84,9 +100,51 @@ function RecipesView() {
     setName("");
     setServings("1");
     setIngredients([]);
+    setSaveError("");
+    createRequestId.current = null;
+  }
+
+  function addBarcodeIngredient(food: PackagedFood, amount: number) {
+    if (ingredients.length >= 30) return void toast.error("A recipe can have at most 30 ingredients.");
+    try {
+      const item = ingredientFromBarcode(food, amount);
+      setIngredients(items => items.length < 30 ? [...items, item] : items);
+      // The shared search sheet displays one success message.
+    } catch {
+      toast.error("Couldn't apply this label. Check the amount.");
+    }
+  }
+
+  async function handleLabelPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || scanningLabel || busy) return;
+    if (ingredients.length >= 30) return void toast.error("A recipe can have at most 30 ingredients.");
+    setScanningLabel(true);
+    try {
+      const image = await compressImage(file);
+      const result = await scanNutritionLabel({ data: { image } });
+      if (!result.ok) {
+        const message = result.error === "LABEL_INCOMPLETE"
+          ? "Some values weren't readable. Enter them manually or try a clearer label."
+          : result.error === "AI_LIMIT"
+            ? "Label scan limit reached. You can still add ingredients manually."
+            : "Couldn't read this nutrition label. Try a clearer photo or add the values manually.";
+        toast.error(message);
+        return;
+      }
+      const item = ingredientFromLabel(result.estimate);
+      setIngredients(items => items.length < 30 ? [...items, item] : items);
+      toast.success("Nutrition label added. Check the serving size.");
+    } catch {
+      toast.error("Couldn't read that label. Try again or enter the values manually.");
+    } finally {
+      setScanningLabel(false);
+    }
   }
 
   function startEdit(recipe: RecipeRecord) {
+    createRequestId.current = null;
     setEditingId(recipe.id);
     setName(recipe.name);
     setDescription("");
@@ -97,7 +155,7 @@ function RecipesView() {
   }
 
   async function analyze() {
-    if (description.trim().length < 3 || busy) return;
+    if (description.trim().length < 3 || busy || scanningLabel) return;
     setBusy(true);
     try {
       const result = await analyzeRecipe({ data: { description: description.trim() } });
@@ -105,8 +163,8 @@ function RecipesView() {
         toast.error(ERRORS[result.error] ?? "Couldn't analyze this recipe.");
         return;
       }
-      setName(result.recipe.name);
-      setServings(String(result.recipe.servings));
+      setName(previous => previous.trim() ? previous : result.recipe.name);
+      setServings(previous => previous === "1" ? String(result.recipe.servings) : previous);
       setIngredients(result.recipe.ingredients);
       toast.success("Recipe analyzed. Review before saving.");
     } catch {
@@ -118,27 +176,55 @@ function RecipesView() {
 
   async function save() {
     const count = Number(servings);
+    setSaveError("");
     if (busy) return;
     if (!name.trim()) return void toast.error("Give your recipe a name.");
     if (!Number.isFinite(count) || count < 0.25 || count > 100) {
       return void toast.error("Servings must be between 0.25 and 100.");
     }
     if (ingredients.length === 0 || ingredients.some((ingredient) => !ingredient.name.trim() || !ingredient.amountLabel.trim())) {
-      return void toast.error("Add at least one named ingredient and its amount.");
+      const error = "Add at least one named ingredient and its amount.";
+      setSaveError(error);
+      return void toast.error(error);
+    }
+    const checked = recipeInputSchema.safeParse({
+      name: name.trim(), servings: count, ingredients,
+    });
+    if (!checked.success) {
+      const issue = checked.error.issues[0];
+      const item = typeof issue?.path[1] === "number" ? Number(issue.path[1]) + 1 : null;
+      const error = item ? `Ingredient ${item}: check ${String(issue?.path.at(-1) ?? "nutrition values")} and try again.`
+        : "Review the recipe name, servings and ingredient values before saving.";
+      setSaveError(error);
+      toast.error(error);
+      return;
     }
     setBusy(true);
     try {
       if (editingId) {
         await updateRecipe({ data: { recipeId: editingId, name: name.trim(), servings: count, ingredients } });
       } else {
-        await saveRecipe({ data: { name: name.trim(), servings: count, ingredients } });
+        const requestId = createRequestId.current ?? crypto.randomUUID();
+        createRequestId.current = requestId;
+        await saveRecipe({ data: { name: name.trim(), servings: count, ingredients, requestId } });
       }
-      await queryClient.invalidateQueries({ queryKey: ["recipes", me.id] });
+      // An unsuccessful list refresh must never tell the user a successful
+      // database write failed, or encourage them to save a duplicate recipe.
+      void queryClient.invalidateQueries({ queryKey: ["recipes", me.id] }).catch(() => {
+        toast.error("Recipe saved, but the list couldn't refresh. Reopen Recipes to see it.");
+      });
       toast.success(editingId ? "Recipe updated" : "Recipe saved");
       reset();
       setCreateMode(false);
-    } catch {
-      toast.error("Couldn't save this recipe.");
+    } catch (error) {
+      const message = String(error);
+      const detail = /unauthorized|not_member/i.test(message)
+        ? "Your session needs reconnecting. Your recipe is still here."
+        : /network|fetch/i.test(message)
+          ? "Couldn't reach the server. Your recipe is still here—try saving again."
+          : "Couldn't save the recipe. Your entries are still here; try again.";
+      setSaveError(detail);
+      toast.error(detail);
     } finally {
       setBusy(false);
     }
@@ -201,37 +287,57 @@ function RecipesView() {
               <WandSparkles className="size-4 text-primary" />
               {editingId ? "Edit saved recipe" : "Create a recipe"}
             </div>
-            <Textarea
+            <label className="block text-sm font-medium text-foreground">
+              Recipe name
+              <TextInput className="mt-1" value={name} maxLength={100} onChange={event => setName(event.target.value)}
+                placeholder="e.g. Chicken rice bowl" autoComplete="off" />
+            </label>
+            <label className="block text-sm font-medium text-foreground">
+              How many servings does this recipe make?
+              <TextInput className="mt-1" type="number" inputMode="decimal" min={0.25} max={100} step="any"
+                value={servings} onChange={event => setServings(event.target.value)} />
+            </label>
+            <label className="block text-sm font-medium text-foreground">
+              Describe the ingredients (optional)
+              <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Bulking shake: 2 bananas, 50g oats, 2 tbsp peanut butter, 250ml whole milk, 5 dates"
-              className="min-h-24"
-            />
+              className="mt-1 min-h-24"
+              />
+            </label>
             <div className="grid grid-cols-2 gap-2">
-              <Btn variant="outline" disabled={busy || description.trim().length < 3} onClick={() => void analyze()}>
+              <Btn variant="outline" disabled={busy || scanningLabel || description.trim().length < 3} onClick={() => void analyze()}>
                 {busy ? "Analyzing…" : "Analyze with AI"}
               </Btn>
-              <Btn variant="outline" disabled={busy || ingredients.length >= 30}
-                onClick={() => setIngredients((items) => [...items, manualIngredient()])}>
+              <Btn variant="outline" disabled={busy || scanningLabel || ingredients.length >= 30}
+                onClick={() => setIngredients((items) => items.length < 30 ? [...items, manualIngredient()] : items)}>
                 <Plus className="size-4" /> Add manually
               </Btn>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Btn variant="outline" disabled={busy || scanningLabel || ingredients.length >= 30}
+                onClick={() => setBarcodeOpen(true)}>
+                <Barcode className="size-4" /> Scan barcode
+              </Btn>
+              <Btn variant="outline" disabled={busy || scanningLabel || ingredients.length >= 30}
+                onClick={() => labelRef.current?.click()}>
+                <Camera className="size-4" /> {scanningLabel ? "Reading label…" : "Scan nutrition label"}
+              </Btn>
+            </div>
+            <input ref={labelRef} type="file" accept="image/*" className="hidden"
+              aria-label="Choose nutrition label photo" onChange={event => void handleLabelPhoto(event)} />
+            <FoodSearchSheet open={barcodeOpen} initialMode="barcode" amountLabel="Amount in recipe (g/ml)"
+              onOpenChange={setBarcodeOpen} onSelect={addBarcodeIngredient} />
             <p className="text-xs leading-relaxed text-muted-foreground">
-              AI is optional. You can add ingredients and their label values manually, review totals, then save.
+              Add ingredients by text, barcode, label or manually. Review the nutrition before saving.
             </p>
 
             {ingredients.length > 0 && (
               <div className="space-y-3 border-t border-border pt-3">
-                <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Recipe name" />
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="mb-1 text-xs text-muted-foreground">Servings</div>
-                    <TextInput inputMode="decimal" value={servings} onChange={(e) => setServings(e.target.value)} />
-                  </div>
-                  <div className="rounded-lg bg-secondary p-2 text-xs text-muted-foreground">
-                    <div className="font-medium text-foreground">{Math.round(totals.calories)} kcal / serving</div>
-                    <div>P {Math.round(totals.protein)}g · C {Math.round(totals.carbs)}g · F {Math.round(totals.fat)}g</div>
-                  </div>
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-medium text-foreground">{ingredients.length} ingredients</span>
+                  <span className="text-muted-foreground">{Math.round(totals.calories)} kcal · P {Math.round(totals.protein)}g · C {Math.round(totals.carbs)}g · F {Math.round(totals.fat)}g / serving</span>
                 </div>
 
                 <div className="space-y-2">
@@ -249,7 +355,10 @@ function RecipesView() {
                               i === index ? { ...v, amountLabel: e.target.value } : v))} />
                           <div className="text-xs text-muted-foreground">
                             {item.source === "USDA" ? "USDA database estimate" :
-                             item.source === "manual" ? "Manually entered" : "AI estimate — verify nutrition"}
+                             item.source === "manual" ? "Manually entered" :
+                             item.source === "nutrition-label" ? "Scanned nutrition label — verify serving" :
+                             item.source === "Open Food Facts" ? "Community barcode label — verify package" :
+                             "AI estimate — verify nutrition"}
                           </div>
                         </div>
                         <button type="button" onClick={() => setIngredients((all) => all.filter((_, i) => i !== index))}
@@ -292,14 +401,20 @@ function RecipesView() {
                   ))}
                 </div>
 
-                <div className="flex gap-2">
-                  <Btn variant="ghost" className="flex-1" onClick={() => { setCreateMode(false); reset(); }}>Cancel</Btn>
-                  <Btn className="flex-1" disabled={busy || !name.trim() || ingredients.length === 0} onClick={() => void save()}>
-                    {busy ? "Saving…" : editingId ? "Save Changes" : "Save Recipe"}
-                  </Btn>
-                </div>
               </div>
             )}
+            {ingredients.length === 0 && (
+              <p className="text-xs text-muted-foreground">Add at least one ingredient to save this recipe.</p>
+            )}
+            {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
+            <div className="flex gap-2 border-t border-border pt-3">
+              <Btn variant="ghost" className="flex-1" disabled={busy || scanningLabel}
+                onClick={() => { setCreateMode(false); reset(); }}>Cancel</Btn>
+              <Btn className="flex-1" disabled={busy || scanningLabel || !name.trim() || ingredients.length === 0}
+                onClick={() => void save()}>
+                {busy ? "Saving…" : editingId ? "Save changes" : "Save recipe"}
+              </Btn>
+            </div>
           </div>
         )}
 
