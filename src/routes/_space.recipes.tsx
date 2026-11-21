@@ -273,37 +273,57 @@ function RecipesView() {
               <WandSparkles className="size-4 text-primary" />
               {editingId ? "Edit saved recipe" : "Create a recipe"}
             </div>
-            <Textarea
+            <label className="block text-sm font-medium text-foreground">
+              Recipe name
+              <TextInput className="mt-1" value={name} maxLength={100} onChange={event => setName(event.target.value)}
+                placeholder="e.g. Chicken rice bowl" autoComplete="off" />
+            </label>
+            <label className="block text-sm font-medium text-foreground">
+              How many servings does this recipe make?
+              <TextInput className="mt-1" type="number" inputMode="decimal" min={0.25} max={100} step="any"
+                value={servings} onChange={event => setServings(event.target.value)} />
+            </label>
+            <label className="block text-sm font-medium text-foreground">
+              Describe the ingredients (optional)
+              <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Bulking shake: 2 bananas, 50g oats, 2 tbsp peanut butter, 250ml whole milk, 5 dates"
-              className="min-h-24"
-            />
+              className="mt-1 min-h-24"
+              />
+            </label>
             <div className="grid grid-cols-2 gap-2">
               <Btn variant="outline" disabled={busy || description.trim().length < 3} onClick={() => void analyze()}>
                 {busy ? "Analyzing…" : "Analyze with AI"}
               </Btn>
-              <Btn variant="outline" disabled={busy || ingredients.length >= 30}
-                onClick={() => setIngredients((items) => [...items, manualIngredient()])}>
+              <Btn variant="outline" disabled={busy || scanningLabel || ingredients.length >= 30}
+                onClick={() => setIngredients((items) => items.length < 30 ? [...items, manualIngredient()] : items)}>
                 <Plus className="size-4" /> Add manually
               </Btn>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Btn variant="outline" disabled={busy || scanningLabel || ingredients.length >= 30}
+                onClick={() => setBarcodeOpen(true)}>
+                <Barcode className="size-4" /> Scan barcode
+              </Btn>
+              <Btn variant="outline" disabled={busy || scanningLabel || ingredients.length >= 30}
+                onClick={() => labelRef.current?.click()}>
+                <Camera className="size-4" /> {scanningLabel ? "Reading label…" : "Scan nutrition label"}
+              </Btn>
+            </div>
+            <input ref={labelRef} type="file" accept="image/*" className="hidden"
+              aria-label="Choose nutrition label photo" onChange={event => void handleLabelPhoto(event)} />
+            <FoodSearchSheet open={barcodeOpen} initialMode="barcode"
+              onOpenChange={setBarcodeOpen} onSelect={addBarcodeIngredient} />
             <p className="text-xs leading-relaxed text-muted-foreground">
-              AI is optional. You can add ingredients and their label values manually, review totals, then save.
+              Add ingredients by text, barcode, label or manually. Review the nutrition before saving.
             </p>
 
             {ingredients.length > 0 && (
               <div className="space-y-3 border-t border-border pt-3">
-                <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Recipe name" />
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="mb-1 text-xs text-muted-foreground">Servings</div>
-                    <TextInput inputMode="decimal" value={servings} onChange={(e) => setServings(e.target.value)} />
-                  </div>
-                  <div className="rounded-lg bg-secondary p-2 text-xs text-muted-foreground">
-                    <div className="font-medium text-foreground">{Math.round(totals.calories)} kcal / serving</div>
-                    <div>P {Math.round(totals.protein)}g · C {Math.round(totals.carbs)}g · F {Math.round(totals.fat)}g</div>
-                  </div>
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-medium text-foreground">{ingredients.length} ingredients</span>
+                  <span className="text-muted-foreground">{Math.round(totals.calories)} kcal · P {Math.round(totals.protein)}g · C {Math.round(totals.carbs)}g · F {Math.round(totals.fat)}g / serving</span>
                 </div>
 
                 <div className="space-y-2">
@@ -321,7 +341,10 @@ function RecipesView() {
                               i === index ? { ...v, amountLabel: e.target.value } : v))} />
                           <div className="text-xs text-muted-foreground">
                             {item.source === "USDA" ? "USDA database estimate" :
-                             item.source === "manual" ? "Manually entered" : "AI estimate — verify nutrition"}
+                             item.source === "manual" ? "Manually entered" :
+                             item.source === "nutrition-label" ? "Scanned nutrition label — verify serving" :
+                             item.source === "Open Food Facts" ? "Community barcode label — verify package" :
+                             "AI estimate — verify nutrition"}
                           </div>
                         </div>
                         <button type="button" onClick={() => setIngredients((all) => all.filter((_, i) => i !== index))}
@@ -364,14 +387,20 @@ function RecipesView() {
                   ))}
                 </div>
 
-                <div className="flex gap-2">
-                  <Btn variant="ghost" className="flex-1" onClick={() => { setCreateMode(false); reset(); }}>Cancel</Btn>
-                  <Btn className="flex-1" disabled={busy || !name.trim() || ingredients.length === 0} onClick={() => void save()}>
-                    {busy ? "Saving…" : editingId ? "Save Changes" : "Save Recipe"}
-                  </Btn>
-                </div>
               </div>
             )}
+            {ingredients.length === 0 && (
+              <p className="text-xs text-muted-foreground">Add at least one ingredient to save this recipe.</p>
+            )}
+            {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
+            <div className="flex gap-2 border-t border-border pt-3">
+              <Btn variant="ghost" className="flex-1" disabled={busy || scanningLabel}
+                onClick={() => { setCreateMode(false); reset(); }}>Cancel</Btn>
+              <Btn className="flex-1" disabled={busy || scanningLabel || !name.trim() || ingredients.length === 0}
+                onClick={() => void save()}>
+                {busy ? "Saving…" : editingId ? "Save changes" : "Save recipe"}
+              </Btn>
+            </div>
           </div>
         )}
 
