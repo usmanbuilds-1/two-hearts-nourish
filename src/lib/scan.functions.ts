@@ -18,6 +18,8 @@ const GEMINI_MODELS = [
 ] as const;
 
 // ── System prompt ─────────────────────────────────────────────────────────
+const REANALYSE_INSTRUCTION = `This is a fresh second assessment of the same food photo, requested by the user. Recheck food identity, visible portion size, number of servings, hidden oil or sauces, and whether calories and macronutrients are internally plausible. Do not assume the first estimate was correct or invent newly visible evidence. State uncertainty through confidence. The photo remains the same.`;
+
 const SYSTEM = `You are a careful food-photo analyst. Identify the meal from the supplied photograph as accurately as the visible evidence allows, and estimate its nutrition.
 Distinguish what is visibly identifiable from what is hidden or uncertain. Describe the food in ordinary terms; do not hallucinate a particular ingredient, meat, brand, filling, seasoning or cooking method based only on its color or shape.
 IMPORTANT EXAMPLE: A toasted bun holding an uncut rectangular golden-brown breaded patty does NOT prove a fish patty, chicken patty or beef burger. Label it "Toasted bun with breaded patty (filling unconfirmed)" and set confidence to low unless the actual filling is visible or user context establishes it. Do not automatically call all buns hamburgers.
@@ -220,7 +222,7 @@ type ScanResult = { ok: true; estimate: FoodEstimate } | { ok: false; error: str
 
 export const analyzeFood = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { image: string; context?: string }) => {
+  .inputValidator((i: { image: string; context?: string; reanalyse?: boolean }) => {
     if (
       typeof i?.image !== "string" ||
       !/^data:image\/(jpeg|png|webp);base64,/.test(i.image) ||
@@ -228,7 +230,7 @@ export const analyzeFood = createServerFn({ method: "POST" })
     )
       throw new Error("INVALID_IMAGE");
     const foodContext = z.string().trim().max(400).optional().default("").parse(i?.context);
-    return { image: i.image, context: foodContext };
+    return { image: i.image, context: foodContext, reanalyse: i.reanalyse === true };
   })
   .handler(async ({ data, context }): Promise<ScanResult> => {
     const { data: me } = await context.supabase
@@ -257,7 +259,7 @@ export const analyzeFood = createServerFn({ method: "POST" })
     if (!mimeType || !rawBase64) return {ok:false,error:"INVALID_IMAGE"};
     try {
       const contextPart = scanContextPart(data.context);
-      const estimate = await callGeminiDirect(geminiKey, SYSTEM, [
+      const estimate = await callGeminiDirect(geminiKey, data.reanalyse ? `${SYSTEM}\n\n${REANALYSE_INSTRUCTION}` : SYSTEM, [
         ...(contextPart ? [{ text: contextPart }] : []),
         { inline_data: { mime_type: mimeType, data: rawBase64 } },
       ]);
