@@ -153,6 +153,9 @@ function Today() {
           <span className="mx-2 text-primary" aria-hidden="true">♡</span>
           <span className="font-medium text-foreground">{partner?.display_name ?? "Your person"}</span>
         </p>
+        {bothLoggedToday && (
+          <p className="mt-2 text-xs text-muted-foreground">You both logged meals today ♡</p>
+        )}
         {sharedStreak >= 2 && (
           <p className="mt-2 text-xs text-primary">
             {sharedStreak} days logging meals together
@@ -269,7 +272,7 @@ function Today() {
                             owner={isMine ? "You" : (partner?.display_name ?? "Your person")}
                             isMine={isMine}
                             roomId={room.id}
-                            marked={isSavedPortion(saved, meal)}
+                            marked={isSavedPortion(saved ?? undefined, meal)}
                             favoriteDisabled={Boolean(favoriteBusyId) || favoritesPending || favoritesError}
                             onViewMeal={() => setSheet({ open: true, meal })}
                             onViewPhoto={() => {
