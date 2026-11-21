@@ -1,3 +1,30 @@
+# Private-device recovery: secure issuer policy (Nov 21, 2026)
+
+## User-facing behavior
+- A currently signed-in member may create one-use recovery links **only for their own member profile**, for example to add a laptop or another phone. The link is a powerful login credential. It expires after 20 minutes and can be used once.
+- The **Help partner reconnect** button remains in Settings, but shares the room recovery page and instructions **without an authentication token**. The recipient enters their own private recovery key or uses another device that is still signed in.
+- A room code or the partner's forwarded instructions **do not** grant account access.
+- If every device has lost access **and** the member has not backed up a recovery key, this app does not currently offer an independently verified recovery path. Restoring that exact profile would require a separate identity-verification mechanism (for example verified passkeys or another user-controlled channel). Do not pretend that the room code can replace proof of ownership.
+- The sender never receives, rotates, or rebinds the partner's key.
+- The device-specific recovery key must be saved privately outside the browser when rotating keys or moving devices.
+
+## Security rationale
+Previously the backend allowed any member of a room to mint a high-entropy one-use login token for the other member. That could allow one partner to authenticate a new device **as the other partner**. This is an account-takeover capability regardless of the room size or whether the sender is trusted.
+
+Now `createRejoinLink` validates untrusted input against `selfRecoveryRequestSchema`, derives the target exclusively from the currently authenticated `member_devices` row, and stores/returns a one-use capability only for that member. `linkDevice` still uses the existing atomic `consume_rejoin_link` SQL function and generates a separate key for the newly linked device. No migration needed.
+
+## Release verification
+1. Check signed-in profile A can generate a new-device link and sign in another device as **A**, not B.
+2. Verify authenticated profile A's POST `createRejoinLink({forMember:"partner"})` is rejected; do not only hide the button.
+3. Confirm both partner-help and self-link buttons render in Settings and that the former shares **only** the recovery page and instructions.
+4. Verify the partner uses their own personal key successfully, and that a room code alone cannot authenticate.
+5. Verify expired/reused/rotated self-links are rejected; device-specific recovery keys and existing sessions remain valid.
+6. Test disconnected/expired anonymous sessions and iPhone Safari recovery, and check the Lovable security finding is cleared before publishing.
+
+## Historical design notes
+The earlier partner-issued one-tap login feature was intentionally changed for security. Do not restore it without recipient-held authentication or another independent identity-verification mechanism.
+
+---
 # Private-device recovery and reinvites
 
 This feature extends PR #4's fix for inadvertent logouts.
