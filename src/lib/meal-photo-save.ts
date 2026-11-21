@@ -42,3 +42,27 @@ export async function saveMealPhoto(
     return { ok: false, failedAt: "attach", uploadedPath };
   }
 }
+
+/**
+ * Use the existing browser path first. If Storage rejects the upload, retry
+ * through an authenticated server handler that checks the owning member and
+ * meal before writing to the same private bucket. An attach-only failure
+ * deliberately retains its existing uploaded path.
+ */
+export async function saveMealPhotoWithServerFallback(
+  request: Parameters<typeof saveMealPhoto>[0],
+  storage: PhotoStorage,
+  serverUpload: (mealId: string, compressedImage: string) =>
+    Promise<{ ok: boolean; photoPath?: string }>,
+): Promise<PhotoSaveResult> {
+  const result = await saveMealPhoto(request, storage);
+  if (result.ok || result.failedAt !== "upload") return result;
+  try {
+    const serverResult = await serverUpload(request.mealId, request.compressedImage);
+    if (serverResult.ok && serverResult.photoPath)
+      return { ok: true, photoPath: serverResult.photoPath };
+  } catch {
+    // Retain same meal and photo for explicit user retry, never insert twice.
+  }
+  return result;
+}

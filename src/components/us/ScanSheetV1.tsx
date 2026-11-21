@@ -16,7 +16,8 @@ import { detectedTotalGrams, packageSearchQuery, scalePackagedLabel, strictPacka
 import { FoodSearchSheet } from "./FoodSearchSheet";
 import { saveFavoriteMeal } from "@/lib/meal-operations.functions";
 import { attachMyMealPhoto } from "@/lib/scanned-meal.functions";
-import { saveMealPhoto } from "@/lib/meal-photo-save";
+import { saveMealPhotoWithServerFallback } from "@/lib/meal-photo-save";
+import { uploadAndAttachMyMealPhoto } from "@/lib/meal-photo-upload.functions";
 import type { Meal } from "@/lib/nutrition";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
@@ -275,7 +276,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       // Insert nutrition only once. If photo storage fails, the next press
       // retries the attachment to the SAME meal, never another meal insertion.
       const savedMeal = pendingPhoto?.meal ?? await save({ ...draft, serving_description: consumedServing, photo_url: null });
-      const result = await saveMealPhoto({
+      const result = await saveMealPhotoWithServerFallback({
         roomId: room.id,
         mealId: savedMeal.id,
         compressedImage: image,
@@ -286,6 +287,9 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
           const r = await attachMyMealPhoto({ data: { mealId, photoPath: uploadedPath } });
           return r.ok ? { ok: true, photoPath: r.photoPath } : { ok: false };
         },
+      }, async (mealId, compressedImage) => {
+        const response = await uploadAndAttachMyMealPhoto({ data: { mealId, image: compressedImage } });
+        return response;
       });
       if (!result.ok) {
         setPendingPhoto({ meal: savedMeal, uploadedPath: result.uploadedPath });

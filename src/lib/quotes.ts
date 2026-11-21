@@ -111,6 +111,43 @@ export const REDDIT_INSPIRED_QUOTES: readonly string[] = [
 
 export const ALL_QUOTES: readonly string[] = [...ORIGINAL_QUOTES, ...REDDIT_INSPIRED_QUOTES];
 
+/**
+ * Editorial lines for Today, written in a neutral voice. The app must not
+ * impersonate either partner or invent a message they never sent.
+ * The larger legacy library remains for compatibility, but never appears as
+ * a supposed personal note on the Home screen.
+ */
+export const TODAY_LINES: readonly string[] = [
+  "Some days, a good conversation is better than a grand plan.",
+  "A familiar voice makes a long day feel shorter.",
+  "The best part of dinner might be who you tell about it.",
+  "Little routines have a way of becoming the important ones.",
+  "Some stories are worth saving for the end of the day.",
+  "A table for two is a lovely plan for another day.",
+  "The ordinary moments deserve a little time, too.",
+  "Good company makes even a simple meal feel special.",
+  "A favourite recipe often comes with a favourite person.",
+  "Sometimes the nicest date is simply making dinner.",
+  "The best check-ins are the ones that feel easy.",
+  "There is something comforting about a shared routine.",
+  "Small plans count. So do the days between them.",
+  "A slow meal and an unhurried conversation sound just right.",
+  "Being remembered in the middle of a busy day means a lot.",
+  "A meal doesn't need to be elaborate to be memorable.",
+  "It is nice to have someone to tell the little things to.",
+  "One day, deciding what to cook can be the hardest part.",
+  "Some evenings are made for leftovers and a long chat.",
+  "The little things add up to a life together.",
+  "The best meals tend to come with good stories.",
+  "Distance can change dinner plans, but not the conversation.",
+  "Everyday care often looks like remembering the small details.",
+  "Some days are better simply because there's someone to call.",
+  "Good memories often begin around an ordinary table.",
+  "A familiar routine can be its own kind of comfort.",
+  "There is plenty of time for big plans. Today is worth enjoying too.",
+  "A favourite meal is even better when someone remembers it.",
+];
+
 function hashDay(day:string):number {
   let hash=2166136261;
   for(const ch of day){
@@ -122,8 +159,8 @@ function hashDay(day:string):number {
 
 /** Stable for a supplied local YYYY-MM-DD, avoiding UTC midnight changes. */
 export function quoteForDay(day:string): string {
-  const idx=hashDay(day)%ALL_QUOTES.length;
-  return ALL_QUOTES[idx] ?? ALL_QUOTES[0] ?? "";
+  const idx=hashDay(day)%TODAY_LINES.length;
+  return TODAY_LINES[idx] ?? TODAY_LINES[0] ?? "";
 }
 
 /** Legacy fallback for call sites without a local date. */
