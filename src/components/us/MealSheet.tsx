@@ -573,9 +573,34 @@ export function MealSheet({
               </div>
             ) : meal ? (
               <div className="space-y-4">
-                {meal.photo_url && (
+                {(meal.photo_url || attachedPhotoPath) && (
                   <div className="overflow-hidden rounded-2xl border border-border">
-                    <PrivateMealPhoto stored={meal.photo_url} roomId={meal.room_id} alt={meal.food_name} className="h-48 w-full object-cover" />
+                    <PrivateMealPhoto stored={(meal.photo_url || attachedPhotoPath)!} roomId={meal.room_id} alt={meal.food_name} className="h-48 w-full object-cover" />
+                  </div>
+                )}
+                {mine && !meal.photo_url && !attachedPhotoPath && (
+                  <div className="space-y-2">
+                    <input ref={photoInput} type="file" accept="image/*" className="hidden"
+                      aria-label="Choose an original meal photo"
+                      onChange={event => {
+                        const file=event.currentTarget.files?.[0];
+                        event.currentTarget.value="";
+                        if (file) void attachOriginalPhoto(file);
+                      }} />
+                    <Btn variant="outline" className="w-full" disabled={photoBusy}
+                      onClick={() => photoInput.current?.click()}>
+                      {photoBusy ? "Saving photo…" : "Add your food photo"}
+                    </Btn>
+                    {photoRetry && (
+                      <Btn className="w-full" disabled={photoBusy}
+                        onClick={() => void attachOriginalPhoto()}>
+                        {photoBusy ? "Saving…" : "Retry saving photo"}
+                      </Btn>
+                    )}
+                    {photoError && <p role="alert" className="text-sm text-destructive">{photoError}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Only you can add a photo to your meal. Choose the actual photo you took.
+                    </p>
                   </div>
                 )}
                 {meal.serving_description && <p className="text-muted-foreground">{meal.serving_description}</p>}
