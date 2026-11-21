@@ -183,25 +183,87 @@ export const getRecentMeals = createServerFn({ method: "GET" })
     return (data ?? []) as Meal[];
   });
 
+/** Ensure a requested local calendar date actually exists (not e.g. Feb 30). */
+const diaryDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
+  const date = new Date(value + "T00:00:00Z");
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}, "Choose a valid date.");
+
 export const copyMealToDay = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { mealId: string; targetDate: string }) => ({
+  .inputValidator((i: { mealId: string; targetDate: string; requestId?: string }) => ({
     mealId: z.string().uuid().parse(i.mealId),
-    targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.targetDate),
+    targetDate: diaryDate.parse(i.targetDate),
+    requestId: z.string().uuid().optional().parse(i.requestId),
   }))
   .handler(async ({ data, context }) => {
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
-    const { data: meal, error: fetchError } = await db.from("meals").select("*").eq("id", data.mealId).eq("member_id", memberId).single();
+    const { data: meal, error: fetchError } = await db.from("meals")
+      .select("*").eq("id", data.mealId).eq("member_id", memberId).maybeSingle();
     if (fetchError || !meal) throw new Error("MEAL_NOT_FOUND");
-    const { data: newMeal, error: insertError } = await db
-      .from("meals")
-      .insert(mealCopyFields(meal as Meal, data.targetDate))
+    if (meal.meal_date === data.targetDate) throw new Error("SAME_DAY");
+
+    const candidate = {
+      ...mealCopyFields(meal as Meal, data.targetDate),
+      ...(data.requestId ? { id: data.requestId } : {}),
+    };
+    const { data: inserted, error: insertError } = await db.from("meals")
+      .insert(candidate).select().maybeSingle();
+    if (!insertError && inserted) return { ok: true as const, meal: inserted as Meal };
+
+    // If the network drops after a successful insert, a retry carries the
+    // same caller-generated UUID. A user can only recover their OWN copy,
+    // for the SAME chosen date, never somebody else's record.
+    if (data.requestId) {
+      const { data: existing, error: existingError } = await db.from("meals")
+        .select("*")
+        .eq("id", data.requestId)
+        .eq("member_id", memberId)
+        .eq("meal_date", data.targetDate)
+        .maybeSingle();
+      if (!existingError && existing) return { ok: true as const, meal: existing as Meal };
+    }
+    throw new Error("COPY_FAILED");
+  });
+
+/** Move in one authenticated UPDATE, keeping the original ID and photo.
+ * Unlike copy+delete, a transient failure cannot leave duplicate meals.
+ */
+export const moveMealToDay = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: { mealId: string; sourceDate: string; targetDate: string }) => ({
+    mealId: z.string().uuid().parse(i.mealId),
+    sourceDate: diaryDate.parse(i.sourceDate),
+    targetDate: diaryDate.parse(i.targetDate),
+  }))
+  .handler(async ({ data, context }) => {
+    if (data.sourceDate === data.targetDate) throw new Error("SAME_DAY");
+    const db = await admin();
+    const memberId = await deviceMemberId(db, context.userId);
+    if (!memberId) throw new Error("NOT_MEMBER");
+
+    const { data: moved, error } = await db.from("meals")
+      .update({ meal_date: data.targetDate })
+      .eq("id", data.mealId)
+      .eq("member_id", memberId)
+      .eq("meal_date", data.sourceDate)
       .select()
-      .single();
-    if (insertError || !newMeal) throw new Error("COPY_FAILED");
-    return { ok: true, meal: newMeal as Meal };
+      .maybeSingle();
+    if (error) throw new Error("MOVE_FAILED");
+    if (moved) return { ok: true as const, meal: moved as Meal };
+
+    // Idempotent response recovery: if an update succeeded before the reply
+    // was lost, returning the now-moved meal avoids a misleading error.
+    const { data: current } = await db.from("meals")
+      .select("*")
+      .eq("id", data.mealId)
+      .eq("member_id", memberId)
+      .maybeSingle();
+    if (current?.meal_date === data.targetDate)
+      return { ok: true as const, meal: current as Meal };
+    throw new Error(current ? "MEAL_CHANGED" : "MEAL_NOT_FOUND");
   });
 
 export const copyDayMeals = createServerFn({ method: "POST" })
@@ -211,6 +273,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
     targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.targetDate),
   }))
   .handler(async ({ data, context }) => {
+    if (data.sourceDate === data.targetDate) throw new Error("SAME_DAY");
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
@@ -223,7 +286,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
     const newMeals = sourceMeals.map((m) => mealCopyFields(m as Meal,data.targetDate));
     const { data: inserted, error: insertError } = await db.from("meals").insert(newMeals).select();
     if (insertError || !inserted) throw new Error("COPY_FAILED");
-    return { ok: true, count: inserted.length };
+    return { ok: true, count: inserted.length, meals: inserted as Meal[] };
   });
 
 export const getMealTemplates = createServerFn({ method: "GET" })
