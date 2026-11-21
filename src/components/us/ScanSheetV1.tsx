@@ -14,6 +14,8 @@ import { detectedTotalGrams, packageSearchQuery, scalePackagedLabel, strictPacka
 import { FoodSearchSheet } from "./FoodSearchSheet";
 import { saveFavoriteMeal } from "@/lib/meal-operations.functions";
 import { attachMyMealPhoto } from "@/lib/scanned-meal.functions";
+import { saveMealPhoto } from "@/lib/meal-photo-save";
+import type { Meal } from "@/lib/nutrition";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
 
@@ -55,9 +57,10 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const [amountGrams, setAmountGrams] = useState("");
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const [rememberPortion, setRememberPortion] = useState(false);
-  const [keepPhoto, setKeepPhoto] = useState(true);
+  const [pendingPhoto, setPendingPhoto] = useState<{ meal: Meal; uploadedPath: string | null } | null>(null);
+  const [photoSaveError, setPhotoSaveError] = useState("");
   const save = useSaveMeal();
-  const { room, me } = useSpace();
+  const { room, me, upsertLocal } = useSpace();
   const queryClient = useQueryClient();
   // An edit made after a scan must be applied to the image before its old
   // nutrition estimate can be saved under a newly described food.
@@ -80,7 +83,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setAmountGrams("");
       setFoodSearchOpen(false);
       setRememberPortion(false);
-      setKeepPhoto(true);
+      setPendingPhoto(null);
+      setPhotoSaveError("");
       setEditing(false);
     }
   }, [open]);
@@ -90,6 +94,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     e.target.value = "";
     if (!file) return;
     const id = ++requestRef.current;
+    setPendingPhoto(null);
+    setPhotoSaveError("");
     editedRef.current = false;
     setCandidates([]);
     setLabelSource(null);
@@ -213,28 +219,46 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     }
   }
 
+
   async function confirm() {
-    if (rechecking || contextText.trim() !== appliedContext) {
+    if (busy) return;
+    if (!pendingPhoto && (rechecking || contextText.trim() !== appliedContext)) {
       toast.error("Update the estimate with your new context before saving.");
       return;
     }
-    if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
+    if (!pendingPhoto && !validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
+    if (!image) return void toast.error("Choose a photo first.");
     setBusy(true);
     editedRef.current = true;
     try {
-      // Save nutrition first. Uploading an optional photo afterward avoids orphan
-      // objects if the meal insert itself fails.
-      let savedMeal = await save({ ...draft, photo_url: null });
-      if (keepPhoto && image) {
-        const uploaded = await uploadMealPhoto(room.id, image);
-        if (uploaded) {
-          const attached = await attachMyMealPhoto({ data: { mealId: savedMeal.id, photoPath: uploaded } });
-          if (attached.ok) savedMeal = { ...savedMeal, photo_url: attached.photoPath };
-          else toast.error("Meal saved, but the photo could not be attached.");
-        } else {
-          toast.error("Meal saved, but the photo upload failed.");
-        }
+      // Insert nutrition only once. If photo storage fails, the next press
+      // retries the attachment to the SAME meal, never another meal insertion.
+      const savedMeal = pendingPhoto?.meal ?? await save({ ...draft, photo_url: null });
+      const result = await saveMealPhoto({
+        roomId: room.id,
+        mealId: savedMeal.id,
+        compressedImage: image,
+        uploadedPath: pendingPhoto?.uploadedPath ?? null,
+      }, {
+        upload: uploadMealPhoto,
+        attach: async (mealId, uploadedPath) => {
+          const r = await attachMyMealPhoto({ data: { mealId, photoPath: uploadedPath } });
+          return r.ok ? { ok: true, photoPath: r.photoPath } : { ok: false };
+        },
+      });
+      if (!result.ok) {
+        setPendingPhoto({ meal: savedMeal, uploadedPath: result.uploadedPath });
+        setPhotoSaveError(result.failedAt === "upload"
+          ? "The meal was logged but the photo couldn't upload. Tap Retry saving photo."
+          : "The meal was logged but the photo couldn't be attached. Tap Retry saving photo.");
+        toast.error("Photo not saved yet.");
+        return;
       }
+      // The meal was first inserted without a photo. Update local UI
+      // immediately so Today doesn't keep showing an empty placeholder.
+      upsertLocal({ ...savedMeal, photo_url: result.photoPath });
+      setPhotoSaveError("");
+      setPendingPhoto(null);
       if (rememberPortion && me) {
         try {
           await saveFavoriteMeal({ data: {
@@ -247,19 +271,20 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
           } });
           await queryClient.invalidateQueries({ queryKey: ["meal-favorites", me.id] });
         } catch {
-          toast.error("Meal added, but saving its favourite failed. You can still star it in Today.");
+          toast.error("Meal and photo saved, but saving the favourite failed. You can star the meal in Today.");
         }
       }
-      toast.success("Added ❤️");
+      toast.success("Meal and photo saved ❤️");
       onOpenChange(false);
     } catch {
-      toast.error("Couldn't save that meal — it wasn't added. Please try again.");
+      toast.error("Couldn't confirm the save. Check Today before trying again.");
     } finally {
       setBusy(false);
     }
   }
 
   const retake = () => {
+    if (pendingPhoto) return;
     requestRef.current += 1;
     editedRef.current = false;
     setCandidates([]);
@@ -276,7 +301,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
+    <Drawer open={open} onOpenChange={next => { if (!busy) onOpenChange(next); }}>
       <DrawerContent className="mx-auto max-h-[94dvh] max-w-xl border-border bg-background">
         <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <input ref={libraryRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
@@ -285,7 +310,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis. When you save the meal, the photo is also saved privately unless you turn that option off."}
+            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis and saved privately with the meal when you confirm."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
@@ -413,7 +438,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
                     Was anything wrong? <span className="font-normal text-muted-foreground">(optional)</span>
                   </label>
-                  <textarea id="scan-food-context" rows={2} maxLength={400}
+                  <textarea id="scan-food-context" rows={2} maxLength={400} disabled={Boolean(pendingPhoto)}
                     value={contextText} onChange={(event) => setContextText(event.target.value)}
                     placeholder="e.g. This is a chicken patty, not fish. It was cooked with butter."
                     className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -442,25 +467,21 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   )}
               </div>
 
-              <label className="mt-4 flex min-h-12 items-start gap-3 rounded-xl border border-border p-3 text-sm text-foreground">
-                <input type="checkbox" checked={keepPhoto} onChange={event => setKeepPhoto(event.target.checked)}
-                  className="mt-0.5 size-4 accent-primary" />
-                <span>
-                  <span className="block font-medium">Keep this photo with the meal</span>
-                  <span className="block text-xs text-muted-foreground">On by default. Saved privately with your meal. Uncheck to keep only the nutrition details.</span>
-                </span>
-              </label>
+              <p className="mt-4 text-xs text-muted-foreground">Your photo is saved privately with the meal.</p>
+              {photoSaveError && <p role="alert" className="mt-3 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{photoSaveError}</p>}
               <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-foreground">
                 <input type="checkbox" checked={rememberPortion} onChange={event => setRememberPortion(event.target.checked)}
                   className="size-4 accent-primary" />
                 Save this portion to my favourites for next time
               </label>
               <div className="mt-5 flex flex-col gap-2">
-                <Btn size="lg" onClick={confirm} disabled={busy || rechecking || contextNeedsRescan}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
+                <Btn size="lg" onClick={confirm} disabled={busy || (!pendingPhoto && (rechecking || contextNeedsRescan))}>
+                  {busy ? "Saving…" : pendingPhoto ? "Retry saving photo" : "Looks right ❤️"}
+                </Btn>
                 <div className="flex gap-2">
-                  {!editing && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
-                  <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy}>Retake photo</Btn>
-                  <Btn variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Discard</Btn>
+                  {!editing && !pendingPhoto && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
+                  <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy || Boolean(pendingPhoto)}>Retake photo</Btn>
+                  <Btn variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>{pendingPhoto ? "Close (meal logged)" : "Discard"}</Btn>
                 </div>
               </div>
             </div>

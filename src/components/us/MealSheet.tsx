@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -19,7 +19,9 @@ import type { PackagedFood } from "@/lib/off-food";
 import { cn } from "@/lib/utils";
 import { findSavedFood, isSavedPortion } from "@/lib/favorite-meals";
 import { editPortionMacro, parseMacroNumber, resetPortionBasis, scaleMealPortion, storedMealMacros, type MealMacroKey } from "@/lib/meal-portion";
-import { deleteMyMeal } from "@/lib/scanned-meal.functions";
+import { attachMyMealPhoto, deleteMyMeal } from "@/lib/scanned-meal.functions";
+import { compressImage, uploadMealPhoto } from "@/lib/image";
+import { saveMealPhoto } from "@/lib/meal-photo-save";
 
 export type MealDraft = {
   food_name: string;
@@ -407,12 +409,17 @@ export function MealSheet({
   onOpenChange: (o: boolean) => void;
   meal: Meal | null;
 }) {
-  const { me, members, removeLocal } = useSpace();
+  const { me, members, removeLocal, upsertLocal } = useSpace();
   const save = useSaveMeal();
   const [draft, setDraft] = useState<MealDraft>(emptyDraft());
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saveAsFavourite,setSaveAsFavourite]=useState(false);
+  const [photoBusy,setPhotoBusy]=useState(false);
+  const [photoError,setPhotoError]=useState("");
+  const [attachedPhotoPath,setAttachedPhotoPath]=useState<string|null>(null);
+  const [photoRetry,setPhotoRetry]=useState<{ dataUrl:string; uploadedPath:string|null }|null>(null);
+  const photoInput=useRef<HTMLInputElement>(null);
   const qc=useQueryClient();
   const mine = !meal || meal.member_id === me.id;
   const owner = meal ? members.find((m) => m.id === meal.member_id) : me;
@@ -422,8 +429,48 @@ export function MealSheet({
       setDraft(meal ? draftFromMeal(meal) : emptyDraft());
       setEditing(!meal);
       setSaveAsFavourite(false);
+      setPhotoError("");
+      setAttachedPhotoPath(null);
+      setPhotoRetry(null);
     }
   }, [open, meal]);
+
+
+  async function attachOriginalPhoto(file?: File) {
+    if (!meal || !mine || meal.photo_url || photoBusy) return;
+    setPhotoBusy(true);
+    setPhotoError("");
+    try {
+      const dataUrl = file ? await compressImage(file) : photoRetry?.dataUrl;
+      if (!dataUrl) throw new Error("NO_IMAGE");
+      const result = await saveMealPhoto({
+        roomId: meal.room_id,
+        mealId: meal.id,
+        compressedImage: dataUrl,
+        uploadedPath: file ? null : (photoRetry?.uploadedPath ?? null),
+      }, {
+        upload: uploadMealPhoto,
+        attach: async (mealId, uploadedPath) => {
+          const response = await attachMyMealPhoto({ data: { mealId, photoPath: uploadedPath } });
+          return response.ok ? { ok: true, photoPath: response.photoPath } : { ok: false };
+        },
+      });
+      if (!result.ok) {
+        setPhotoRetry({ dataUrl, uploadedPath: result.uploadedPath });
+        setPhotoError("Couldn't save your photo. Try again without re-adding the meal.");
+        return;
+      }
+      setPhotoRetry(null);
+      setAttachedPhotoPath(result.photoPath);
+      setDraft(previous => ({ ...previous, photo_url: result.photoPath }));
+      upsertLocal({ ...meal, photo_url: result.photoPath });
+      toast.success("Photo saved with this meal");
+    } catch {
+      setPhotoError("Couldn't read or save that photo. Choose another one.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   async function submit() {
     if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
@@ -526,9 +573,34 @@ export function MealSheet({
               </div>
             ) : meal ? (
               <div className="space-y-4">
-                {meal.photo_url && (
+                {(meal.photo_url || attachedPhotoPath) && (
                   <div className="overflow-hidden rounded-2xl border border-border">
-                    <PrivateMealPhoto stored={meal.photo_url} roomId={meal.room_id} alt={meal.food_name} className="h-48 w-full object-cover" />
+                    <PrivateMealPhoto stored={(meal.photo_url || attachedPhotoPath)!} roomId={meal.room_id} alt={meal.food_name} className="h-48 w-full object-cover" />
+                  </div>
+                )}
+                {mine && !meal.photo_url && !attachedPhotoPath && (
+                  <div className="space-y-2">
+                    <input ref={photoInput} type="file" accept="image/*" className="hidden"
+                      aria-label="Choose an original meal photo"
+                      onChange={event => {
+                        const file=event.currentTarget.files?.[0];
+                        event.currentTarget.value="";
+                        if (file) void attachOriginalPhoto(file);
+                      }} />
+                    <Btn variant="outline" className="w-full" disabled={photoBusy}
+                      onClick={() => photoInput.current?.click()}>
+                      {photoBusy ? "Saving photo…" : "Add your food photo"}
+                    </Btn>
+                    {photoRetry && (
+                      <Btn className="w-full" disabled={photoBusy}
+                        onClick={() => void attachOriginalPhoto()}>
+                        {photoBusy ? "Saving…" : "Retry saving photo"}
+                      </Btn>
+                    )}
+                    {photoError && <p role="alert" className="text-sm text-destructive">{photoError}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Only you can add a photo to your meal. Choose the actual photo you took.
+                    </p>
                   </div>
                 )}
                 {meal.serving_description && <p className="text-muted-foreground">{meal.serving_description}</p>}
