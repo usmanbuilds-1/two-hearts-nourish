@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { recoveryBinding } from "@/lib/device-recovery-policy";
+import { selfRecoveryRequestSchema } from "@/lib/rejoin-authorization";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 chars → unbiased mod
 
@@ -77,37 +78,29 @@ function throwRpcError(error: { message?: string } | null, fallback = "SERVER_ER
   throw new Error(fallback);
 }
 
-/** Creates a high-entropy, one-use recovery link for SELF or the other room member. 
- * This does not expose, rotate, or impersonate anyone's permanent recovery key. */
+/** Issue a high-entropy, one-use recovery link for the authenticated
+ * member's own profile only. A room-mate must not mint login capabilities
+ * for the other member without the recipient's own authentication.
+ */
 export const createRejoinLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: { forMember: "self" | "partner" }) => ({
-    forMember: z.enum(["self", "partner"]).parse(i.forMember),
-  }))
-  .handler(async ({ data, context }) => {
+  .inputValidator((input: { forMember: "self" | "partner" }) => selfRecoveryRequestSchema.parse(input))
+  .handler(async ({ context }) => {
     const db = await admin();
     const myId = await deviceMemberId(db, context.userId);
     if (!myId) throw new Error("NOT_MEMBER");
     const { data: me, error: meError } = await db.from("members")
       .select("id, room_id").eq("id", myId).single();
     if (meError || !me) throw new Error("NOT_MEMBER");
-    let recipientId = myId;
-    if (data.forMember === "partner") {
-      const { data: partner, error: partnerError } = await db.from("members")
-        .select("id").eq("room_id", me.room_id).neq("id", myId).maybeSingle();
-      if (partnerError) throw new Error("SERVER_ERROR");
-      if (!partner) throw new Error("NO_PARTNER");
-      recipientId = partner.id;
-    }
     const { data: room, error: roomError } = await db.from("rooms")
       .select("room_code").eq("id", me.room_id).single();
     if (roomError || !room) throw new Error("SERVER_ERROR");
-    const token = randomToken(); // 256 bits; far safer than 6-digit codes
+    const token = randomToken(); // 256-bit one-use capability for self
     const expiresAt = new Date(Date.now() + 20 * 60_000).toISOString();
     const { data: updated, error } = await db.from("members").update({
-      link_code_hash: await sha256(`${recipientId}:${token}`),
+      link_code_hash: await sha256(`${myId}:${token}`),
       link_code_expires_at: expiresAt,
-    }).eq("id", recipientId).select("id").maybeSingle();
+    }).eq("id", myId).select("id").maybeSingle();
     if (error || !updated) throw new Error("SERVER_ERROR");
     return { roomCode: room.room_code, token, expiresAt };
   });
