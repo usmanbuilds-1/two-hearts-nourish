@@ -163,17 +163,11 @@ function Today() {
         )}
       </header>
 
-      <blockquote className="mt-5 rounded-2xl border border-primary/20 bg-accent px-4 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">A little note for us</p>
-        <p className="mt-2 font-display text-lg italic leading-snug text-foreground">
-          “{quoteForDay(today)}”
+      <section className="mt-5 border-l-2 border-primary/40 py-1 pl-4" aria-label={room.couple_message ? "Your shared message" : "Today's thought"}>
+        <p className="font-display text-lg leading-snug text-foreground">
+          {room.couple_message?.trim() || quoteForDay(today)}
         </p>
-        {room.couple_message && (
-          <p className="mt-3 border-t border-primary/15 pt-2 text-sm text-muted-foreground">
-            {room.couple_message}
-          </p>
-        )}
-      </blockquote>
+      </section>
 
       <TodayNutritionSummary me={me} partner={partner} mine={mine} theirs={theirs} />
 
