@@ -477,7 +477,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
               </Btn>}
               <FoodSearchSheet open={foodSearchOpen} onOpenChange={setFoodSearchOpen} onSelect={applyLabel} />
               {editing ? (
-                <MealFields draft={draft} onChange={next => {
+                <div className="border-t border-border pt-4">
+                  <MealFields draft={draft} onChange={next => {
                     editedRef.current = true;
                     if (labelSource && (
                       next.calories !== draft.calories || next.protein !== draft.protein ||
@@ -485,25 +486,37 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                     )) setLabelAdjusted(true);
                     setDraft(next);
                   }} />
+                  <Btn variant="ghost" className="mt-3 w-full text-primary" onClick={() => setEditing(false)}>
+                    Done editing
+                  </Btn>
+                </div>
               ) : (
-                <div className="rounded-2xl border border-border bg-card p-4">
-                  <div className="font-display text-xl">{draft.food_name}</div>
-                  {draft.serving_description && <div className="mt-0.5 text-sm text-muted-foreground">{draft.serving_description}</div>}
-                  <div className="mt-4 grid grid-cols-4 text-center">
-                    {[["kcal", draft.calories], ["protein", draft.protein], ["carbs", draft.carbs], ["fat", draft.fat]].map(([l, v]) => (
-                      <div key={l}>
-                        <div className="num text-lg font-semibold">{v}{l !== "kcal" && <span className="text-xs text-muted-foreground">g</span>}</div>
-                        <div className="text-xs text-muted-foreground">{l}</div>
-                      </div>
-                    ))}
+                <section aria-label="Estimated nutrition" className="border-b border-border pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-display text-[1.6rem] leading-tight text-foreground">
+                        {draft.food_name}
+                      </h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {labelSource ? "Community label · check the packet" : `AI estimate · ${draft.ai_confidence ?? "unknown"} confidence`}
+                      </p>
+                    </div>
+                    <div className="shrink-0 pt-0.5 text-right text-primary">
+                      <span className="num font-display text-2xl leading-none">{draft.calories}</span>
+                      <span className="ml-1 font-display text-base">kcal</span>
+                    </div>
                   </div>
-                   <div className="mt-4 text-xs text-muted-foreground">{labelSource ? "Source: Open Food Facts community label (check packet)" : <>AI estimate · Confidence: <span className="capitalize text-foreground">{draft.ai_confidence}</span></>}</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center text-sm text-foreground">
+                    <div>Protein <span className="num font-semibold">{draft.protein} g</span></div>
+                    <div>Carbs <span className="num font-semibold">{draft.carbs} g</span></div>
+                    <div>Fat <span className="num font-semibold">{draft.fat} g</span></div>
+                  </div>
                   {!labelSource && draft.ai_confidence === "low" && (
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      The food type or serving may be uncertain. Check the guess and correct any hidden ingredients before saving; calories and macros may be significantly off.
+                    <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                      Food type or quantity may be uncertain. Check hidden ingredients before saving.
                     </p>
                   )}
-                </div>
+                </section>
               )}
               {!editing && (
                 <ScanPortionPicker
@@ -514,37 +527,48 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   onChange={percentage => setDraft(previous => scaleMealPortion(previous, percentage))}
                 />
               )}
+              {!editing && (
+                <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border py-3">
+                  <span className="text-sm font-medium">Serving</span>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <span className="max-w-44 truncate text-sm text-muted-foreground" title={draft.serving_description}>
+                      {draft.serving_description || "Full pictured portion"}
+                    </span>
+                    <Btn variant="ghost" className="shrink-0 px-2 text-primary" onClick={() => setEditing(true)}>
+                      Edit
+                    </Btn>
+                  </div>
+                </div>
+              )}
 <div className="mt-4">
                   <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
-                    Was anything wrong? <span className="font-normal text-muted-foreground">(optional)</span>
+                    Add details for a better estimate <span className="font-normal text-muted-foreground">(optional)</span>
                   </label>
-                  <textarea id="scan-food-context" rows={2} maxLength={400} disabled={Boolean(pendingPhoto) || rechecking || Boolean(reanalysisResult)}
-                    value={contextText} onChange={(event) => setContextText(event.target.value)}
-                    placeholder="e.g. This is a chicken patty, not fish. It was cooked with butter."
-                    className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  <textarea id="scan-food-context" rows={2} maxLength={400}
+                    disabled={Boolean(pendingPhoto) || rechecking || Boolean(reanalysisResult)}
+                    value={contextText} onChange={event => setContextText(event.target.value)}
+                    placeholder="e.g. Cooked with 1 tbsp oil"
+                    className="mt-2 w-full resize-none rounded-xl border border-input bg-card px-3 py-3 text-base text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Correct the food, ingredients, cooking method, or portion. We’ll analyze the same photo again using your correction.
-                  </p>
-                  {(contextNeedsRescan || correctionError) && (
-                    <div className="mt-3 space-y-2">
-                      {contextNeedsRescan && <p className="text-sm text-muted-foreground">
-                        The estimate above still uses the previous information.
-                      </p>}
-                      {correctionError && <p role="alert" className="text-sm text-destructive">{correctionError}</p>}
-                      {contextNeedsRescan && !reanalysisResult && (
-                        <Btn size="lg" variant="outline" className="w-full" disabled={rechecking} onClick={() => void analyze()}>
-                          {rechecking ? "Recalculating…" : "Recalculate with correction"}
-                        </Btn>
-                      )}
-                      {contextNeedsRescan && !reanalysisResult && (
-                        <Btn size="lg" variant="ghost" className="w-full" disabled={rechecking}
-                          onClick={() => { setContextText(appliedContext); setCorrectionError(""); }}>
-                          Discard correction and keep previous estimate
-                        </Btn>
-                      )}
-                    </div>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                    <Btn variant="ghost" className="px-1 text-primary"
+                      disabled={!contextNeedsRescan || rechecking || busy || Boolean(reanalysisResult) || Boolean(pendingPhoto)}
+                      onClick={() => void analyze()}>
+                      {rechecking ? "Updating estimate…" : "Update estimate"}
+                    </Btn>
+                    {contextNeedsRescan && !reanalysisResult && (
+                      <Btn variant="ghost" className="px-1 text-xs text-muted-foreground" disabled={rechecking}
+                        onClick={() => { setContextText(appliedContext); setCorrectionError(""); }}>
+                        Discard changes
+                      </Btn>
+                    )}
+                  </div>
+                  {contextNeedsRescan && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Your current estimate does not include these details yet.
+                    </p>
                   )}
+                  {correctionError && <p role="alert" className="mt-2 text-sm text-destructive">{correctionError}</p>}
               </div>
 
               
@@ -558,10 +582,11 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                 <Btn size="lg" className="w-full" onClick={confirm} disabled={busy || Boolean(reanalysisResult) || (!pendingPhoto && (rechecking || contextNeedsRescan))}>
                   {busy ? "Saving…" : pendingPhoto ? "Retry saving photo" : "Save meal"}
                 </Btn>
-                <div className="flex gap-2">
-                  {!editing && !pendingPhoto && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
-                  <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy || Boolean(pendingPhoto)}>Retake photo</Btn>
-                  <Btn variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>{pendingPhoto ? "Close (meal logged)" : "Discard"}</Btn>
+                <div className="flex items-center justify-center gap-3">
+                  <Btn variant="ghost" className="text-primary" onClick={retake} disabled={busy || Boolean(pendingPhoto)}>Retake photo</Btn>
+                  <Btn variant="ghost" className="text-muted-foreground" onClick={() => onOpenChange(false)} disabled={busy}>
+                    {pendingPhoto ? "Close (meal logged)" : "Discard"}
+                  </Btn>
                 </div>
               </div>
             </div>
