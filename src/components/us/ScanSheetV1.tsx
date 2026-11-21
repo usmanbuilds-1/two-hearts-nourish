@@ -14,6 +14,8 @@ import { detectedTotalGrams, packageSearchQuery, scalePackagedLabel, strictPacka
 import { FoodSearchSheet } from "./FoodSearchSheet";
 import { saveFavoriteMeal } from "@/lib/meal-operations.functions";
 import { attachMyMealPhoto } from "@/lib/scanned-meal.functions";
+import { saveMealPhoto } from "@/lib/meal-photo-save";
+import type { Meal } from "@/lib/nutrition";
 
 type Stage = "pick" | "preview" | "analyzing" | "confirm" | "error";
 
@@ -55,9 +57,10 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   const [amountGrams, setAmountGrams] = useState("");
   const [foodSearchOpen, setFoodSearchOpen] = useState(false);
   const [rememberPortion, setRememberPortion] = useState(false);
-  const [keepPhoto, setKeepPhoto] = useState(true);
+  const [pendingPhoto, setPendingPhoto] = useState<{ meal: Meal; uploadedPath: string | null } | null>(null);
+  const [photoSaveError, setPhotoSaveError] = useState("");
   const save = useSaveMeal();
-  const { room, me } = useSpace();
+  const { room, me, upsertLocal } = useSpace();
   const queryClient = useQueryClient();
   // An edit made after a scan must be applied to the image before its old
   // nutrition estimate can be saved under a newly described food.
@@ -80,7 +83,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
       setAmountGrams("");
       setFoodSearchOpen(false);
       setRememberPortion(false);
-      setKeepPhoto(true);
+      setPendingPhoto(null);
+      setPhotoSaveError("");
       setEditing(false);
     }
   }, [open]);
@@ -90,6 +94,8 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     e.target.value = "";
     if (!file) return;
     const id = ++requestRef.current;
+    setPendingPhoto(null);
+    setPhotoSaveError("");
     editedRef.current = false;
     setCandidates([]);
     setLabelSource(null);
