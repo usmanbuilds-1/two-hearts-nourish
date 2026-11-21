@@ -156,7 +156,7 @@ function RecipesView() {
         return;
       }
       setName(previous => previous.trim() ? previous : result.recipe.name);
-      setServings(String(result.recipe.servings));
+      setServings(previous => previous === "1" ? String(result.recipe.servings) : previous);
       setIngredients(result.recipe.ingredients);
       toast.success("Recipe analyzed. Review before saving.");
     } catch {
