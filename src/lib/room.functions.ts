@@ -84,7 +84,7 @@ function throwRpcError(error: { message?: string } | null, fallback = "SERVER_ER
  */
 export const createRejoinLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { forMember: "self" | "partner" }) => selfRecoveryRequestSchema.parse(input))
+  .inputValidator((input: unknown) => selfRecoveryRequestSchema.parse(input))
   .handler(async ({ context }) => {
     const db = await admin();
     const myId = await deviceMemberId(db, context.userId);
