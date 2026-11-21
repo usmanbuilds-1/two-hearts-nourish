@@ -219,28 +219,46 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
     }
   }
 
+
   async function confirm() {
-    if (rechecking || contextText.trim() !== appliedContext) {
+    if (busy) return;
+    if (!pendingPhoto && (rechecking || contextText.trim() !== appliedContext)) {
       toast.error("Update the estimate with your new context before saving.");
       return;
     }
-    if (!validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
+    if (!pendingPhoto && !validDraft(draft)) return void toast.error("Add a name and valid numbers first.");
+    if (!image) return void toast.error("Choose a photo first.");
     setBusy(true);
     editedRef.current = true;
     try {
-      // Save nutrition first. Uploading an optional photo afterward avoids orphan
-      // objects if the meal insert itself fails.
-      let savedMeal = await save({ ...draft, photo_url: null });
-      if (keepPhoto && image) {
-        const uploaded = await uploadMealPhoto(room.id, image);
-        if (uploaded) {
-          const attached = await attachMyMealPhoto({ data: { mealId: savedMeal.id, photoPath: uploaded } });
-          if (attached.ok) savedMeal = { ...savedMeal, photo_url: attached.photoPath };
-          else toast.error("Meal saved, but the photo could not be attached.");
-        } else {
-          toast.error("Meal saved, but the photo upload failed.");
-        }
+      // Insert nutrition only once. If photo storage fails, the next press
+      // retries the attachment to the SAME meal, never another meal insertion.
+      const savedMeal = pendingPhoto?.meal ?? await save({ ...draft, photo_url: null });
+      const result = await saveMealPhoto({
+        roomId: room.id,
+        mealId: savedMeal.id,
+        compressedImage: image,
+        uploadedPath: pendingPhoto?.uploadedPath ?? null,
+      }, {
+        upload: uploadMealPhoto,
+        attach: async (mealId, uploadedPath) => {
+          const r = await attachMyMealPhoto({ data: { mealId, photoPath: uploadedPath } });
+          return r.ok ? { ok: true, photoPath: r.photoPath } : { ok: false };
+        },
+      });
+      if (!result.ok) {
+        setPendingPhoto({ meal: savedMeal, uploadedPath: result.uploadedPath });
+        setPhotoSaveError(result.failedAt === "upload"
+          ? "The meal was logged but the photo couldn't upload. Tap Retry saving photo."
+          : "The meal was logged but the photo couldn't be attached. Tap Retry saving photo.");
+        toast.error("Photo not saved yet.");
+        return;
       }
+      // The meal was first inserted without a photo. Update local UI
+      // immediately so Today doesn't keep showing an empty placeholder.
+      upsertLocal({ ...savedMeal, photo_url: result.photoPath });
+      setPhotoSaveError("");
+      setPendingPhoto(null);
       if (rememberPortion && me) {
         try {
           await saveFavoriteMeal({ data: {
@@ -253,13 +271,13 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
           } });
           await queryClient.invalidateQueries({ queryKey: ["meal-favorites", me.id] });
         } catch {
-          toast.error("Meal added, but saving its favourite failed. You can still star it in Today.");
+          toast.error("Meal and photo saved, but saving the favourite failed. You can star the meal in Today.");
         }
       }
-      toast.success("Added ❤️");
+      toast.success("Meal and photo saved ❤️");
       onOpenChange(false);
     } catch {
-      toast.error("Couldn't save that meal — it wasn't added. Please try again.");
+      toast.error("Couldn't confirm the save. Check Today before trying again.");
     } finally {
       setBusy(false);
     }
