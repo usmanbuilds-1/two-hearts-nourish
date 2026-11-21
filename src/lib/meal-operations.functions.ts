@@ -273,6 +273,7 @@ export const copyDayMeals = createServerFn({ method: "POST" })
     targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(i.targetDate),
   }))
   .handler(async ({ data, context }) => {
+    if (data.sourceDate === data.targetDate) throw new Error("SAME_DAY");
     const db = await admin();
     const memberId = await deviceMemberId(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
