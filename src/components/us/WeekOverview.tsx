@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Info, TrendingUp } from "lucide-react";
 import { fmt, parseLocalDate, type Meal, type Member, type Totals } from "@/lib/nutrition";
 import { cn } from "@/lib/utils";
+import { WeekMacroProgress } from "./WeekMacroProgress";
 
 export type WeekRow = {
   d: string;
@@ -186,6 +187,7 @@ export function WeekOverview({
           <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Recorded days only, not estimated intake</p>
         </div>
       </section>
+      <WeekMacroProgress rows={rows} me={me} partner={partner} />
       <button type="button" onClick={onShowWeight}
         className="flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-border px-4 py-3 text-left text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         <span className="flex items-center gap-2"><TrendingUp className="size-4 text-primary" aria-hidden="true" />View weight trend</span>
