@@ -109,7 +109,7 @@ function RecipesView() {
     try {
       const item = ingredientFromBarcode(food, amount);
       setIngredients(items => items.length < 30 ? [...items, item] : items);
-      toast.success("Label values added. Check the ingredient amount.");
+      // The shared search sheet displays one success message.
     } catch {
       toast.error("Couldn't apply this label. Check the amount.");
     }
@@ -327,7 +327,7 @@ function RecipesView() {
             </div>
             <input ref={labelRef} type="file" accept="image/*" className="hidden"
               aria-label="Choose nutrition label photo" onChange={event => void handleLabelPhoto(event)} />
-            <FoodSearchSheet open={barcodeOpen} initialMode="barcode"
+            <FoodSearchSheet open={barcodeOpen} initialMode="barcode" amountLabel="Amount in recipe (g/ml)"
               onOpenChange={setBarcodeOpen} onSelect={addBarcodeIngredient} />
             <p className="text-xs leading-relaxed text-muted-foreground">
               Add ingredients by text, barcode, label or manually. Review the nutrition before saving.
