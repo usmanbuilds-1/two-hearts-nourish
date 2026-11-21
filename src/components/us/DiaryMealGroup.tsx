@@ -52,7 +52,7 @@ export function DiaryMealGroup({
                   aria-label={`Edit ${meal.food_name}`}>
                   <span className="block truncate text-sm font-semibold text-foreground">{meal.food_name}</span>
                   <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {meal.is_planned ? "Planned · not eaten" : (meal.serving_description?.trim() || "1 serving")}
+                    {meal.is_planned ? "Planned · not eaten" + (meal.serving_description?.trim() ? " · " + meal.serving_description.trim() : "") : (meal.serving_description?.trim() || "Serving not specified")}
                   </span>
                 </button>
                 <div className="num shrink-0 text-right leading-5">
