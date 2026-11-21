@@ -5,20 +5,22 @@ import { MealFields, emptyDraft, validDraft, type MealDraft } from "@/components
 import { storedMealMacros } from "@/lib/meal-portion";
 import { useSpace } from "@/lib/space";
 import { supabase } from "@/integrations/supabase/client";
-import type { Meal } from "@/lib/nutrition";
+import type { Meal, MealType } from "@/lib/nutrition";
 import { toast } from "sonner";
 
 export function DiarySheet({
   open,
   onOpenChange,
   targetDate,
+  initialMealType,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   targetDate: string;
+  initialMealType?: MealType | null;
 }) {
   const { me, room, upsertLocal } = useSpace();
-  const [draft, setDraft] = useState<MealDraft>(emptyDraft());
+  const [draft, setDraft] = useState<MealDraft>(() => ({ ...emptyDraft(), ...(initialMealType ? { meal_type: initialMealType } : {}) }));
   const [busy, setBusy] = useState(false);
 
   async function submit() {
@@ -44,8 +46,8 @@ export function DiarySheet({
         .single();
       if (error || !data) { console.error("[DiarySheet insert]", error); throw new Error(error?.message ?? "save"); }
       upsertLocal(data as Meal);
-      toast.success("Added ❤️");
-      setDraft(emptyDraft());
+      toast.success("Meal logged");
+      setDraft({ ...emptyDraft(), ...(initialMealType ? { meal_type: initialMealType } : {}) });
       onOpenChange(false);
     } catch {
       toast.error("Couldn't save that meal — it wasn't added. Please try again.");
@@ -62,7 +64,7 @@ export function DiarySheet({
       description={`Log food for ${targetDate}.`}
       footer={(
         <Btn size="lg" className="w-full" onClick={submit} disabled={busy}>
-          {busy ? "Saving…" : "Add meal ❤️"}
+          {busy ? "Saving…" : "Log meal"}
         </Btn>
       )}
     >
