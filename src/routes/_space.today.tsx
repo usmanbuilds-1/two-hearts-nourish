@@ -128,7 +128,7 @@ function Today() {
   const bothLoggedToday = stats.bothDays.has(today);
 
   return (
-    <Screen className="max-w-xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
+    <Screen className="max-w-xl px-4 pb-0 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
       <header className="pb-1">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
