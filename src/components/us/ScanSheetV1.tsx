@@ -315,7 +315,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
           toast.error("Meal and photo saved, but saving the favourite failed. You can star the meal in Today.");
         }
       }
-      toast.success("Meal and photo saved ❤️");
+      toast.success("Meal saved");
       onOpenChange(false);
     } catch {
       toast.error("Couldn't confirm the save. Check Today before trying again.");
@@ -350,14 +350,14 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
         <input ref={libraryRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
         <div className="overflow-y-auto px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
           <DrawerTitle className="font-display text-2xl font-normal">
-            {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
+            {stage === "confirm" ? "Review your meal" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis and saved privately with the meal when you confirm."}
+            {stage === "confirm" ? "Estimate — review before saving" : "Take a photo or choose one from your library."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
-            <img src={image} alt="Your meal" className={`mt-5 w-full rounded-2xl object-cover ${stage === "confirm" ? "max-h-40" : "max-h-80"} ${stage === "analyzing" ? "animate-pulse" : ""}`} />
+            <img src={image} alt="Your meal" className={`mt-4 w-full rounded-2xl object-cover ${stage === "confirm" ? "h-44 sm:h-52" : "max-h-80"} ${stage === "analyzing" ? "animate-pulse" : ""}`} />
           )}
 
           {stage === "pick" && (
@@ -392,12 +392,12 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
 
           {stage === "confirm" && (
             <div className="mt-5">
-              <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3">
-                <div>
-                  <p className="text-sm font-medium">Want a second assessment?</p>
-                  <p className="text-xs text-muted-foreground">Reanalyse this same photo. A new AI estimate may differ, not necessarily improve.</p>
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-accent/60 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">AI estimate</p>
+                  <p className="text-xs text-muted-foreground">Run a fresh estimate on this same photo.</p>
                 </div>
-                <Btn variant="outline" disabled={rechecking || busy || Boolean(pendingPhoto) || Boolean(reanalysisResult)}
+                <Btn variant="outline" className="shrink-0 border-primary/30 text-primary" disabled={rechecking || busy || Boolean(pendingPhoto) || Boolean(reanalysisResult) || checkingLabel}
                   onClick={() => void analyze()}>
                   {rechecking ? "Reanalysing…" : "Reanalyse"}
                 </Btn>
@@ -547,15 +547,15 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   )}
               </div>
 
-              <p className="mt-4 text-xs text-muted-foreground">Your photo is saved privately with the meal.</p>
+              
               {photoSaveError && <p role="alert" className="mt-3 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{photoSaveError}</p>}
               <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-foreground">
                 <input type="checkbox" checked={rememberPortion} onChange={event => setRememberPortion(event.target.checked)}
                   className="size-4 accent-primary" />
-                Save this portion to my favourites for next time
+                Remember this portion
               </label>
               <div className="mt-5 flex flex-col gap-2">
-                <Btn size="lg" onClick={confirm} disabled={busy || Boolean(reanalysisResult) || (!pendingPhoto && (rechecking || contextNeedsRescan))}>
+                <Btn size="lg" className="w-full" onClick={confirm} disabled={busy || Boolean(reanalysisResult) || (!pendingPhoto && (rechecking || contextNeedsRescan))}>
                   {busy ? "Saving…" : pendingPhoto ? "Retry saving photo" : "Save meal"}
                 </Btn>
                 <div className="flex gap-2">
