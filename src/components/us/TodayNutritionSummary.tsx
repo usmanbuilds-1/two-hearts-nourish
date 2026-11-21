@@ -1,4 +1,3 @@
-import { Heart } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { fmt, totals, type Meal, type Member } from "@/lib/nutrition";
 import { cn } from "@/lib/utils";
@@ -108,12 +107,6 @@ export function TodayNutritionSummary({
           );
         })}
       </div>
-      {partner && (
-        <p className="mt-1 flex items-center justify-center gap-1 text-center text-xs text-muted-foreground">
-          <Heart className="size-3 text-primary" aria-hidden="true" />
-          Two people, their own goals
-        </p>
-      )}
     </section>
   );
 }
