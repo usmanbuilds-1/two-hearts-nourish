@@ -235,23 +235,55 @@ export const getRecipes = createServerFn({ method: "GET" })
     });
   });
 
+const createRecipeInputSchema = recipeInputSchema.extend({
+  // Stable across retries of the same unfinished draft, preventing duplicate
+  // recipes if a mobile connection drops after the database commit.
+  requestId: z.string().uuid().optional(),
+});
+
 export const saveRecipe = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { name: string; servings: number; ingredients: RecipeIngredient[] }) =>
-    recipeInputSchema.parse(input))
+  .inputValidator((input: z.input<typeof createRecipeInputSchema>) =>
+    createRecipeInputSchema.parse(input))
   .handler(async ({ data, context }) => {
     const db = await admin();
     const memberId = await memberIdFor(db, context.userId);
     if (!memberId) throw new Error("NOT_MEMBER");
-    const { data: saved, error } = await db.from("recipes").insert({
-      member_id: memberId,
+    const values = {
       name: data.name,
       servings: data.servings,
       ingredients: data.ingredients,
       updated_at: new Date().toISOString(),
-    }).select("id,name,ingredients,servings,created_at,updated_at").single();
-    if (error || !saved) throw new Error("SAVE_RECIPE_FAILED");
-    return { ok: true as const, recipeId: saved.id };
+    };
+    const { data: saved, error } = await db.from("recipes").insert({
+      ...values,
+      member_id: memberId,
+      ...(data.requestId ? { id: data.requestId } : {}),
+    }).select("id").maybeSingle();
+
+    if (!error && saved) return { ok: true as const, recipeId: saved.id };
+
+    if (data.requestId) {
+      // A previous insert can commit even if the client loses its response.
+      // Reconfirm ownership before reconciling any retry; never upsert an
+      // arbitrary ID through the service-role client.
+      const { data: existing, error: readError } = await db.from("recipes")
+        .select("id")
+        .eq("id", data.requestId)
+        .eq("member_id", memberId)
+        .maybeSingle();
+      if (!readError && existing) {
+        const { data: updated, error: updateError } = await db.from("recipes")
+          .update(values)
+          .eq("id", existing.id)
+          .eq("member_id", memberId)
+          .select("id")
+          .maybeSingle();
+        if (!updateError && updated) return { ok: true as const, recipeId: updated.id };
+      }
+    }
+    console.error("recipe_save_failed", error?.code ?? "NO_ROW");
+    throw new Error("SAVE_RECIPE_FAILED");
   });
 
 /** Update only the signed-in member's existing recipe; no delete/recreate. */
