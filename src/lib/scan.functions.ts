@@ -7,14 +7,14 @@ import type { DetectedPackage } from "./packaged-scan";
 import { scanContextPart } from "./scan-v1-context";
 
 // ── Model identifiers ─────────────────────────────────────────────────────
-// Keep the original scanner on models with broad Gemini Developer API
-// compatibility. The November 20 Hydrogen/3.8 rollout made API-key access and
-// provider capacity a dependency for *every* scan. One model request on success,
-// and bounded fallbacks only if the first model is unavailable or malformed.
+// Pinned, documented model IDs instead of drifting "latest" aliases or
+// deprecated Gemini 2.5 endpoints. One call on success; bounded fallbacks
+// only for model access, capacity or unparseable output. Key access still
+// depends on the Google AI Studio project's tier and quota.
 const GEMINI_MODELS = [
-  "gemini-3-flash-preview",
+  "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
-  "gemini-2.5-flash-lite",
+  "gemini-3.1-flash-lite",
 ] as const;
 
 // ── System prompt ─────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ async function callGeminiDirect(
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        signal: AbortSignal.timeout(model === "gemini-3-flash-preview" ? 18_000 : 12_000),
+        signal: AbortSignal.timeout(model === "gemini-3.8-flash" ? 18_000 : 12_000),
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts }],
