@@ -19,6 +19,11 @@ describe("daily couple quotes",()=>{
     const unique=new Set(Array.from({length:14},(_,i)=>quoteForDay(`2026-11-${String(14+i).padStart(2,"0")}`)));
     expect(unique.size).toBeGreaterThan(1);
   });
+  it("does not invent a first-person love note from either partner",()=>{
+    const seen=Array.from({length:31},(_,i)=>quoteForDay(`2026-11-${String(i+1).padStart(2,"0")}`));
+    expect(seen.some(line=>line.includes("I just really love you"))).toBe(false);
+    expect(seen.every(line=>!/^I (love|miss|wish|want|hope)\\b/i.test(line))).toBe(true);
+  });
   it("always returns a non-empty quote",()=>{
     expect(quoteForDay("2026-11-14").trim().length).toBeGreaterThan(10);
   });
