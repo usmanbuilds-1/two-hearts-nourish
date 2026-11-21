@@ -284,6 +284,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   }
 
   const retake = () => {
+    if (pendingPhoto) return;
     requestRef.current += 1;
     editedRef.current = false;
     setCandidates([]);
@@ -300,7 +301,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
   };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
+    <Drawer open={open} onOpenChange={next => { if (!busy) onOpenChange(next); }}>
       <DrawerContent className="mx-auto max-h-[94dvh] max-w-xl border-border bg-background">
         <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <input ref={libraryRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
@@ -309,7 +310,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
             {stage === "confirm" ? "What's on the plate? 👀" : "Scan food"}
           </DrawerTitle>
           <DrawerDescription className="mt-1 text-sm text-muted-foreground">
-            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis. When you save the meal, the photo is also saved privately unless you turn that option off."}
+            {stage === "confirm" ? "Review the source and portion before saving. A database match is not a verified package label." : "Your photo is sent to Google Gemini for analysis and saved privately with the meal when you confirm."}
           </DrawerDescription>
 
           {image && stage !== "pick" && (
@@ -437,7 +438,7 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   <label htmlFor="scan-food-context" className="block text-sm font-medium text-foreground">
                     Was anything wrong? <span className="font-normal text-muted-foreground">(optional)</span>
                   </label>
-                  <textarea id="scan-food-context" rows={2} maxLength={400}
+                  <textarea id="scan-food-context" rows={2} maxLength={400} disabled={Boolean(pendingPhoto)}
                     value={contextText} onChange={(event) => setContextText(event.target.value)}
                     placeholder="e.g. This is a chicken patty, not fish. It was cooked with butter."
                     className="mt-2 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -466,25 +467,21 @@ export function ScanSheetV1({ open, onOpenChange, onManual }: { open: boolean; o
                   )}
               </div>
 
-              <label className="mt-4 flex min-h-12 items-start gap-3 rounded-xl border border-border p-3 text-sm text-foreground">
-                <input type="checkbox" checked={keepPhoto} onChange={event => setKeepPhoto(event.target.checked)}
-                  className="mt-0.5 size-4 accent-primary" />
-                <span>
-                  <span className="block font-medium">Keep this photo with the meal</span>
-                  <span className="block text-xs text-muted-foreground">On by default. Saved privately with your meal. Uncheck to keep only the nutrition details.</span>
-                </span>
-              </label>
+              <p className="mt-4 text-xs text-muted-foreground">Your photo is saved privately with the meal.</p>
+              {photoSaveError && <p role="alert" className="mt-3 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{photoSaveError}</p>}
               <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-foreground">
                 <input type="checkbox" checked={rememberPortion} onChange={event => setRememberPortion(event.target.checked)}
                   className="size-4 accent-primary" />
                 Save this portion to my favourites for next time
               </label>
               <div className="mt-5 flex flex-col gap-2">
-                <Btn size="lg" onClick={confirm} disabled={busy || rechecking || contextNeedsRescan}>{busy ? "Saving…" : "Looks right ❤️"}</Btn>
+                <Btn size="lg" onClick={confirm} disabled={busy || (!pendingPhoto && (rechecking || contextNeedsRescan))}>
+                  {busy ? "Saving…" : pendingPhoto ? "Retry saving photo" : "Looks right ❤️"}
+                </Btn>
                 <div className="flex gap-2">
-                  {!editing && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
-                  <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy}>Retake photo</Btn>
-                  <Btn variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Discard</Btn>
+                  {!editing && !pendingPhoto && <Btn variant="outline" className="flex-1" onClick={() => setEditing(true)}>Edit</Btn>}
+                  <Btn variant="outline" className="flex-1" onClick={retake} disabled={busy || Boolean(pendingPhoto)}>Retake photo</Btn>
+                  <Btn variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>{pendingPhoto ? "Close (meal logged)" : "Discard"}</Btn>
                 </div>
               </div>
             </div>
