@@ -19,7 +19,7 @@ export function ScanPortionPicker({
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState("");
   const isCustom = customOpen || !PRESETS.some(value => value === percentage);
-  const customInvalid = isCustom && (customText === "" || !Number.isInteger(Number(customText)) ||
+  const customInvalid = customOpen && (customText === "" || !Number.isInteger(Number(customText)) ||
     Number(customText) < 1 || Number(customText) > 100);
 
   return (
@@ -65,7 +65,7 @@ export function ScanPortionPicker({
               max={100}
               step={1}
               disabled={disabled}
-              value={customText || (customOpen ? customText : String(percentage))}
+              value={customOpen ? customText : String(percentage)}
               onChange={event => {
                 const raw = event.target.value;
                 setCustomText(raw);
