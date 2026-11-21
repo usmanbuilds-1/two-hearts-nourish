@@ -16,6 +16,7 @@ import { logWeight, getWeightLog, type WeightEntry } from "@/lib/weight.function
 import type { Member, Room } from "@/lib/nutrition";
 import { localDate } from "@/lib/nutrition";
 import { validateTargets } from "@/lib/settings-validation";
+import { AdaptiveTargetCard } from "@/components/us/AdaptiveTargetCard";
 
 export const Route = createFileRoute("/_space/settings")({
   head: () => ({ meta: [{ title: "Settings — Us" }, { name: "description", content: "Names, targets and your shared message." }, { property: "og:title", content: "Settings — Us" }, { property: "og:description", content: "Names, targets and your shared message." }] }),
@@ -445,6 +446,8 @@ function SettingsPage() {
             )}
           </div>
         )}
+
+        {adaptiveEnabled && <AdaptiveTargetCard location="settings" />}
 
         {/* Weight log */}
         <Eyebrow className="pt-2">Weight log</Eyebrow>
